@@ -52,4 +52,46 @@ function M._focus_cmd(target)
 	return action.select_pane(target.id)
 end
 
+---@param target wiremux.Instance
+function M.focus(target)
+	client.execute({ M._focus_cmd(target) })
+end
+
+---@param target_name string
+---@param def wiremux.target.definition
+---@param st wiremux.State
+---@return wiremux.Instance?
+function M.create(target_name, def, st)
+	local query = require("wiremux.backend.tmux.query")
+
+	local kind = def.kind or "pane"
+	local cmds = {}
+
+	if kind == "window" then
+		table.insert(cmds, action.new_window(target_name))
+		if target_name then
+			table.insert(cmds, action.set_target(target_name, "window"))
+		end
+		table.insert(cmds, query.window_id())
+	else
+		table.insert(cmds, action.split_pane(def.split or "vertical", st.origin_pane_id))
+		if target_name then
+			table.insert(cmds, action.set_target(target_name, "pane"))
+		end
+		table.insert(cmds, query.pane_id())
+	end
+
+	local id = client.execute(cmds)
+	if not id or id == "" then
+		return nil
+	end
+
+	local instance = { id = id, target = target_name or id, kind = kind }
+	table.insert(st.instances, instance)
+
+	state.set(st)
+	notify.debug("create: %s %s target=%s", kind, id, instance.target)
+	return instance
+end
+
 return M
