@@ -1,0 +1,161 @@
+---@module 'luassert'
+
+describe("tmux operations", function()
+	local operation, client, state, notify, action
+
+	before_each(function()
+		-- Clear loaded modules
+		package.loaded["wiremux.backend.tmux.client"] = nil
+		package.loaded["wiremux.backend.tmux.state"] = nil
+		package.loaded["wiremux.utils.notify"] = nil
+		package.loaded["wiremux.backend.tmux.action"] = nil
+		package.loaded["wiremux.backend.tmux.operation"] = nil
+
+		-- Mock action module
+		action = {
+			load_buffer = function(name)
+				return { "load-buffer", "-b", name, "-" }
+			end,
+			paste_buffer = function(name, target)
+				return { "paste-buffer", "-b", name, "-p", "-t", target }
+			end,
+			delete_buffer = function(name)
+				return { "delete-buffer", "-b", name }
+			end,
+			select_window = function(id)
+				return { "select-window", "-t", id }
+			end,
+			select_pane = function(id)
+				return { "select-pane", "-t", id }
+			end,
+			set_state = function(encoded)
+				return { "set-option", "-s", "@wiremux_state", encoded }
+			end,
+		}
+
+		-- Mock client
+		client = {
+			execute = function()
+				return "ok"
+			end,
+		}
+
+		-- Mock state
+		state = {
+			encode = function(s)
+				return vim.json.encode(s)
+			end,
+		}
+
+		-- Mock notify
+		notify = {
+			debug = function() end,
+			error = function() end,
+		}
+
+		-- Set up mocks
+		package.loaded["wiremux.backend.tmux.action"] = action
+		package.loaded["wiremux.backend.tmux.client"] = client
+		package.loaded["wiremux.backend.tmux.state"] = state
+		package.loaded["wiremux.utils.notify"] = notify
+
+		-- Load operation module
+		operation = require("wiremux.backend.tmux.operation")
+	end)
+
+	describe("send", function()
+		it("sends text to single target", function()
+			local executed = false
+			client.execute = function(_, opts)
+				executed = true
+				assert.are.equal("test text", opts.stdin)
+				return "ok"
+			end
+
+			local targets = { { id = "%1", kind = "pane", target = "test" } }
+			local st = { instances = {}, last_used_target_id = nil }
+
+			operation.send("test text", targets, {}, st)
+			assert.is_true(executed)
+		end)
+
+		it("cleans tabs and trailing newlines", function()
+			local cleaned_text
+			client.execute = function(_, opts)
+				cleaned_text = opts.stdin
+				return "ok"
+			end
+
+			local targets = { { id = "%1", kind = "pane", target = "test" } }
+			operation.send("text\twith\ttabs\n", targets, {}, {})
+
+			assert.are.equal("text  with  tabs", cleaned_text)
+		end)
+
+		it("sends to multiple targets", function()
+			local batch_cmds
+			client.execute = function(batch, _)
+				batch_cmds = batch
+				return "ok"
+			end
+
+			local targets = {
+				{ id = "%1", kind = "pane", target = "t1" },
+				{ id = "%2", kind = "pane", target = "t2" },
+			}
+
+			operation.send("text", targets, {}, { instances = {} })
+
+			assert.are.equal(5, #batch_cmds)
+
+			-- Verify exact batch commands (IPC call structure)
+			assert.are.same({ "load-buffer", "-b", "wiremux", "-" }, batch_cmds[1])
+			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%1" }, batch_cmds[2])
+			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%2" }, batch_cmds[3])
+			assert.are.same({ "delete-buffer", "-b", "wiremux" }, batch_cmds[4])
+			assert.are.equal("set-option", batch_cmds[5][1])
+		end)
+
+		it("handles send failure", function()
+			local error_called = false
+			client.execute = function()
+				return nil
+			end
+			notify.error = function(msg)
+				error_called = true
+				assert.matches("failed", msg)
+			end
+
+			local targets = { { id = "%1", kind = "pane", target = "test" } }
+			operation.send("text", targets, {}, {})
+
+			assert.is_true(error_called)
+		end)
+
+		it("updates last_used_target_id", function()
+			client.execute = function()
+				return "ok"
+			end
+
+			local st = { instances = {}, last_used_target_id = nil }
+			local targets = { { id = "%1", kind = "pane", target = "test" } }
+
+			operation.send("text", targets, {}, st)
+
+			assert.are.equal("%1", st.last_used_target_id)
+		end)
+
+		it("updates last_used_target_id for windows", function()
+			client.execute = function()
+				return "ok"
+			end
+
+			local st = { instances = {}, last_used_target_id = nil }
+			local targets = { { id = "@1", kind = "window", target = "test" } }
+
+			operation.send("text", targets, {}, st)
+
+			assert.are.equal("@1", st.last_used_target_id)
+		end)
+	end)
+end)
