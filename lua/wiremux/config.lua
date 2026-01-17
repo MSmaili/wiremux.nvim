@@ -6,6 +6,11 @@ local M = {}
 ---@alias wiremux.action.Behavior "all"|"pick"|"last"
 ---@alias wiremux.config.LogLevel "off"|"error"|"warn"|"info"|"debug"
 
+---@class wiremux.target.definition
+---@field cmd? string Command to run in the new pane/window
+---@field kind? "pane"|"window" Target kind (default: "pane")
+---@field split? "horizontal"|"vertical" Split direction for panes (default: "vertical")
+
 local defaults = {
 	log_level = "warn",
 	targets = {
