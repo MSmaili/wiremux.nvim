@@ -1,0 +1,43 @@
+-- Wiremux Configuration
+-- Stores user configuration with defaults.
+
+local M = {}
+
+---@alias wiremux.action.Behavior "all"|"pick"|"last"
+---@alias wiremux.config.LogLevel "off"|"error"|"warn"|"info"|"debug"
+
+local defaults = {
+	log_level = "warn",
+	targets = {
+		definitions = {},
+	},
+	actions = {
+		send = { behavior = "pick", focus = true },
+		focus = { behavior = "last", focus = true },
+		close = { behavior = "pick" },
+	},
+	context = {
+		resolvers = {},
+	},
+}
+
+M.opts = vim.deepcopy(defaults)
+
+function M.setup(user_opts)
+	M.opts = vim.tbl_deep_extend("force", defaults, user_opts or {})
+	require("wiremux.utils.validate").validate(M.opts)
+
+	-- Register custom context resolvers
+	if M.opts.context and M.opts.context.resolvers then
+		local context = require("wiremux.context")
+		for name, resolver in pairs(M.opts.context.resolvers) do
+			context.register(name, resolver)
+		end
+	end
+end
+
+function M.get()
+	return M.opts
+end
+
+return M
