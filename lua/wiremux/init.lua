@@ -7,7 +7,7 @@ function M.setup(opts)
 end
 
 function M.send(text, opts)
-	--TODO
+	return require("wiremux.action.send").send(text, opts)
 end
 
 return M
