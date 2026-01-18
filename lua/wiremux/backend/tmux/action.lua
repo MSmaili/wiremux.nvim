@@ -46,6 +46,13 @@ function M.select_window(window_id)
 	return { "select-window", "-t", window_id }
 end
 
+---@param target_id string
+---@param keys string
+---@return string[]
+function M.send_keys(target_id, keys)
+	return { "send-keys", "-t", target_id, keys, "Enter" }
+end
+
 ---@param buffer_name string
 ---@return string[]
 function M.load_buffer(buffer_name)

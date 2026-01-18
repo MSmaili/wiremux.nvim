@@ -83,7 +83,12 @@ function M.create(target_name, def, st)
 
 	local id = client.execute(cmds)
 	if not id or id == "" then
+		notify.error(string.format("create: failed to create %s", kind))
 		return nil
+	end
+
+	if def.cmd then
+		client.execute({ action.send_keys(id, def.cmd) })
 	end
 
 	local instance = { id = id, target = target_name or id, kind = kind }
