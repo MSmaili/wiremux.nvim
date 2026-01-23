@@ -22,4 +22,17 @@ function M.create(target_name, def, s)
 	return require("wiremux.backend.tmux.operation").create(target_name, def, s)
 end
 
+---Focus on a target
+---@param target wiremux.Instance
+function M.focus(target)
+	return require("wiremux.backend.tmux.operation").focus(target)
+end
+
+---Close a target pane/window
+---@param targets wiremux.Instance
+---@param s wiremux.State
+function M.close(targets, s)
+	return require("wiremux.backend.tmux.operation").close(targets, s)
+end
+
 return M

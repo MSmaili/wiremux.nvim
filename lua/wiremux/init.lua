@@ -10,4 +10,10 @@ function M.send(text, opts)
 	return require("wiremux.action.send").send(text, opts)
 end
 
+--- Create a new target from definitions
+---@param opts? wiremux.action.CreateOpts
+function M.create(opts)
+	return require("wiremux.action.create").create(opts)
+end
+
 return M

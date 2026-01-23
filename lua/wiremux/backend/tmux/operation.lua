@@ -57,6 +57,50 @@ function M.focus(target)
 	client.execute({ M._focus_cmd(target) })
 end
 
+---@param targets wiremux.Instance[]
+---@param st wiremux.State
+function M.close(targets, st)
+	local batch = {}
+
+	-- Build batch of kill commands
+	for _, target in ipairs(targets) do
+		if target.kind == "window" then
+			table.insert(batch, action.kill_window(target.id))
+		else
+			table.insert(batch, action.kill_pane(target.id))
+		end
+	end
+
+	-- Execute all kills in one IPC call
+	local ok = client.execute(batch)
+	if not ok then
+		notify.error("close: failed to close targets")
+		return
+	end
+
+	-- Update state: remove closed instances
+	local closed_ids = {}
+	for _, target in ipairs(targets) do
+		closed_ids[target.id] = true
+	end
+
+	local remaining = {}
+	for _, inst in ipairs(st.instances) do
+		if not closed_ids[inst.id] then
+			table.insert(remaining, inst)
+		end
+	end
+	st.instances = remaining
+
+	-- Clear last_used if it was closed
+	if closed_ids[st.last_used_target_id] then
+		st.last_used_target_id = nil
+	end
+
+	state.set(st)
+	notify.debug("close: closed %d targets", #targets)
+end
+
 ---@param target_name string
 ---@param def wiremux.target.definition
 ---@param st wiremux.State
