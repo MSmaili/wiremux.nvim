@@ -16,4 +16,10 @@ function M.create(opts)
 	return require("wiremux.action.create").create(opts)
 end
 
+--- Close target pane(s)/window(s)
+---@param opts? wiremux.config.ActionConfig
+function M.close(opts)
+	return require("wiremux.action.close").close(opts)
+end
+
 return M
