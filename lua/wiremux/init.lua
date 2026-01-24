@@ -22,4 +22,10 @@ function M.close(opts)
 	return require("wiremux.action.close").close(opts)
 end
 
+--- Focus on a target pane/window
+---@param opts? wiremux.config.ActionConfig
+function M.focus(opts)
+	return require("wiremux.action.focus").focus(opts)
+end
+
 return M
