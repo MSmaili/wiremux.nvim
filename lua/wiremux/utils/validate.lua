@@ -3,6 +3,7 @@ local M = {}
 local valid = {
 	behaviors = { last = true, pick = true, all = true },
 	kinds = { pane = true, window = true },
+	splits = { horizontal = true, vertical = true },
 	log_levels = { off = true, error = true, warn = true, info = true, debug = true },
 }
 
@@ -26,6 +27,7 @@ function M.validate(opts)
 
 	for name, def in pairs(opts.targets.definitions) do
 		def.kind = validate_field(def.kind, valid.kinds, "kind", "for target '" .. name .. "'", "pane")
+		def.split = validate_field(def.split, valid.splits, "split", "for target '" .. name .. "'", "vertical")
 	end
 
 	for action, cfg in pairs(opts.actions) do
