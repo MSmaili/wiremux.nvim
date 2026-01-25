@@ -4,7 +4,8 @@ function M.get()
 	if vim.env.TMUX then
 		return require("wiremux.backend.tmux")
 	end
-	error("wiremux: not in tmux")
+	require("wiremux.utils.notify").error("wiremux requires tmux")
+	return nil
 end
 
 return M
