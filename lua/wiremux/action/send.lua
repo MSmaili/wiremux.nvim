@@ -16,6 +16,9 @@ function M.send(text, opts)
 
 	local config = require("wiremux.config")
 	local backend = require("wiremux.backend").get()
+	if not backend then
+		return
+	end
 	local context = require("wiremux.context")
 	local action = require("wiremux.core.action")
 	local notify = require("wiremux.utils.notify")
