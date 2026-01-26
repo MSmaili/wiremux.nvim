@@ -10,6 +10,12 @@ function M.send(text, opts)
 	return require("wiremux.action.send").send(text, opts)
 end
 
+--- Toggle between creating and focusing targets
+---@param opts? wiremux.config.ActionConfig
+function M.toggle(opts)
+	return require("wiremux.action.toggle").toggle(opts)
+end
+
 --- Create a new target from definitions
 ---@param opts? wiremux.config.ActionConfig
 function M.create(opts)
