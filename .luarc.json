@@ -1,4 +1,23 @@
 {
   "runtime.version": "LuaJIT",
-  "diagnostics.globals": ["vim", "describe", "it", "before_each", "after_each", "pending", "assert"]
+  "workspace.library": [
+    "${3rd}/luv/library",
+    "${3rd}/busted/library",
+    "${3rd}/luassert/library"
+  ],
+  "workspace.ignoreDir": [
+    ".git",
+    "node_modules",
+    ".kiro",
+    "custom",
+    "*-backup"
+  ],
+  "diagnostics.globals": [
+    "vim",
+    "describe",
+    "it",
+    "before_each",
+    "after_each",
+    "assert"
+  ]
 }
