@@ -22,7 +22,7 @@ local M = {}
 ---@class wiremux.target.definition
 ---@field cmd? string Command to run in the new pane/window
 ---@field kind? "pane"|"window" Target kind (default: "pane")
----@field split? "horizontal"|"vertical" Split direction for panes (default: "vertical")
+---@field split? "horizontal"|"vertical" Split direction for panes (default: "horizontal")
 
 local defaults = {
 	log_level = "warn",

@@ -118,7 +118,7 @@ function M.create(target_name, def, st)
 		end
 		table.insert(cmds, query.window_id())
 	else
-		table.insert(cmds, action.split_pane(def.split or "vertical", st.origin_pane_id))
+		table.insert(cmds, action.split_pane(def.split or "horizontal", st.origin_pane_id))
 		if target_name then
 			table.insert(cmds, action.set_target(target_name, "pane"))
 		end
