@@ -28,8 +28,8 @@ describe("tmux operations", function()
 			select_pane = function(id)
 				return { "select-pane", "-t", id }
 			end,
-			set_state = function(encoded)
-				return { "set-option", "-s", "@wiremux_state", encoded }
+			set_pane_option = function(pane_id, key, value)
+				return { "set-option", "-p", "-t", pane_id, key, value }
 			end,
 			send_keys = function(target, keys)
 				return { "send-keys", "-t", target, keys, "Enter" }
@@ -45,9 +45,14 @@ describe("tmux operations", function()
 
 		-- Mock state
 		state = {
-			encode = function(s)
-				return vim.json.encode(s)
+			update_last_used = function(batch, old_id, new_id)
+				-- Append to batch like the real function
+				if old_id and old_id ~= new_id then
+					table.insert(batch, action.set_pane_option(old_id, "@wiremux_last_used", "false"))
+				end
+				table.insert(batch, action.set_pane_option(new_id, "@wiremux_last_used", "true"))
 			end,
+			set_instance_metadata = function() end,
 		}
 
 		-- Mock notify
@@ -136,7 +141,9 @@ describe("tmux operations", function()
 		end)
 
 		it("updates last_used_target_id", function()
-			client.execute = function()
+			local batch_cmds
+			client.execute = function(cmds)
+				batch_cmds = cmds
 				return "ok"
 			end
 
@@ -145,11 +152,21 @@ describe("tmux operations", function()
 
 			operation.send("text", targets, {}, st)
 
-			assert.are.equal("%1", st.last_used_target_id)
+			-- Verify set_pane_option was called for last_used
+			local found = false
+			for _, cmd in ipairs(batch_cmds) do
+				if cmd[1] == "set-option" and cmd[5] == "@wiremux_last_used" then
+					found = true
+					break
+				end
+			end
+			assert.is_true(found)
 		end)
 
 		it("updates last_used_target_id for windows", function()
-			client.execute = function()
+			local batch_cmds
+			client.execute = function(cmds)
+				batch_cmds = cmds
 				return "ok"
 			end
 
@@ -158,7 +175,15 @@ describe("tmux operations", function()
 
 			operation.send("text", targets, {}, st)
 
-			assert.are.equal("@1", st.last_used_target_id)
+			-- Verify set_pane_option was called for last_used
+			local found = false
+			for _, cmd in ipairs(batch_cmds) do
+				if cmd[1] == "set-option" and cmd[5] == "@wiremux_last_used" then
+					found = true
+					break
+				end
+			end
+			assert.is_true(found)
 		end)
 
 		it("sends Enter key when submit=true", function()
@@ -193,7 +218,7 @@ describe("tmux operations", function()
 
 			operation.send("text", targets, { submit = false }, st)
 
-			-- Should have: load, paste, delete, set-state (no send-keys)
+			-- Should have: load, paste, delete, set-last-used (no send-keys)
 			assert.are.equal(4, #batch_cmds)
 			assert.are.same({ "load-buffer", "-b", "wiremux", "-" }, batch_cmds[1])
 			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%1" }, batch_cmds[2])
@@ -214,7 +239,7 @@ describe("tmux operations", function()
 
 			operation.send("text", targets, { submit = true }, { instances = {} })
 
-			-- Should have: load, paste1, send-keys1, paste2, send-keys2, delete, set-state
+			-- Should have: load, paste1, send-keys1, paste2, send-keys2, delete, set-last-used
 			assert.are.equal(7, #batch_cmds)
 			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%1" }, batch_cmds[2])
 			assert.are.same({ "send-keys", "-t", "%1", "", "Enter" }, batch_cmds[3])
