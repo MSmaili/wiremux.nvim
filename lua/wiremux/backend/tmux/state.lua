@@ -6,138 +6,96 @@ local client = require("wiremux.backend.tmux.client")
 
 ---@class wiremux.Instance
 ---@field id string
+---@field window_id string
 ---@field kind "pane"|"window"
 ---@field target string
+---@field origin string
+---@field origin_cwd string
+---@field last_used boolean
 
 ---@class wiremux.State
 ---@field origin_pane_id string?
 ---@field last_used_target_id string?
 ---@field instances wiremux.Instance[]
 
----@return wiremux.State
-local function empty_state()
-	return { instances = {} }
-end
-
----@param inst { id: string, kind: "pane"|"window" }
----@param id_to_target table<string, string>
----@return wiremux.Instance
-local function resolve_target(inst, id_to_target)
-	return {
-		id = inst.id,
-		kind = inst.kind,
-		target = id_to_target[inst.id] or inst.id,
-	}
-end
-
----@param panes_output string
----@param windows_output string
----@return table<string, string> id_to_target (also serves as alive check)
-local function parse_tmux_ids(panes_output, windows_output)
-	local id_to_target = {}
-
-	for line in (panes_output or ""):gmatch("[^\n]+") do
-		local id, target = line:match("^(%%[0-9]+)%s*(.*)$")
-		if id then
-			id_to_target[id] = target ~= "" and target or id
-		end
+---@param line string
+---@return wiremux.Instance?
+local function parse_pane_line(line)
+	local parts = vim.split(line, ":", { plain = true })
+	if #parts ~= 7 then
+		return nil
 	end
 
-	for line in (windows_output or ""):gmatch("[^\n]+") do
-		local id, target = line:match("^(@[0-9]+)%s*(.*)$")
-		if id then
-			id_to_target[id] = target ~= "" and target or id
-		end
-	end
+	local id, window_id, target, origin, origin_cwd, kind, last_used = unpack(parts)
 
-	return id_to_target
-end
-
----@param state wiremux.State
----@return string
-local function encode(state)
-	local persisted = {
-		last_used_target_id = state.last_used_target_id,
-		instances = {},
-	}
-
-	for _, inst in ipairs(state.instances or {}) do
-		if inst.id and inst.kind then
-			table.insert(persisted.instances, { id = inst.id, kind = inst.kind })
-		end
-	end
-
-	return vim.json.encode(persisted)
-end
-
----@param str string
----@return wiremux.State
-local function decode(str)
-	if not str or str == "" then
-		return empty_state()
-	end
-
-	local ok, parsed = pcall(vim.json.decode, str)
-	if not ok or type(parsed) ~= "table" then
-		return empty_state()
-	end
-
-	local instances = {}
-	for _, inst in ipairs(parsed.instances or {}) do
-		if type(inst) == "table" and type(inst.id) == "string" then
-			table.insert(instances, {
-				id = inst.id,
-				kind = inst.kind == "window" and "window" or "pane",
-			})
-		end
+	if not target or target == "" then
+		return nil
 	end
 
 	return {
-		origin_pane_id = nil,
-		last_used_target_id = type(parsed.last_used_target_id) == "string" and parsed.last_used_target_id or nil,
-		instances = instances,
+		id = id,
+		window_id = window_id,
+		target = target,
+		origin = origin ~= "" and origin or nil,
+		origin_cwd = origin_cwd ~= "" and origin_cwd or nil,
+		kind = kind == "window" and "window" or "pane",
+		last_used = last_used == "true",
 	}
 end
 
 ---@return wiremux.State
 function M.get()
 	local results = client.query({
-		query.state(),
 		query.current_pane(),
 		query.list_panes(),
-		query.list_windows(),
 	})
 
-	local state = decode(results[1] or "")
-	local origin_pane_id = vim.trim(results[2] or "")
-	local id_to_target = parse_tmux_ids(results[3], results[4])
+	local origin_pane_id = vim.trim(results[1] or "")
+	local panes_output = results[2] or ""
 
-	state.origin_pane_id = origin_pane_id
+	local instances = {}
+	local last_used_target_id = nil
 
-	local alive = {}
-	for _, inst in ipairs(state.instances) do
-		if id_to_target[inst.id] and inst.id ~= origin_pane_id then
-			table.insert(alive, resolve_target(inst, id_to_target))
+	for line in panes_output:gmatch("[^\n]+") do
+		local inst = parse_pane_line(line)
+		if inst and inst.id ~= origin_pane_id then
+			table.insert(instances, inst)
+			if inst.last_used then
+				last_used_target_id = inst.id
+			end
 		end
 	end
-	state.instances = alive
 
-	if state.last_used_target_id and not id_to_target[state.last_used_target_id] then
-		state.last_used_target_id = nil
+	return {
+		origin_pane_id = origin_pane_id,
+		last_used_target_id = last_used_target_id,
+		instances = instances,
+	}
+end
+
+---@param pane_id string
+---@param target string
+---@param origin string
+---@param origin_cwd string
+---@param kind "pane"|"window"
+function M.set_instance_metadata(pane_id, target, origin, origin_cwd, kind)
+	client.execute({
+		action.set_pane_option(pane_id, "@wiremux_target", target),
+		action.set_pane_option(pane_id, "@wiremux_origin", origin),
+		action.set_pane_option(pane_id, "@wiremux_origin_cwd", origin_cwd),
+		action.set_pane_option(pane_id, "@wiremux_kind", kind),
+		action.set_pane_option(pane_id, "@wiremux_last_used", "true"),
+	})
+end
+
+---@param batch string[][] Command batch to append to
+---@param old_id string? Previous last_used pane ID
+---@param new_id string New last_used pane ID
+function M.update_last_used(batch, old_id, new_id)
+	if old_id and old_id ~= new_id then
+		table.insert(batch, action.set_pane_option(old_id, "@wiremux_last_used", "false"))
 	end
-
-	return state
-end
-
----@param state wiremux.State
-function M.set(state)
-	client.execute({ action.set_state(encode(state)) })
-end
-
----@param state wiremux.State
----@return string
-function M.encode(state)
-	return encode(state)
+	table.insert(batch, action.set_pane_option(new_id, "@wiremux_last_used", "true"))
 end
 
 return M

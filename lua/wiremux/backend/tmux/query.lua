@@ -1,9 +1,7 @@
 local M = {}
 
----@return string[]
-function M.state()
-	return { "show-option", "-sqv", "@wiremux_state" }
-end
+local PANE_FORMAT =
+	"#{pane_id}:#{window_id}:#{@wiremux_target}:#{@wiremux_origin}:#{@wiremux_origin_cwd}:#{@wiremux_kind}:#{@wiremux_last_used}"
 
 ---@return string[]
 function M.current_pane()
@@ -12,12 +10,7 @@ end
 
 ---@return string[]
 function M.list_panes()
-	return { "list-panes", "-s", "-F", "#{pane_id} #{@wiremux_target}" }
-end
-
----@return string[]
-function M.list_windows()
-	return { "list-windows", "-F", "#{window_id} #{@wiremux_target}" }
+	return { "list-panes", "-a", "-F", PANE_FORMAT }
 end
 
 ---@return string[]

@@ -7,13 +7,21 @@ local notify = require("wiremux.utils.notify")
 
 local BUFFER_NAME = "wiremux"
 
+---@param target wiremux.Instance
+---@return string[]
+function M._focus_cmd(target)
+	if target.kind == "window" then
+		return action.select_window(target.id)
+	end
+	return action.select_pane(target.id)
+end
+
 ---@param text string
 ---@param targets wiremux.Instance[]
 ---@param opts? { focus?: boolean, submit?: boolean }
 ---@param st wiremux.State
 function M.send(text, targets, opts, st)
 	opts = opts or {}
-	-- remove tabs and newlines, tabs because it is spawing tab for some commands
 	local clean_text = text:gsub("\t", "  "):gsub("\n$", "")
 
 	local batch = { action.load_buffer(BUFFER_NAME) }
@@ -34,8 +42,7 @@ function M.send(text, targets, opts, st)
 	end
 
 	if targets[1] and st.last_used_target_id ~= targets[1].id then
-		st.last_used_target_id = targets[1].id
-		table.insert(batch, action.set_state(state.encode(st)))
+		state.update_last_used(batch, st.last_used_target_id, targets[1].id)
 	end
 
 	local ok = client.execute(batch, { stdin = clean_text })
@@ -47,68 +54,35 @@ function M.send(text, targets, opts, st)
 end
 
 ---@param target wiremux.Instance
----@return string[]
-function M._focus_cmd(target)
-	if target.kind == "window" then
-		return action.select_window(target.id)
-	end
-	return action.select_pane(target.id)
-end
-
----@param target wiremux.Instance
 function M.focus(target)
 	local st = state.get()
 	local batch = { M._focus_cmd(target) }
-	
+
 	if st.last_used_target_id ~= target.id then
-		st.last_used_target_id = target.id
-		table.insert(batch, action.set_state(state.encode(st)))
+		state.update_last_used(batch, st.last_used_target_id, target.id)
 	end
-	
+
 	client.execute(batch)
 end
 
 ---@param targets wiremux.Instance[]
----@param st wiremux.State
-function M.close(targets, st)
+function M.close(targets)
 	local batch = {}
 
-	-- Build batch of kill commands
 	for _, target in ipairs(targets) do
 		if target.kind == "window" then
-			table.insert(batch, action.kill_window(target.id))
+			table.insert(batch, action.kill_window(target.window_id))
 		else
 			table.insert(batch, action.kill_pane(target.id))
 		end
 	end
 
-	-- Execute all kills in one IPC call
 	local ok = client.execute(batch)
 	if not ok then
 		notify.error("close: failed to close targets")
 		return
 	end
 
-	-- Update state: remove closed instances
-	local closed_ids = {}
-	for _, target in ipairs(targets) do
-		closed_ids[target.id] = true
-	end
-
-	local remaining = {}
-	for _, inst in ipairs(st.instances) do
-		if not closed_ids[inst.id] then
-			table.insert(remaining, inst)
-		end
-	end
-	st.instances = remaining
-
-	-- Clear last_used if it was closed
-	if closed_ids[st.last_used_target_id] then
-		st.last_used_target_id = nil
-	end
-
-	state.set(st)
 	notify.debug("close: closed %d targets", #targets)
 end
 
@@ -126,15 +100,9 @@ function M.create(target_name, def, st)
 
 	if kind == "window" then
 		table.insert(cmds, action.new_window(target_name, use_shell and nil or cmd))
-		if target_name then
-			table.insert(cmds, action.set_target(target_name, "window"))
-		end
 		table.insert(cmds, query.window_id())
 	else
 		table.insert(cmds, action.split_pane(def.split or "horizontal", st.origin_pane_id, use_shell and nil or cmd))
-		if target_name then
-			table.insert(cmds, action.set_target(target_name, "pane"))
-		end
 		table.insert(cmds, query.pane_id())
 	end
 
@@ -144,17 +112,22 @@ function M.create(target_name, def, st)
 		return nil
 	end
 
+	state.set_instance_metadata(id, target_name, st.origin_pane_id or "", vim.fn.getcwd(), kind)
+
 	if use_shell and cmd then
 		client.execute({ action.send_keys(id, cmd) })
 	end
 
-	local instance = { id = id, target = target_name or id, kind = kind }
-	table.insert(st.instances, instance)
-	st.last_used_target_id = id
-
-	state.set(st)
-	notify.debug("create: %s %s target=%s", kind, id, instance.target)
-	return instance
+	notify.debug("create: %s %s target=%s", kind, id, target_name)
+	return {
+		id = id,
+		window_id = kind == "window" and id or "",
+		target = target_name,
+		origin = st.origin_pane_id,
+		origin_cwd = vim.fn.getcwd(),
+		kind = kind,
+		last_used = true,
+	}
 end
 
 ---Toggle zoom on current pane

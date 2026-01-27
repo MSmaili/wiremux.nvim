@@ -1,17 +1,11 @@
 local M = {}
 
----@param encoded_state string
+---@param pane_id string
+---@param key string
+---@param value string
 ---@return string[]
-function M.set_state(encoded_state)
-	return { "set-option", "-s", "@wiremux_state", encoded_state }
-end
-
----@param target string pane or window target name
----@param kind "pane"|"window"
----@return string[]
-function M.set_target(target, kind)
-	local flag = kind == "window" and "-w" or "-p"
-	return { "set-option", flag, "@wiremux_target", target }
+function M.set_pane_option(pane_id, key, value)
+	return { "set-option", "-p", "-t", pane_id, key, value }
 end
 
 ---@param name? string window name
