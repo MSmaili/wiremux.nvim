@@ -142,7 +142,6 @@ function M.toggle_visibility(st)
 
 	if not st.last_used_target_id then
 		notify.debug("toggle_visibility: no last_used_target_id, returning")
-		notify.warn("Currently you do not have any active used pane, please focus/send to one instance first")
 		return
 	end
 

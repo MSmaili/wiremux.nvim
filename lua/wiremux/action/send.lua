@@ -10,15 +10,16 @@ local M = {}
 function M.send(text, opts)
 	opts = opts or {}
 
+	local backend = require("wiremux.backend").get()
+	if not backend then
+		return
+	end
+
 	if type(text) == "table" then
 		return M._pick_items(text, opts)
 	end
 
 	local config = require("wiremux.config")
-	local backend = require("wiremux.backend").get()
-	if not backend then
-		return
-	end
 	local context = require("wiremux.context")
 	local action = require("wiremux.core.action")
 	local notify = require("wiremux.utils.notify")

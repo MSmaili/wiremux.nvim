@@ -4,11 +4,11 @@ local M = {}
 function M.focus(opts)
 	opts = opts or {}
 
-	local config = require("wiremux.config")
 	local backend = require("wiremux.backend").get()
 	if not backend then
 		return
 	end
+	local config = require("wiremux.config")
 	local action = require("wiremux.core.action")
 
 	action.run({
