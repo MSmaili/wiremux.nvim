@@ -63,7 +63,7 @@ local function build_definition_items(definitions)
 			type = "definition",
 			target = name,
 			def = def,
-			label = name,
+			label = "[+] " .. name,
 		})
 	end
 
@@ -97,6 +97,11 @@ function M.resolve(state, definitions, opts)
 		return { kind = "targets", targets = instances }
 	end
 
+	-- Single instance - use it directly
+	if #instances == 1 then
+		return { kind = "targets", targets = { instances[1] } }
+	end
+
 	-- Behavior: pick
 	if opts.behavior == "pick" then
 		return { kind = "pick", items = build_instance_items(instances) }
@@ -109,11 +114,6 @@ function M.resolve(state, definitions, opts)
 				return { kind = "targets", targets = { inst } }
 			end
 		end
-	end
-
-	-- Single instance
-	if #instances == 1 then
-		return { kind = "targets", targets = { instances[1] } }
 	end
 
 	-- Fallback to picker

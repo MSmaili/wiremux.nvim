@@ -44,6 +44,20 @@ describe("resolver", function()
 			assert.are.equal("test #2", result.items[2].label)
 		end)
 
+		it("skips picker when only one instance exists", function()
+			local state = {
+				instances = {
+					{ id = "%1", kind = "pane", target = "test" },
+				},
+			}
+
+			local result = resolver.resolve(state, {}, { behavior = "pick" })
+
+			assert.are.equal("targets", result.kind)
+			assert.are.equal(1, #result.targets)
+			assert.are.equal("%1", result.targets[1].id)
+		end)
+
 		it("sorts items by target name", function()
 			local state = {
 				instances = {
