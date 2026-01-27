@@ -23,6 +23,7 @@ local M = {}
 ---@field cmd? string Command to run in the new pane/window
 ---@field kind? "pane"|"window" Target kind (default: "pane")
 ---@field split? "horizontal"|"vertical" Split direction for panes (default: "horizontal")
+---@field shell? boolean Run command through shell (default: true)
 
 local defaults = {
 	log_level = "warn",

@@ -15,21 +15,30 @@ function M.set_target(target, kind)
 end
 
 ---@param name? string window name
+---@param command? string command to run
 ---@return string[]
-function M.new_window(name)
+function M.new_window(name, command)
+	local cmd = { "new-window" }
 	if name then
-		return { "new-window", "-n", name }
+		vim.list_extend(cmd, { "-n", name })
 	end
-	return { "new-window" }
+	if command then
+		table.insert(cmd, command)
+	end
+	return cmd
 end
 
 ---@param direction "horizontal"|"vertical"
 ---@param target_pane? string pane id to split from
+---@param command? string command to run
 ---@return string[]
-function M.split_pane(direction, target_pane)
+function M.split_pane(direction, target_pane, command)
 	local cmd = { "split-window", direction == "horizontal" and "-h" or "-v" }
 	if target_pane then
 		vim.list_extend(cmd, { "-t", target_pane })
+	end
+	if command then
+		table.insert(cmd, command)
 	end
 	return cmd
 end

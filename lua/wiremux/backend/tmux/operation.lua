@@ -109,16 +109,18 @@ function M.create(target_name, def, st)
 	local query = require("wiremux.backend.tmux.query")
 
 	local kind = def.kind or "pane"
+	local use_shell = def.shell == nil or def.shell
+	local cmd = def.cmd
 	local cmds = {}
 
 	if kind == "window" then
-		table.insert(cmds, action.new_window(target_name))
+		table.insert(cmds, action.new_window(target_name, use_shell and nil or cmd))
 		if target_name then
 			table.insert(cmds, action.set_target(target_name, "window"))
 		end
 		table.insert(cmds, query.window_id())
 	else
-		table.insert(cmds, action.split_pane(def.split or "horizontal", st.origin_pane_id))
+		table.insert(cmds, action.split_pane(def.split or "horizontal", st.origin_pane_id, use_shell and nil or cmd))
 		if target_name then
 			table.insert(cmds, action.set_target(target_name, "pane"))
 		end
@@ -131,8 +133,8 @@ function M.create(target_name, def, st)
 		return nil
 	end
 
-	if def.cmd then
-		client.execute({ action.send_keys(id, def.cmd) })
+	if use_shell and cmd then
+		client.execute({ action.send_keys(id, cmd) })
 	end
 
 	local instance = { id = id, target = target_name or id, kind = kind }
