@@ -57,7 +57,15 @@ end
 
 ---@param target wiremux.Instance
 function M.focus(target)
-	client.execute({ M._focus_cmd(target) })
+	local st = state.get()
+	local batch = { M._focus_cmd(target) }
+	
+	if st.last_used_target_id ~= target.id then
+		st.last_used_target_id = target.id
+		table.insert(batch, action.set_state(state.encode(st)))
+	end
+	
+	client.execute(batch)
 end
 
 ---@param targets wiremux.Instance[]
