@@ -4,6 +4,7 @@ local M = {}
 ---@class wiremux.ResolveOpts
 ---@field behavior wiremux.action.Behavior
 ---@field mode? wiremux.ResolveMode
+---@field filter? wiremux.config.FilterConfig
 
 ---@class wiremux.ResolveResult.Targets
 ---@field kind "targets"
@@ -28,6 +29,42 @@ local M = {}
 ---@field items wiremux.ResolveItem[]
 
 ---@alias wiremux.ResolveResult wiremux.ResolveResult.Targets | wiremux.ResolveResult.Pick
+
+---@param instances wiremux.Instance[]
+---@param filter_fn? fun(inst: wiremux.Instance, state: wiremux.State): boolean
+---@param state wiremux.State
+---@return wiremux.Instance[]
+local function filter_instances(instances, filter_fn, state)
+	if not filter_fn then
+		return instances
+	end
+
+	local filtered = {}
+	for _, inst in ipairs(instances) do
+		if filter_fn(inst, state) then
+			table.insert(filtered, inst)
+		end
+	end
+	return filtered
+end
+
+---@param definitions table<string, wiremux.target.definition>
+---@param filter_fn? fun(def: wiremux.target.definition, name: string, state: wiremux.State): boolean
+---@param state wiremux.State
+---@return table<string, wiremux.target.definition>
+local function filter_definitions(definitions, filter_fn, state)
+	if not filter_fn then
+		return definitions
+	end
+
+	local filtered = {}
+	for name, def in pairs(definitions) do
+		if filter_fn(def, name, state) then
+			filtered[name] = def
+		end
+	end
+	return filtered
+end
 
 ---@param instances wiremux.Instance[]
 ---@return wiremux.ResolveItem.Instance[]
@@ -79,17 +116,29 @@ end
 ---@param opts wiremux.ResolveOpts
 ---@return wiremux.ResolveResult
 function M.resolve(state, definitions, opts)
-	local instances = state.instances
+	local config = require("wiremux.config")
+
+	-- Merge filters: action-specific overrides global
+	local action_filter = opts.filter or {}
+	local global_filter = config.opts.filter or {}
+
+	local instance_filter = action_filter.instances or global_filter.instances
+	local definition_filter = action_filter.definitions or global_filter.definitions
+
+	-- Apply filters
+	local instances = filter_instances(state.instances, instance_filter, state)
+	local filtered_defs = filter_definitions(definitions, definition_filter, state)
+
 	local last_used = state.last_used_target_id
 
 	-- Definitions mode - only show definitions
 	if opts.mode == "definitions" then
-		return { kind = "pick", items = build_definition_items(definitions) }
+		return { kind = "pick", items = build_definition_items(filtered_defs) }
 	end
 
 	-- No instances - fallback to definitions
 	if #instances == 0 then
-		return { kind = "pick", items = build_definition_items(definitions) }
+		return { kind = "pick", items = build_definition_items(filtered_defs) }
 	end
 
 	-- Behavior: all

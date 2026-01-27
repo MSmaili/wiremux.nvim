@@ -6,12 +6,17 @@ local M = {}
 ---@alias wiremux.action.Behavior "all"|"pick"|"last"
 ---@alias wiremux.config.LogLevel "off"|"error"|"warn"|"info"|"debug"
 
+---@class wiremux.config.FilterConfig
+---@field instances? fun(inst: wiremux.Instance, state: wiremux.State): boolean
+---@field definitions? fun(def: wiremux.target.definition, name: string, state: wiremux.State): boolean
+
 ---@class wiremux.config.UserOptions
 ---@field log_level? wiremux.config.LogLevel
 ---@field targets? { definitions?: table<string, wiremux.target.definition> }
 ---@field actions? { send?: wiremux.config.ActionConfig, focus?: wiremux.config.ActionConfig, close?: wiremux.config.ActionConfig }
 ---@field picker? string|fun(items: any[], opts: wiremux.picker.Opts, on_choice: fun(item: any?))
 ---@field context? { resolvers?: table<string, fun(): string> }
+---@field filter? wiremux.config.FilterConfig
 
 -- User-facing config (all fields optional)
 ---@class wiremux.config.ActionConfig
@@ -19,6 +24,7 @@ local M = {}
 ---@field focus? boolean
 ---@field allow_create? boolean
 ---@field submit? boolean
+---@field filter? wiremux.config.FilterConfig
 
 ---@class wiremux.target.definition
 ---@field cmd? string Command to run in the new pane/window
@@ -38,6 +44,11 @@ local defaults = {
 	},
 	context = {
 		resolvers = {},
+	},
+	filter = {
+		instances = function(inst, state)
+			return inst.origin == state.origin_pane_id
+		end,
 	},
 }
 
