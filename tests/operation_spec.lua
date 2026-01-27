@@ -31,6 +31,9 @@ describe("tmux operations", function()
 			set_state = function(encoded)
 				return { "set-option", "-s", "@wiremux_state", encoded }
 			end,
+			send_keys = function(target, keys)
+				return { "send-keys", "-t", target, keys, "Enter" }
+			end,
 		}
 
 		-- Mock client
@@ -156,6 +159,67 @@ describe("tmux operations", function()
 			operation.send("text", targets, {}, st)
 
 			assert.are.equal("@1", st.last_used_target_id)
+		end)
+
+		it("sends Enter key when submit=true", function()
+			local batch_cmds
+			client.execute = function(batch, _)
+				batch_cmds = batch
+				return "ok"
+			end
+
+			local targets = { { id = "%1", kind = "pane", target = "test" } }
+			local st = { instances = {}, last_used_target_id = nil }
+
+			operation.send("text", targets, { submit = true }, st)
+
+			-- Should have: load, paste, send-keys, delete, set-state
+			assert.are.equal(5, #batch_cmds)
+			assert.are.same({ "load-buffer", "-b", "wiremux", "-" }, batch_cmds[1])
+			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%1" }, batch_cmds[2])
+			assert.are.same({ "send-keys", "-t", "%1", "", "Enter" }, batch_cmds[3])
+			assert.are.same({ "delete-buffer", "-b", "wiremux" }, batch_cmds[4])
+		end)
+
+		it("does not send Enter key when submit=false", function()
+			local batch_cmds
+			client.execute = function(batch, _)
+				batch_cmds = batch
+				return "ok"
+			end
+
+			local targets = { { id = "%1", kind = "pane", target = "test" } }
+			local st = { instances = {}, last_used_target_id = nil }
+
+			operation.send("text", targets, { submit = false }, st)
+
+			-- Should have: load, paste, delete, set-state (no send-keys)
+			assert.are.equal(4, #batch_cmds)
+			assert.are.same({ "load-buffer", "-b", "wiremux", "-" }, batch_cmds[1])
+			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%1" }, batch_cmds[2])
+			assert.are.same({ "delete-buffer", "-b", "wiremux" }, batch_cmds[3])
+		end)
+
+		it("sends Enter to multiple targets when submit=true", function()
+			local batch_cmds
+			client.execute = function(batch, _)
+				batch_cmds = batch
+				return "ok"
+			end
+
+			local targets = {
+				{ id = "%1", kind = "pane", target = "t1" },
+				{ id = "%2", kind = "pane", target = "t2" },
+			}
+
+			operation.send("text", targets, { submit = true }, { instances = {} })
+
+			-- Should have: load, paste1, send-keys1, paste2, send-keys2, delete, set-state
+			assert.are.equal(7, #batch_cmds)
+			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%1" }, batch_cmds[2])
+			assert.are.same({ "send-keys", "-t", "%1", "", "Enter" }, batch_cmds[3])
+			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%2" }, batch_cmds[4])
+			assert.are.same({ "send-keys", "-t", "%2", "", "Enter" }, batch_cmds[5])
 		end)
 	end)
 end)

@@ -18,6 +18,7 @@ local M = {}
 ---@field behavior? wiremux.action.Behavior
 ---@field focus? boolean
 ---@field allow_create? boolean
+---@field submit? boolean
 
 ---@class wiremux.target.definition
 ---@field cmd? string Command to run in the new pane/window

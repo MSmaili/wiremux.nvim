@@ -9,7 +9,7 @@ local BUFFER_NAME = "wiremux"
 
 ---@param text string
 ---@param targets wiremux.Instance[]
----@param opts? { focus?: boolean }
+---@param opts? { focus?: boolean, submit?: boolean }
 ---@param st wiremux.State
 function M.send(text, targets, opts, st)
 	opts = opts or {}
@@ -20,6 +20,9 @@ function M.send(text, targets, opts, st)
 
 	for _, t in ipairs(targets) do
 		table.insert(batch, action.paste_buffer(BUFFER_NAME, t.id))
+		if opts.submit then
+			table.insert(batch, action.send_keys(t.id, ""))
+		end
 	end
 
 	if #targets > 0 then

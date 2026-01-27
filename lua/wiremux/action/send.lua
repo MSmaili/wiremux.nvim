@@ -30,12 +30,13 @@ function M.send(text, opts)
 	end
 
 	local focus = opts.focus or config.opts.actions.send.focus
+	local submit = opts.submit or config.opts.actions.send.submit
 
 	action.run({
 		prompt = "Send to",
 		behavior = opts.behavior or config.opts.actions.send.behavior or "pick",
 	}, function(targets, state)
-		backend.send(expanded, targets, { focus = focus }, state)
+		backend.send(expanded, targets, { focus = focus, submit = submit }, state)
 	end)
 end
 
