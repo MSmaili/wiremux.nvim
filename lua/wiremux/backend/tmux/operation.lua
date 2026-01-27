@@ -142,10 +142,52 @@ function M.create(target_name, def, st)
 
 	local instance = { id = id, target = target_name or id, kind = kind }
 	table.insert(st.instances, instance)
+	st.last_used_target_id = id
 
 	state.set(st)
 	notify.debug("create: %s %s target=%s", kind, id, instance.target)
 	return instance
+end
+
+---Toggle zoom on current pane
+function M.toggle_zoom()
+	client.execute({ action.resize_pane_zoom() })
+end
+
+---Toggle visibility based on instance kind
+---@param st wiremux.State
+function M.toggle_visibility(st)
+	notify.debug("toggle_visibility: last_used_target_id = %s", st.last_used_target_id or "nil")
+
+	if not st.last_used_target_id then
+		notify.debug("toggle_visibility: no last_used_target_id, returning")
+		notify.warn("Currently you do not have any active used pane, please focus/send to one instance first")
+		return
+	end
+
+	local target = nil
+	for _, inst in ipairs(st.instances) do
+		if inst.id == st.last_used_target_id then
+			target = inst
+			break
+		end
+	end
+
+	if not target then
+		notify.debug("toggle_visibility: target not found in instances")
+		notify.warn("Currently you do not have any active used pane, please focus/send to one instance first")
+		return
+	end
+
+	-- For windows: switch to target window
+	-- For panes: toggle zoom
+	if target.kind == "window" then
+		notify.debug("toggle_visibility: switching to window %s", target.id)
+		client.execute({ action.select_window(target.id) })
+	else
+		notify.debug("toggle_visibility: toggling zoom")
+		M.toggle_zoom()
+	end
 end
 
 return M

@@ -93,4 +93,14 @@ function M.kill_window(window_id)
 	return { "kill-window", "-t", window_id }
 end
 
+---@param pane_id? string
+---@return string[]
+function M.resize_pane_zoom(pane_id)
+	local cmd = { "resize-pane", "-Z" }
+	if pane_id then
+		vim.list_extend(cmd, { "-t", pane_id })
+	end
+	return cmd
+end
+
 return M

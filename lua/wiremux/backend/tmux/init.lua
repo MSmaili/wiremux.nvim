@@ -28,6 +28,12 @@ function M.focus(target)
 	return require("wiremux.backend.tmux.operation").focus(target)
 end
 
+---Toggle visibility: zoom for panes, switch for windows
+---@param s wiremux.State
+function M.toggle_visibility(s)
+	return require("wiremux.backend.tmux.operation").toggle_visibility(s)
+end
+
 ---Close a target pane/window
 ---@param targets wiremux.Instance
 ---@param s wiremux.State
