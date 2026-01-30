@@ -1,0 +1,402 @@
+*wiremux.txt*  *wiremux*  Send text from Neovim to tmux targets
+
+==============================================================================
+CONTENTS                                                        *wiremux-contents*
+
+1. Introduction .................................. |wiremux-introduction|
+2. Tutorial  ..................................... |wiremux-tutorial|
+3. How-to guides .................................. |wiremux-howto|
+4. Configuration .................................. |wiremux-configuration|
+   4.1 Filters .................................... |wiremux-filters|
+5. Placeholders (context) ......................... |wiremux-placeholders|
+6. Commands ....................................... |wiremux-commands|
+7. Lua API ........................................ |wiremux-api|
+8. Troubleshooting ................................ |wiremux-troubleshooting|
+9. Explanation / design notes ..................... |wiremux-explanation|
+
+==============================================================================
+1. INTRODUCTION                                                *wiremux-introduction*
+
+wiremux is a small Neovim plugin that sends text to tmux panes/windows.
+
+It was built for an AI workflow: keep an assistant like `opencode` or
+`claudecode` running in a dedicated tmux pane, then send it context (selection,
+diagnostics, git diff, quickfix) with a keymap.
+
+wiremux is inspired by folke/sidekick.nvim, but aims to stay simpler and more
+tmux-first.
+
+Features:
+
+  - Create/focus/close named tmux targets
+  - Send text (or pick from a list of prompts)
+  - Expand context placeholders like {file}, {position}, {diagnostics_all}
+  - Store instance metadata in tmux (survives Neovim restarts)
+  - Lazy loaded (near zero startup cost)
+
+Requirements:
+
+  - Neovim 0.10+
+  - tmux 3.0+ recommended
+  - Neovim must run inside tmux
+
+==============================================================================
+2. TUTORIAL                                                    *wiremux-tutorial*
+
+The simplest way to use wiremux is:
+
+  1) Define a target that runs your AI assistant
+  2) Map a key to send prompts with placeholders
+
+Define targets:
+>lua
+  require("wiremux").setup({
+    targets = {
+      definitions = {
+        opencode = {
+          cmd = "opencode",
+          kind = "pane",
+          split = "vertical",
+          shell = false -- recomanded if you want to
+                        -- close/kill pane/window when closing
+        },
+        claudecode = {
+          cmd = "claudecode",
+          kind = "window",
+          split = "horizontal",
+        },
+      },
+    },
+  })
+<
+
+Send a prompt to your target:
+>lua
+  require("wiremux").send("Explain {position}\n\n{this}")
+<
+
+Pick from a custom prompt list:
+>lua
+  vim.keymap.set({ "n", "x" }, "<leader>ap", function()
+    require("wiremux").send({
+      { name = "Review changes", text = "Can you review my changes?\n{changes}" },
+      { name = "Fix diagnostics", text = "Fix {file}\n{diagnostics_all}" },
+      { name = "Fix quickfix", text = "Help me fix these:\n{quickfix}" },
+    })
+  end, { desc = "Wiremux: Select prompt" })
+<
+
+==============================================================================
+3. HOW-TO GUIDES                                                   *wiremux-howto*
+
+3.1 Run a tool directly (no shell wrapper)                *wiremux-howto-shell-false*
+
+By default, wiremux creates a pane/window and then types the command into it.
+That is convenient for long-running shells.
+
+If you want to run a program directly (and have tmux close the pane when the
+program exits), set `shell = false`:
+>lua
+  require("wiremux").setup({
+    targets = {
+      definitions = {
+        ai_direct = { cmd = "opencode", kind = "pane", shell = false },
+      },
+    },
+  })
+<
+
+3.2 Use send_motion (operator)                                   *wiremux-howto-send-motion*
+
+`send_motion()` sets `operatorfunc` and returns `g@`. The usual pattern is an
+expr-mapping:
+>lua
+  vim.keymap.set({ "n", "x" }, "ga", function()
+    return require("wiremux").send_motion()
+  end, { expr = true, desc = "Wiremux: Send motion" })
+<
+
+Example usage:
+
+  - Normal mode: press `ga` then a motion/textobject (for example `ip`)
+     sends paragraphs
+  - Visual mode: select text, then press `ga`
+     sends selection
+
+==============================================================================
+4. CONFIGURATION                                              *wiremux-configuration*
+
+Configure with: >lua
+  require("wiremux").setup({
+    -- options here
+  })
+<
+
+Top-level options ~
+
+*wiremux-config-log-level*
+log_level           (string, default: "warn")
+                    "off" | "error" | "warn" | "info" | "debug"
+
+*wiremux-config-targets*
+targets             (table)
+                    Contains `definitions`.
+
+*wiremux-config-targets-definitions*
+targets.definitions (table<string, definition>)
+                    Map of target names to their definitions.
+
+Target definition fields ~
+
+*wiremux-config-definition-cmd*
+cmd                 (string|nil)
+                    Command to run in the target.
+
+*wiremux-config-definition-kind*
+kind                (string, default: "pane")
+                    "pane" or "window"
+
+*wiremux-config-definition-split*
+split               (string, default: "horizontal")
+                    For panes: "horizontal" or "vertical"
+
+*wiremux-config-definition-shell*
+shell               (boolean, default: true)
+                    true: create pane, then type cmd
+                    false: pass cmd directly to tmux (pane closes when cmd exits)
+
+Action defaults ~
+
+*wiremux-config-actions*
+actions             (table)
+                    Default behavior for send/focus/close.
+
+*wiremux-config-action-behavior*
+actions.*.behavior  (string)
+                    "pick" - show picker
+                    "last" - use last target
+                    "all"  - apply to all targets
+
+*wiremux-config-action-submit*
+actions.send.submit (boolean)
+                    Send Enter after pasting text.
+
+*wiremux-config-action-focus*
+actions.*.focus     (boolean)
+                    Focus target after action.
+
+Other options ~
+
+*wiremux-config-picker*
+picker              (string|function|nil)
+                    Picker to use. nil = auto-detect (fzf-lua preferred)
+
+*wiremux-config-context*
+context.resolvers   (table<string, function>)
+                    Custom placeholder functions.
+                    See |wiremux-placeholders|.
+
+*wiremux-config-filter*
+filter              (table)
+                    Global filters. See |wiremux-filters| for details.
+
+==============================================================================
+4.1 FILTERS                                                    *wiremux-filters*
+
+Filters control which targets appear in pickers. This is useful when you have
+multiple Neovim instances or want to share AI assistants across projects.
+
+Filter functions receive:
+- `inst` (Instance): { id, target, origin, origin_cwd, kind, last_used }
+- `state` (State): { origin_pane_id, last_used_target_id, instances }
+
+Three common strategies:
+
+1. BY ORIGIN (default) - isolated per Neovim instance ~
+
+Only show targets created from the current Neovim pane. This keeps your AI
+assistant private to your current editor instance.
+>lua
+  require("wiremux").setup({
+    filter = {
+      instances = function(inst, state)
+        return inst.origin == state.origin_pane_id
+      end,
+    },
+  })
+<
+
+2. BY WORKING DIRECTORY - shared within a project ~
+
+Show all targets created from the same directory. Useful when you want one
+AI assistant per project, shared across multiple Neovim instances in the
+same project.
+>lua
+  require("wiremux").setup({
+    filter = {
+      instances = function(inst, state)
+        return inst.origin_cwd == vim.fn.getcwd()
+      end,
+    },
+  })
+<
+
+3. NO FILTER - global shared targets ~
+
+Show all targets regardless of where they were created. Useful if you want
+one global AI assistant for everything.
+>lua
+  require("wiremux").setup({
+    filter = {
+      instances = nil,  -- or function() return true end
+    },
+  })
+<
+
+Per-action filters ~
+
+You can also override filters for specific actions:
+>lua
+  -- For send: only show pane targets (not windows)
+  require("wiremux").send("text", {
+    filter = {
+      instances = function(inst, state)
+        return inst.kind == "pane"
+      end,
+    },
+  })
+<
+
+==============================================================================
+5. PLACEHOLDERS (CONTEXT)                                     *wiremux-placeholders*
+
+wiremux expands `{placeholders}` before sending.
+
+Built-ins:
+
+  {file}            current buffer path
+  {filename}        basename of {file}
+  {position}        file:line:col (1-based line/col)
+  {line}            current line text
+  {selection}       visual selection (empty if not in visual mode)
+  {this}            {position} plus {selection} when available
+  {diagnostics}     diagnostics on current line
+  {diagnostics_all} all diagnostics in current buffer
+  {quickfix}        formatted quickfix list
+  {buffers}         list of listed, loaded buffers
+  {changes}         git diff HEAD -- {file} (or "No changes")
+
+Custom resolvers:
+>lua
+  require("wiremux").setup({
+    context = {
+      resolvers = {
+        git_branch = function()
+          local result = vim.system({ "git", "branch", "--show-current" }, { text = true }):wait()
+          return result.code == 0 and vim.trim(result.stdout) or nil
+        end,
+      },
+    },
+  })
+<
+
+==============================================================================
+6. COMMANDS                                                      *wiremux-commands*
+
+The main entry point is the `:Wiremux` command.
+
+                                                           *:Wiremux*
+:Wiremux {subcommand} ...
+
+Subcommands:
+
+                                                           *:Wiremux-send*
+:Wiremux send {text...}
+        Send text to a target. If there are multiple targets, a picker may be
+        shown depending on behavior.
+
+                                                      *:Wiremux-send-motion*
+:Wiremux send-motion
+        Prepare operator-pending send. For most users, mapping
+        `require("wiremux").send_motion()` with `{ expr = true }` is the
+        intended usage. See |wiremux-howto-send-motion|.
+
+                                                          *:Wiremux-focus*
+:Wiremux focus
+        Focus a target.
+
+                                                         *:Wiremux-create*
+:Wiremux create
+        Create a new target from configured definitions.
+
+                                                          *:Wiremux-close*
+:Wiremux close
+        Close a target pane/window.
+
+                                                         *:Wiremux-toggle*
+:Wiremux toggle
+        Toggle "visibility" for the last-used target.
+        - pane targets: toggles zoom
+        - window targets: switches to the window
+
+                                                         *:Wiremux-health*
+:Wiremux health
+        Run health checks (`:checkhealth wiremux`).
+
+                                                          *:Wiremux-help*
+:Wiremux help
+        Show a short command list inside Neovim.
+
+==============================================================================
+7. LUA API                                                          *wiremux-api*
+
+The Lua module is `require("wiremux")`.
+
+                                                     *wiremux.setup()*
+wiremux.setup({opts})
+        Configure wiremux.
+
+                                                     *wiremux.send()*
+wiremux.send({text|items}, {opts})
+        Send a string, or pick from a list of items.
+
+        Items are { name = string, text = string }.
+
+                                                     *wiremux.focus()*
+wiremux.focus({opts})
+        Focus a target.
+
+                                                    *wiremux.create()*
+wiremux.create({opts})
+        Create a target from definitions.
+
+                                                     *wiremux.close()*
+wiremux.close({opts})
+        Close a target.
+
+                                                    *wiremux.toggle()*
+wiremux.toggle({opts})
+        Toggle visibility for the last-used target.
+
+                                                *wiremux.send_motion()*
+wiremux.send_motion({opts})
+        Set operatorfunc and return "g@".
+
+==============================================================================
+8. TROUBLESHOOTING                                          *wiremux-troubleshooting*
+
+If things do not work:
+
+  - Make sure Neovim runs inside tmux (check `$TMUX`).
+  - Run `:Wiremux health`.
+  - If pickers are not showing, try without optional pickers to confirm the
+    fallback works (`vim.ui.select`).
+
+==============================================================================
+9. EXPLANATION / DESIGN NOTES                                  *wiremux-explanation*
+
+State is stored in tmux (pane variables like `@wiremux_*`), not in Neovim.
+That makes instances survive Neovim restarts and lets multiple Neovim
+instances share the same targets.
+
+vim:tw=78:ts=8:ft=help:norl:
