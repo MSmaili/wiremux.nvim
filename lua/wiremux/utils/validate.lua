@@ -7,33 +7,127 @@ local valid = {
 	log_levels = { off = true, error = true, warn = true, info = true, debug = true },
 }
 
+---@param value any
+---@param valid_set table
+---@return boolean
 local function is_valid(value, valid_set)
-	return not value or valid_set[value] ~= nil
+	return value == nil or valid_set[value] ~= nil
 end
 
-local function validate_field(value, valid_set, field_name, context, default)
-	if not is_valid(value, valid_set) then
-		local valid_values = table.concat(vim.tbl_keys(valid_set), ", ")
-		require("wiremux.utils.notify").warn(
-			string.format("invalid %s '%s' %s, use: %s", field_name, value, context, valid_values)
-		)
-		return default
+---@class ValidateFieldOpts
+---@field valid_set table
+---@field name string
+---@field context? string
+
+---@param value any
+---@param opts ValidateFieldOpts
+---@return string? error
+local function validate_field(value, opts)
+	if is_valid(value, opts.valid_set) then
+		return nil
 	end
-	return value
+
+	local valid_values = table.concat(vim.fn.sort(vim.tbl_keys(opts.valid_set)), ", ")
+	return string.format(
+		"invalid %s '%s'%s, use: %s",
+		opts.name,
+		tostring(value),
+		opts.context and " " .. opts.context or "",
+		valid_values
+	)
 end
 
+---@param picker string|function|nil
+---@return string? error
+local function validate_picker(picker)
+	if picker == nil then
+		return nil
+	end
+
+	local picker_type = type(picker)
+	if picker_type ~= "string" and picker_type ~= "function" then
+		return string.format("picker must be string or function, got %s", picker_type)
+	end
+
+	if picker_type == "string" then
+		local adapter_ok = pcall(require, "wiremux.picker." .. picker)
+		if not adapter_ok then
+			return string.format("invalid picker '%s', adapter not found", picker)
+		end
+	end
+
+	return nil
+end
+
+---@param resolvers table|nil
+---@return string[] errors
+local function validate_resolvers(resolvers)
+	local errors = {}
+
+	if resolvers == nil then
+		return errors
+	end
+
+	if type(resolvers) ~= "table" then
+		table.insert(errors, string.format("context.resolvers must be table, got %s", type(resolvers)))
+		return errors
+	end
+
+	for name, resolver in pairs(resolvers) do
+		if type(resolver) ~= "function" then
+			table.insert(
+				errors,
+				string.format("context resolver '%s' is not a function (got %s)", name, type(resolver))
+			)
+		end
+	end
+
+	return errors
+end
+
+---@param opts table
+---@return string[] errors List of validation errors (empty if no errors)
 function M.validate(opts)
-	opts.log_level = validate_field(opts.log_level, valid.log_levels, "log_level", "", "warn")
+	local errors = {}
 
-	for name, def in pairs(opts.targets.definitions) do
-		def.kind = validate_field(def.kind, valid.kinds, "kind", "for target '" .. name .. "'", "pane")
-		def.split = validate_field(def.split, valid.splits, "split", "for target '" .. name .. "'", "vertical")
+	local function collect_error(err)
+		if err then
+			table.insert(errors, err)
+		end
 	end
 
-	for action, cfg in pairs(opts.actions) do
-		cfg.behavior =
-			validate_field(cfg.behavior, valid.behaviors, "behavior", "for action '" .. action .. "'", "last")
+	collect_error(validate_field(opts.log_level, {
+		valid_set = valid.log_levels,
+		name = "log_level",
+	}))
+
+	for name, def in pairs(vim.tbl_get(opts, "targets", "definitions") or {}) do
+		collect_error(validate_field(def.kind, {
+			valid_set = valid.kinds,
+			name = "kind",
+			context = "for target '" .. name .. "'",
+		}))
+
+		collect_error(validate_field(def.split, {
+			valid_set = valid.splits,
+			name = "split",
+			context = "for target '" .. name .. "'",
+		}))
 	end
+
+	for action, cfg in pairs(opts.actions or {}) do
+		collect_error(validate_field(cfg.behavior, {
+			valid_set = valid.behaviors,
+			name = "behavior",
+			context = "for action '" .. action .. "'",
+		}))
+	end
+
+	collect_error(validate_picker(opts.picker))
+
+	vim.list_extend(errors, validate_resolvers(vim.tbl_get(opts, "context", "resolvers")))
+
+	return errors
 end
 
 return M

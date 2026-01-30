@@ -56,9 +56,17 @@ M.opts = vim.deepcopy(defaults)
 
 function M.setup(user_opts)
 	M.opts = vim.tbl_deep_extend("force", defaults, user_opts or {})
-	require("wiremux.utils.validate").validate(M.opts)
 
-	-- Register custom context resolvers
+	if M.opts.log_level ~= "off" then
+		local errors = require("wiremux.utils.validate").validate(M.opts)
+		if #errors > 0 then
+			local notify = require("wiremux.utils.notify")
+			for _, err in ipairs(errors) do
+				notify.warn(err)
+			end
+		end
+	end
+
 	if M.opts.context and M.opts.context.resolvers then
 		local context = require("wiremux.context")
 		for name, resolver in pairs(M.opts.context.resolvers) do
