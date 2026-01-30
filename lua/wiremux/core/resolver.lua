@@ -39,13 +39,11 @@ local function filter_instances(instances, filter_fn, state)
 		return instances
 	end
 
-	local filtered = {}
-	for _, inst in ipairs(instances) do
-		if filter_fn(inst, state) then
-			table.insert(filtered, inst)
-		end
-	end
-	return filtered
+	return vim.iter(instances)
+		:filter(function(inst)
+			return filter_fn(inst, state)
+		end)
+		:totable()
 end
 
 ---@param definitions table<string, wiremux.target.definition>
@@ -69,19 +67,20 @@ end
 ---@param instances wiremux.Instance[]
 ---@return wiremux.ResolveItem.Instance[]
 local function build_instance_items(instances)
-	local items = {}
 	local counts = {}
 
-	for _, inst in ipairs(instances) do
-		local target = inst.target
-		counts[target] = (counts[target] or 0) + 1
-		table.insert(items, {
-			type = "instance",
-			instance = inst,
-			target = target,
-			label = target .. " #" .. counts[target],
-		})
-	end
+	local items = vim.iter(instances)
+		:map(function(inst)
+			local target = inst.target
+			counts[target] = (counts[target] or 0) + 1
+			return {
+				type = "instance",
+				instance = inst,
+				target = target,
+				label = target .. " #" .. counts[target],
+			}
+		end)
+		:totable()
 
 	table.sort(items, function(a, b)
 		return a.target < b.target
@@ -93,16 +92,16 @@ end
 ---@param definitions table<string, wiremux.target.definition>
 ---@return wiremux.ResolveItem.Definition[]
 local function build_definition_items(definitions)
-	local items = {}
-
-	for name, def in pairs(definitions or {}) do
-		table.insert(items, {
-			type = "definition",
-			target = name,
-			def = def,
-			label = "[+] " .. name,
-		})
-	end
+	local items = vim.iter(definitions or {})
+		:map(function(name, def)
+			return {
+				type = "definition",
+				target = name,
+				def = def,
+				label = "[+] " .. name,
+			}
+		end)
+		:totable()
 
 	table.sort(items, function(a, b)
 		return a.target < b.target
