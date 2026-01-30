@@ -50,19 +50,6 @@ local subcommand_tbl = {
 		end,
 		desc = "Toggle between creating and focusing tmux targets",
 	},
-	help = {
-		impl = function(_, _)
-			local lines = { "Wiremux commands:" }
-			local keys = vim.tbl_keys(subcommand_tbl)
-			table.sort(keys)
-			for _, key in ipairs(keys) do
-				local cmd = subcommand_tbl[key]
-				table.insert(lines, string.format("  %-12s %s", key, cmd.desc))
-			end
-			vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
-		end,
-		desc = "Show this help message",
-	},
 	health = {
 		impl = function(_, _)
 			vim.cmd("checkhealth wiremux")
@@ -75,8 +62,7 @@ local subcommand_tbl = {
 local function wiremux_cmd(opts)
 	local fargs = opts.fargs
 	local subcommand_key = fargs[1]
-	local args = #fargs > 1 and vim.list_slice(fargs, 2, #fargs) or {}
-
+	local args = #fargs > 1 and { unpack(fargs, 2, #fargs) } or {}
 	local subcommand = subcommand_tbl[subcommand_key]
 	if not subcommand then
 		vim.notify("Wiremux: Unknown command: " .. (subcommand_key or "nil"), vim.log.levels.ERROR)
