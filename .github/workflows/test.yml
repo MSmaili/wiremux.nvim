@@ -1,0 +1,29 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          if command -v sudo &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y neovim tmux
+          else
+            apt-get update
+            apt-get install -y neovim tmux
+          fi
+
+      - name: Run tests
+        run: |
+          nvim --headless -l tests/minit.lua tests/
+        timeout-minutes: 5

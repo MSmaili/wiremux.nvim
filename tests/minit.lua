@@ -13,7 +13,7 @@ require("lazy.minit").setup({
 	spec = {
 		"echasnovski/mini.test",
 		{
-			dir = vim.uv.cwd(),
+			dir = vim.fn.getcwd(),
 			opts = {},
 		},
 	},
