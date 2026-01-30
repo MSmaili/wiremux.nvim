@@ -18,9 +18,28 @@ function M.toggle(opts)
 		prompt = "Toggle",
 		behavior = "last",
 		filter = opts.filter,
-	}, function(_, state)
-		if backend then
+	}, function(targets, state)
+		if not backend then
+			return
+		end
+
+		local target = targets[1]
+		if not target then
+			return
+		end
+
+		local is_existing = false
+		for _, inst in ipairs(state.instances) do
+			if inst.id == target.id then
+				is_existing = true
+				break
+			end
+		end
+
+		if is_existing then
 			backend.toggle_visibility(state)
+		else
+			backend.focus(target)
 		end
 	end)
 end
