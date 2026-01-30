@@ -14,7 +14,6 @@ function M.focus(opts)
 	action.run({
 		prompt = "Focus",
 		behavior = opts.behavior or config.opts.actions.focus.behavior or "last",
-		allow_create = false,
 	}, function(targets, _)
 		-- Focus only the first target
 		if targets[1] then

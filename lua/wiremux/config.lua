@@ -21,8 +21,6 @@ local M = {}
 -- User-facing config (all fields optional)
 ---@class wiremux.config.ActionConfig
 ---@field behavior? wiremux.action.Behavior
----@field focus? boolean
----@field allow_create? boolean
 ---@field submit? boolean
 ---@field filter? wiremux.config.FilterConfig
 
