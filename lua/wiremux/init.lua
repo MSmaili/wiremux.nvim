@@ -34,4 +34,11 @@ function M.focus(opts)
 	return require("wiremux.action.focus").focus(opts)
 end
 
+--- Send text via motion/textobject
+---@param opts? wiremux.config.ActionConfig
+---@return string
+function M.send_motion(opts)
+	return require("wiremux.action.send_motion").send_motion(opts)
+end
+
 return M
