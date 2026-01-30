@@ -9,7 +9,7 @@
 local M = {}
 
 ---@type string[]
-local ADAPTERS = { "fzf-lua" }
+M.ADAPTERS = { "fzf-lua" }
 
 ---@type fun(items: any[], opts: wiremux.picker.Opts, on_choice: fun(item: any?))?
 local cached_select = nil
@@ -26,7 +26,7 @@ end
 
 ---@return fun(items: any[], opts: wiremux.picker.Opts, on_choice: fun(item: any?))
 local function auto_detect()
-	for _, name in ipairs(ADAPTERS) do
+	for _, name in ipairs(M.ADAPTERS) do
 		local fn = try_adapter(name)
 		if fn then
 			return fn
