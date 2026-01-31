@@ -339,15 +339,7 @@ Subcommands:
         - pane targets: toggles zoom
         - window targets: switches to the window
 
-                                                         *:Wiremux-health*
-:Wiremux health
-        Run health checks (`:checkhealth wiremux`).
-
-                                                          *:Wiremux-help*
-:Wiremux help
-        Show a short command list inside Neovim.
-
-==============================================================================
+:==============================================================================
 7. LUA API                                                          *wiremux-api*
 
 The Lua module is `require("wiremux")`.
@@ -388,7 +380,7 @@ wiremux.send_motion({opts})
 If things do not work:
 
   - Make sure Neovim runs inside tmux (check `$TMUX`).
-  - Run `:Wiremux health`.
+  - Run `:help wiremux`.
   - If pickers are not showing, try without optional pickers to confirm the
     fallback works (`vim.ui.select`).
 

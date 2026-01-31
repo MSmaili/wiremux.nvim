@@ -80,14 +80,15 @@ require("wiremux").setup({
 
 Notes:
 
-- You can create multiple panes/windows and then pick when sending to the target. Then you have behaviour option which you decide what to hapen
+- You can create multiple panes/windows and then pick when sending to the target. You have behaviour option which you decide what to hapen
 - `shell = true` (default) means: create a pane and then type `cmd` into it.
 - `shell = false` means: pass `cmd` directly to tmux when creating the pane/window.
   This is useful for "run the tool directly and let tmux close the pane when it exits".
 
 ## How I Use It (Real-world config)
 
-I run multiple AI assistants (opencode, claude, kiro) and switch between them. Here is my actual lazy.nvim configuration:
+I run multiple instances(panes/windows) one for example an AI (opencode, claude, kiro) and anther instance running tests or some dev scripts and switch between them.
+Here is my actual lazy.nvim configuration:
 
 <details>
 <summary>Click to expand full configuration</summary>
@@ -156,7 +157,6 @@ I run multiple AI assistants (opencode, claude, kiro) and switch between them. H
 - **`{this}`** — My most used placeholder. In normal mode it sends position. In visual mode it sends position + selection.
 - **`shell = false`** — When the AI exits, tmux closes the pane. No zombie shells.
 - **`ga` operator** — `gaiw` sends inner word, `gaap` sends paragraph, visual + `ga` sends selection.
-- **Multiple AIs** — I can have opencode, claude, and kiro running in different panes and pick which one to send to.
 
 ## Placeholders (context)
 
@@ -202,7 +202,6 @@ require("wiremux").setup({
 :Wiremux create
 :Wiremux close
 :Wiremux toggle
-:Wiremux health
 ```
 
 ## Help
@@ -222,7 +221,7 @@ In other words this means, when you press the action based on the behaviour we s
 
 ## Troubleshooting
 
-- Run `:Wiremux health` (it calls `:checkhealth wiremux`).
+- Run :checkhealth wiremux`.
 - Make sure Neovim is running inside tmux (`$TMUX` is set).
 
 ## Persistence
@@ -266,3 +265,12 @@ wiremux is designed to have minimal impact on your editor:
 - **Zero startup cost:** The plugin adds no overhead to Neovim startup
 - **State in tmux:** No background processes or timers running in Neovim
 - **On-demand resolution:** Targets are queried from tmux only when needed, and number of IPC calls is minimal
+
+## Disclamer
+
+AI assisted tools were used during development, but all generated code was reviewed, understood, and adjusted manually.
+The design and implementation decisions are intentional, and the plugin is kept deliberately simple and minimal.
+
+## Credits
+
+- [folke/sidekick.nvim](https://github.com/folke/sidekick.nvim) — Inspiration for the idea and reference for a few implementation patterns.
