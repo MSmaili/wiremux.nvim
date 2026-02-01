@@ -8,15 +8,19 @@ function M.close(opts)
 	if not backend then
 		return
 	end
+
 	local config = require("wiremux.config")
 	local action = require("wiremux.core.action")
 
 	action.run({
 		prompt = "Close",
 		behavior = opts.behavior or config.opts.actions.close.behavior or "pick",
-	}, function(targets, state)
-		backend.close(targets, state)
-	end)
+		mode = "instances",
+	}, {
+		on_targets = function(targets)
+			backend.close(targets)
+		end,
+	})
 end
 
 return M

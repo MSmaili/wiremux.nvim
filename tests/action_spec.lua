@@ -72,10 +72,12 @@ describe("action", function()
 				}
 			end
 
-			action.run({ prompt = "Test", behavior = "all" }, function(targets, state)
+		action.run({ prompt = "Test", behavior = "all" }, {
+			on_targets = function(targets, state)
 				executed = true
 				received_targets = targets
-			end)
+			end,
+		})
 
 			assert.is_true(executed)
 			assert.are.equal(1, #received_targets)
@@ -102,7 +104,9 @@ describe("action", function()
 				assert.are.equal("Test Prompt", opts.prompt)
 			end
 
-			action.run({ prompt = "Test Prompt", behavior = "pick" }, function() end)
+			action.run({ prompt = "Test Prompt", behavior = "pick" }, {
+			on_targets = function() end,
+		})
 
 			assert.is_true(picker_shown)
 		end)
@@ -128,11 +132,13 @@ describe("action", function()
 				callback(items[1])
 			end
 
-			action.run({ prompt = "Test", behavior = "pick" }, function(targets, state)
+		action.run({ prompt = "Test", behavior = "pick" }, {
+			on_targets = function(targets, state)
 				executed = true
 				assert.are.equal(1, #targets)
 				assert.are.equal("%1", targets[1].id)
-			end)
+			end,
+		})
 
 			assert.is_true(executed)
 		end)
@@ -165,10 +171,14 @@ describe("action", function()
 				callback(items[1])
 			end
 
-			action.run({ prompt = "Test", behavior = "pick" }, function(targets, state)
+		action.run({ prompt = "Test", behavior = "pick" }, {
+			on_definition = function(name, def, state)
 				executed = true
-				assert.are.equal("%1", targets[1].id)
-			end)
+				assert.are.equal("server", name)
+				local inst = backend.create(name, def, state)
+				assert.are.equal("%1", inst.id)
+			end,
+		})
 
 			assert.is_true(create_called)
 			assert.is_true(executed)
@@ -204,9 +214,14 @@ describe("action", function()
 				callback(items[1])
 			end
 
-			action.run({ prompt = "Test", behavior = "pick" }, function()
-				error("should not execute")
-			end)
+			action.run({ prompt = "Test", behavior = "pick" }, {
+			on_definition = function(name, def, state)
+				local inst = backend.create(name, def, state)
+				if not inst then
+					notify.error("failed to create target: " .. name)
+				end
+			end,
+		})
 
 			assert.is_true(error_shown)
 		end)
@@ -218,6 +233,8 @@ describe("action", function()
 					items = {
 						{ type = "instance", instance = { id = "%1" }, label = "test" },
 					},
+					has_instances = true,
+					has_definitions = false,
 				}
 			end
 
@@ -225,9 +242,11 @@ describe("action", function()
 				callback(nil) -- User cancelled
 			end
 
-			action.run({ prompt = "Test", behavior = "pick" }, function()
-				error("should not execute when cancelled")
-			end)
+			action.run({ prompt = "Test", behavior = "pick" }, {
+				on_targets = function()
+					error("should not execute when cancelled")
+				end,
+			})
 
 			-- Test passes if no error thrown
 		end)
@@ -246,9 +265,11 @@ describe("action", function()
 				assert.matches("no targets", msg)
 			end
 
-			action.run({ prompt = "Test", behavior = "pick" }, function()
+			action.run({ prompt = "Test", behavior = "pick" }, {
+			on_targets = function()
 				error("should not execute")
-			end)
+			end,
+		})
 
 			assert.is_true(warned)
 		end)

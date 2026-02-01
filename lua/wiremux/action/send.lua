@@ -36,9 +36,18 @@ function M.send(text, opts)
 	action.run({
 		prompt = "Send to",
 		behavior = opts.behavior or config.opts.actions.send.behavior or "pick",
-	}, function(targets, state)
-		backend.send(expanded, targets, { focus = focus, submit = submit }, state)
-	end)
+		mode = "instances",
+	}, {
+		on_targets = function(targets, state)
+			backend.send(expanded, targets, { focus = focus, submit = submit }, state)
+		end,
+		on_definition = function(name, def, state)
+			local inst = backend.create(name, def, state)
+			if inst then
+				backend.send(expanded, { inst }, { focus = focus, submit = submit }, state)
+			end
+		end,
+	})
 end
 
 ---@param items wiremux.action.SendItem[]

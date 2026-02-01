@@ -4,6 +4,11 @@ local M = {}
 ---@field prompt string
 ---@field behavior wiremux.action.Behavior
 ---@field mode? wiremux.ResolveMode
+---@field filter? wiremux.config.FilterConfig
+
+---@class wiremux.action.Callbacks
+---@field on_targets? fun(targets: wiremux.Instance[], state: wiremux.State)
+---@field on_definition? fun(name: string, def: wiremux.target.definition, state: wiremux.State)
 
 ---Resolve kind when definition has multiple kinds (table).
 ---Shows a picker to let the user choose, then calls on_resolved with a
@@ -25,7 +30,6 @@ local function resolve_kind(def, on_resolved)
 		end)
 		:totable()
 
-	-- Defer to let fzf-lua fully tear down its terminal buffer before opening the next picker
 	vim.defer_fn(function()
 		picker.select(items, {
 			prompt = "Select kind",
@@ -41,35 +45,44 @@ local function resolve_kind(def, on_resolved)
 	end, 50)
 end
 
----@param choice wiremux.ResolveItem
----@param state wiremux.State
----@param on_resolved fun(instance: wiremux.Instance?)
-local function resolve_choice(choice, state, on_resolved)
-	if choice.type == "instance" then
-		on_resolved(choice.instance)
-		return
-	end
-
-	if choice.type == "definition" then
-		resolve_kind(choice.def, function(resolved_def)
-			local backend = require("wiremux.backend.tmux")
-			local notify = require("wiremux.utils.notify")
-
-			local instance = backend.create(choice.target, resolved_def, state)
-			if not instance then
-				notify.error(string.format("failed to create target: %s", choice.target))
+---Filter picker items to only include types the callbacks can handle.
+---@param items wiremux.ResolveItem[]
+---@param callbacks wiremux.action.Callbacks
+---@return wiremux.ResolveItem[]
+local function filter_items_by_callbacks(items, callbacks)
+	return vim.iter(items)
+		:filter(function(item)
+			if item.type == "instance" then
+				return callbacks.on_targets ~= nil
+			elseif item.type == "definition" then
+				return callbacks.on_definition ~= nil
 			end
-			on_resolved(instance)
+			return false
 		end)
-		return
-	end
+		:totable()
+end
 
-	on_resolved(nil)
+---Dispatch a single picked item to the appropriate callback.
+---@param choice wiremux.ResolveItem
+---@param callbacks wiremux.action.Callbacks
+---@param state wiremux.State
+local function dispatch_choice(choice, callbacks, state)
+	if choice.type == "instance" then
+		if callbacks.on_targets then
+			callbacks.on_targets({ choice.instance }, state)
+		end
+	elseif choice.type == "definition" then
+		if callbacks.on_definition then
+			resolve_kind(choice.def, function(resolved_def)
+				callbacks.on_definition(choice.target, resolved_def, state)
+			end)
+		end
+	end
 end
 
 ---@param opts wiremux.action.RunOpts
----@param execute fun(targets: wiremux.Instance[], state: wiremux.State)
-function M.run(opts, execute)
+---@param callbacks wiremux.action.Callbacks
+function M.run(opts, callbacks)
 	local backend = require("wiremux.backend.tmux")
 	local resolver = require("wiremux.core.resolver")
 	local config = require("wiremux.config")
@@ -81,37 +94,32 @@ function M.run(opts, execute)
 	local result = resolver.resolve(state, config.opts.targets.definitions, {
 		behavior = opts.behavior,
 		mode = opts.mode,
+		filter = opts.filter,
 	})
 
-	if result.kind == "pick" and #result.items == 0 then
-		notify.warn("no targets available")
-		return
-	end
-
 	if result.kind == "pick" then
-		picker.select(result.items, {
+		local available_items = filter_items_by_callbacks(result.items, callbacks)
+		if #available_items == 0 then
+			notify.warn("no targets available")
+			return
+		end
+
+		picker.select(available_items, {
 			prompt = opts.prompt,
 			format_item = function(item)
 				return item.label
 			end,
 		}, function(choice)
-			if not choice then
-				return
+			if choice then
+				dispatch_choice(choice, callbacks, state)
 			end
-
-			resolve_choice(choice, state, function(target)
-				if not target then
-					notify.warn("failed to resolve target")
-					return
-				end
-
-				execute({ target }, state)
-			end)
 		end)
 		return
 	end
 
-	execute(result.targets, state)
+	if result.targets and callbacks.on_targets then
+		callbacks.on_targets(result.targets, state)
+	end
 end
 
 return M

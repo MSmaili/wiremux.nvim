@@ -8,40 +8,29 @@ local M = {}
 function M.toggle(opts)
 	opts = opts or {}
 
-	local action = require("wiremux.core.action")
 	local backend = require("wiremux.backend").get()
 	if not backend then
 		return
 	end
 
+	local action = require("wiremux.core.action")
+
 	action.run({
 		prompt = "Toggle",
 		behavior = "last",
+		mode = "instances",
 		filter = opts.filter,
-	}, function(targets, state)
-		if not backend then
-			return
-		end
-
-		local target = targets[1]
-		if not target then
-			return
-		end
-
-		local is_existing = false
-		for _, inst in ipairs(state.instances) do
-			if inst.id == target.id then
-				is_existing = true
-				break
+	}, {
+		on_targets = function(targets, state)
+			backend.toggle_visibility(targets[1], state)
+		end,
+		on_definition = function(name, def, state)
+			local inst = backend.create(name, def, state)
+			if inst then
+				backend.focus(inst)
 			end
-		end
-
-		if is_existing then
-			backend.toggle_visibility(state)
-		else
-			backend.focus(target)
-		end
-	end)
+		end,
+	})
 end
 
 return M

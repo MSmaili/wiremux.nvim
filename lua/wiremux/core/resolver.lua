@@ -1,14 +1,11 @@
 local M = {}
----@alias wiremux.ResolveMode "instances"|"definitions"
+
+---@alias wiremux.ResolveMode "instances"|"definitions"|"both"
 
 ---@class wiremux.ResolveOpts
 ---@field behavior wiremux.action.Behavior
 ---@field mode? wiremux.ResolveMode
 ---@field filter? wiremux.config.FilterConfig
-
----@class wiremux.ResolveResult.Targets
----@field kind "targets"
----@field targets wiremux.Instance[]
 
 ---@class wiremux.ResolveItem.Instance
 ---@field type "instance"
@@ -24,6 +21,10 @@ local M = {}
 
 ---@alias wiremux.ResolveItem wiremux.ResolveItem.Instance | wiremux.ResolveItem.Definition
 
+---@class wiremux.ResolveResult.Targets
+---@field kind "targets"
+---@field targets wiremux.Instance[]
+
 ---@class wiremux.ResolveResult.Pick
 ---@field kind "pick"
 ---@field items wiremux.ResolveItem[]
@@ -38,7 +39,6 @@ local function filter_instances(instances, filter_fn, state)
 	if not filter_fn then
 		return instances
 	end
-
 	return vim.iter(instances)
 		:filter(function(inst)
 			return filter_fn(inst, state)
@@ -54,7 +54,6 @@ local function filter_definitions(definitions, filter_fn, state)
 	if not filter_fn then
 		return definitions
 	end
-
 	local filtered = {}
 	for name, def in pairs(definitions) do
 		if filter_fn(def, name, state) then
@@ -68,7 +67,6 @@ end
 ---@return wiremux.ResolveItem.Instance[]
 local function build_instance_items(instances)
 	local counts = {}
-
 	local items = vim.iter(instances)
 		:map(function(inst)
 			local target = inst.target
@@ -85,7 +83,6 @@ local function build_instance_items(instances)
 	table.sort(items, function(a, b)
 		return a.target < b.target
 	end)
-
 	return items
 end
 
@@ -106,8 +103,47 @@ local function build_definition_items(definitions)
 	table.sort(items, function(a, b)
 		return a.target < b.target
 	end)
-
 	return items
+end
+
+---@param items wiremux.ResolveItem[]
+---@return wiremux.ResolveResult.Pick
+local function pick_result(items)
+	return { kind = "pick", items = items }
+end
+
+---@param targets wiremux.Instance[]
+---@return wiremux.ResolveResult.Targets
+local function targets_result(targets)
+	return { kind = "targets", targets = targets }
+end
+
+---@param instances wiremux.Instance[]
+---@param behavior wiremux.action.Behavior
+---@param last_used string?
+---@return wiremux.ResolveResult
+local function resolve_by_behavior(instances, behavior, last_used)
+	if behavior == "all" then
+		return targets_result(instances)
+	end
+
+	if #instances == 1 then
+		return targets_result({ instances[1] })
+	end
+
+	if behavior == "pick" then
+		return pick_result(build_instance_items(instances))
+	end
+
+	if behavior == "last" and last_used then
+		for _, inst in ipairs(instances) do
+			if inst.id == last_used then
+				return targets_result({ inst })
+			end
+		end
+	end
+
+	return pick_result(build_instance_items(instances))
 end
 
 ---@param state wiremux.State
@@ -116,50 +152,37 @@ end
 ---@return wiremux.ResolveResult
 function M.resolve(state, definitions, opts)
 	local config = require("wiremux.config")
-
-	-- Merge filters: action-specific overrides global
 	local action_filter = opts.filter or {}
 	local global_filter = config.opts.filter or {}
-
-	local instance_filter = action_filter.instances or global_filter.instances
-	local definition_filter = action_filter.definitions or global_filter.definitions
-
-	local instances = filter_instances(state.instances, instance_filter, state)
-	local filtered_defs = filter_definitions(definitions, definition_filter, state)
-
 	local last_used = state.last_used_target_id
 
+	local instances = filter_instances(state.instances, action_filter.instances or global_filter.instances, state)
+	local filtered_defs = filter_definitions(definitions, action_filter.definitions or global_filter.definitions, state)
+
 	if opts.mode == "definitions" then
-		return { kind = "pick", items = build_definition_items(filtered_defs) }
+		return pick_result(build_definition_items(filtered_defs))
 	end
 
-	-- No instances - fallback to definitions
-	if #instances == 0 then
-		return { kind = "pick", items = build_definition_items(filtered_defs) }
+	if opts.mode == "instances" then
+		if #instances == 0 then
+			return pick_result({})
+		end
+		return resolve_by_behavior(instances, opts.behavior, last_used)
 	end
 
-	if opts.behavior == "all" then
-		return { kind = "targets", targets = instances }
-	end
+	-- Show instances & target-defintions
+	local items = {}
+	vim.list_extend(items, build_instance_items(instances))
+	vim.list_extend(items, build_definition_items(filtered_defs))
 
-	if #instances == 1 then
-		return { kind = "targets", targets = { instances[1] } }
-	end
-
-	if opts.behavior == "pick" then
-		return { kind = "pick", items = build_instance_items(instances) }
-	end
-
-	if last_used then
-		for _, inst in ipairs(instances) do
-			if inst.id == last_used then
-				return { kind = "targets", targets = { inst } }
-			end
+	if #instances > 0 then
+		local result = resolve_by_behavior(instances, opts.behavior, last_used)
+		if result.kind == "targets" then
+			return result
 		end
 	end
 
-	-- Fallback to picker
-	return { kind = "pick", items = build_instance_items(instances) }
+	return pick_result(items)
 end
 
 return M

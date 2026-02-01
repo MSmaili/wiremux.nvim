@@ -9,16 +9,18 @@ function M.create(opts)
 	if not backend then
 		return
 	end
+
 	local action = require("wiremux.core.action")
 
 	action.run({
 		prompt = "Create",
-		behavior = "pick",
+		behavior = opts.behavior,
 		mode = "definitions",
-	}, function(_, _)
-		-- Target is already created by resolve_choice
-		-- Just a placeholder - could add post-creation logic here
-	end)
+	}, {
+		on_definition = function(name, def, state)
+			backend.create(name, def, state)
+		end,
+	})
 end
 
 return M

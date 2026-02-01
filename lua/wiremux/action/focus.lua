@@ -8,18 +8,25 @@ function M.focus(opts)
 	if not backend then
 		return
 	end
+
 	local config = require("wiremux.config")
 	local action = require("wiremux.core.action")
 
 	action.run({
 		prompt = "Focus",
 		behavior = opts.behavior or config.opts.actions.focus.behavior or "last",
-	}, function(targets, _)
-		-- Focus only the first target
-		if targets[1] then
+		mode = "instances",
+	}, {
+		on_targets = function(targets, _)
 			backend.focus(targets[1])
-		end
-	end)
+		end,
+		on_definition = function(name, def, state)
+			local inst = backend.create(name, def, state)
+			if inst then
+				backend.focus(inst)
+			end
+		end,
+	})
 end
 
 return M
