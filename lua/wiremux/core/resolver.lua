@@ -124,13 +124,11 @@ function M.resolve(state, definitions, opts)
 	local instance_filter = action_filter.instances or global_filter.instances
 	local definition_filter = action_filter.definitions or global_filter.definitions
 
-	-- Apply filters
 	local instances = filter_instances(state.instances, instance_filter, state)
 	local filtered_defs = filter_definitions(definitions, definition_filter, state)
 
 	local last_used = state.last_used_target_id
 
-	-- Definitions mode - only show definitions
 	if opts.mode == "definitions" then
 		return { kind = "pick", items = build_definition_items(filtered_defs) }
 	end
@@ -140,22 +138,18 @@ function M.resolve(state, definitions, opts)
 		return { kind = "pick", items = build_definition_items(filtered_defs) }
 	end
 
-	-- Behavior: all
 	if opts.behavior == "all" then
 		return { kind = "targets", targets = instances }
 	end
 
-	-- Single instance - use it directly
 	if #instances == 1 then
 		return { kind = "targets", targets = { instances[1] } }
 	end
 
-	-- Behavior: pick
 	if opts.behavior == "pick" then
 		return { kind = "pick", items = build_instance_items(instances) }
 	end
 
-	-- Behavior: last
 	if last_used then
 		for _, inst in ipairs(instances) do
 			if inst.id == last_used then

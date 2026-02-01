@@ -26,7 +26,7 @@ local M = {}
 
 ---@class wiremux.target.definition
 ---@field cmd? string Command to run in the new pane/window
----@field kind? "pane"|"window" Target kind (default: "pane")
+---@field kind? "pane"|"window"|("pane"|"window")[] Target kind (default: "pane"). If table, prompts user to choose.
 ---@field split? "horizontal"|"vertical" Split direction for panes (default: "horizontal")
 ---@field shell? boolean Run command through shell (default: true)
 

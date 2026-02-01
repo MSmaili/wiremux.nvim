@@ -207,7 +207,6 @@ require("wiremux").setup({
 ## Help
 
 - `:h wiremux`
-- `:h :Wiremux`
 
 ## Behaviors
 

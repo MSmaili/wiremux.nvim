@@ -85,6 +85,52 @@ local function validate_resolvers(resolvers)
 	return errors
 end
 
+---@param kind "pane"|"window"|("pane"|"window")[]|nil
+---@param target_name string
+---@return string? error
+local function validate_kind(kind, target_name)
+	if kind == nil then
+		return nil
+	end
+
+	if type(kind) == "string" then
+		if valid.kinds[kind] then
+			return nil
+		end
+		return string.format("invalid kind '%s' for target '%s', use: pane, window", kind, target_name)
+	end
+
+	if type(kind) == "table" then
+		if #kind == 0 then
+			return string.format("kind table for target '%s' cannot be empty", target_name)
+		end
+		if #kind == 1 then
+			return string.format(
+				"kind table for target '%s' has a single value, use kind = '%s' instead",
+				target_name,
+				tostring(kind[1])
+			)
+		end
+		local seen = {}
+		for _, v in ipairs(kind) do
+			if type(v) ~= "string" or not valid.kinds[v] then
+				return string.format(
+					"invalid kind value '%s' in table for target '%s', use: pane, window",
+					tostring(v),
+					target_name
+				)
+			end
+			if seen[v] then
+				return string.format("duplicate kind '%s' in table for target '%s'", v, target_name)
+			end
+			seen[v] = true
+		end
+		return nil
+	end
+
+	return string.format("kind for target '%s' must be string or table, got %s", target_name, type(kind))
+end
+
 ---@param opts table
 ---@return string[] errors List of validation errors (empty if no errors)
 function M.validate(opts)
@@ -102,11 +148,7 @@ function M.validate(opts)
 	}))
 
 	for name, def in pairs(vim.tbl_get(opts, "targets", "definitions") or {}) do
-		collect_error(validate_field(def.kind, {
-			valid_set = valid.kinds,
-			name = "kind",
-			context = "for target '" .. name .. "'",
-		}))
+		collect_error(validate_kind(def.kind, name))
 
 		collect_error(validate_field(def.split, {
 			valid_set = valid.splits,

@@ -5,26 +5,66 @@ local M = {}
 ---@field behavior wiremux.action.Behavior
 ---@field mode? wiremux.ResolveMode
 
+---Resolve kind when definition has multiple kinds (table).
+---Shows a picker to let the user choose, then calls on_resolved with a
+---copy of the definition where kind is the chosen string value.
+---If kind is already a string or nil, calls on_resolved immediately.
+---@param def wiremux.target.definition
+---@param on_resolved fun(def: wiremux.target.definition)
+local function resolve_kind(def, on_resolved)
+	local kind = def.kind
+	if kind == nil or type(kind) == "string" then
+		on_resolved(def)
+		return
+	end
+
+	local picker = require("wiremux.picker")
+	local items = vim.iter(kind)
+		:map(function(k)
+			return { label = k, value = k }
+		end)
+		:totable()
+
+	-- Defer to let fzf-lua fully tear down its terminal buffer before opening the next picker
+	vim.defer_fn(function()
+		picker.select(items, {
+			prompt = "Select kind",
+			format_item = function(item)
+				return item.label
+			end,
+		}, function(choice)
+			if not choice then
+				return
+			end
+			on_resolved(vim.tbl_extend("force", def, { kind = choice.value }))
+		end)
+	end, 50)
+end
+
 ---@param choice wiremux.ResolveItem
 ---@param state wiremux.State
----@return wiremux.Instance?
-local function resolve_choice(choice, state)
+---@param on_resolved fun(instance: wiremux.Instance?)
+local function resolve_choice(choice, state, on_resolved)
 	if choice.type == "instance" then
-		return choice.instance
+		on_resolved(choice.instance)
+		return
 	end
 
 	if choice.type == "definition" then
-		local backend = require("wiremux.backend.tmux")
-		local notify = require("wiremux.utils.notify")
+		resolve_kind(choice.def, function(resolved_def)
+			local backend = require("wiremux.backend.tmux")
+			local notify = require("wiremux.utils.notify")
 
-		local instance = backend.create(choice.target, choice.def, state)
-		if not instance then
-			notify.error(string.format("failed to create target: %s", choice.target))
-		end
-		return instance
+			local instance = backend.create(choice.target, resolved_def, state)
+			if not instance then
+				notify.error(string.format("failed to create target: %s", choice.target))
+			end
+			on_resolved(instance)
+		end)
+		return
 	end
 
-	return nil
+	on_resolved(nil)
 end
 
 ---@param opts wiremux.action.RunOpts
@@ -59,13 +99,14 @@ function M.run(opts, execute)
 				return
 			end
 
-			local target = resolve_choice(choice, state)
-			if not target then
-				notify.warn("failed to resolve target")
-				return
-			end
+			resolve_choice(choice, state, function(target)
+				if not target then
+					notify.warn("failed to resolve target")
+					return
+				end
 
-			execute({ target }, state)
+				execute({ target }, state)
+			end)
 		end)
 		return
 	end
