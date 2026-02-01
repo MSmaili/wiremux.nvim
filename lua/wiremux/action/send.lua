@@ -36,7 +36,6 @@ function M.send(text, opts)
 	action.run({
 		prompt = "Send to",
 		behavior = opts.behavior or config.opts.actions.send.behavior or "pick",
-		mode = "instances",
 	}, {
 		on_targets = function(targets, state)
 			backend.send(expanded, targets, { focus = focus, submit = submit }, state)

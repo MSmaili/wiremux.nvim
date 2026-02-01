@@ -18,11 +18,10 @@ function M.toggle(opts)
 	action.run({
 		prompt = "Toggle",
 		behavior = "last",
-		mode = "instances",
 		filter = opts.filter,
 	}, {
-		on_targets = function(targets, state)
-			backend.toggle_visibility(targets[1], state)
+		on_targets = function(_, state)
+			backend.toggle_visibility(state)
 		end,
 		on_definition = function(name, def, state)
 			local inst = backend.create(name, def, state)
