@@ -153,8 +153,9 @@ cmd                 (string|nil)
                     Command to run in the target.
 
 *wiremux-config-definition-kind*
-kind                (string, default: "pane")
+kind                (string|table, default: "pane")
                     "pane" or "window"
+                    table (e.g., {"pane", "window"}) = prompt to choose at runtime
 
 *wiremux-config-definition-split*
 split               (string, default: "horizontal")

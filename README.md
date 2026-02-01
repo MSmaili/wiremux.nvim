@@ -59,7 +59,8 @@ require("wiremux").setup({
     definitions = {
       opencode = {
         cmd = "opencode",
-        kind = "pane",     -- "pane" | "window" (default: pane)
+        kind = "pane",     -- "pane" | "window" | {"pane", "window"} (default: pane)
+                           -- table = prompt to choose at runtime
         split = "vertical", -- for panes: "horizontal" | "vertical"
       },
       claudecode = {
@@ -72,6 +73,12 @@ require("wiremux").setup({
         cmd = "opencode",
         kind = "pane",
         shell = false,
+      },
+      -- Runtime choice: prompts to select pane or window each time we create
+      flexible = {
+        cmd = "htop",
+        kind = { "pane", "window" },
+        shell = false, -- closes when htop exits
       },
     },
   },
