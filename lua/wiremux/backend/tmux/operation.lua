@@ -47,7 +47,7 @@ function M.send(text, targets, opts, st)
 
 	local ok = client.execute(batch, { stdin = clean_text })
 	if not ok then
-		notify.error("send: failed to send to targets")
+		notify.error("Failed to send text to targets. Check that tmux panes are still active.")
 		return
 	end
 	notify.debug("send: sent to %d targets", #targets)
@@ -79,7 +79,7 @@ function M.close(targets)
 
 	local ok = client.execute(batch)
 	if not ok then
-		notify.error("close: failed to close targets")
+		notify.error("Failed to close targets. Check that tmux panes/windows still exist.")
 		return
 	end
 
@@ -108,7 +108,7 @@ function M.create(target_name, def, st)
 
 	local id = client.execute(cmds)
 	if not id or id == "" then
-		notify.error(string.format("create: failed to create %s", kind))
+		notify.error(string.format("Failed to create %s. Check tmux configuration and available space.", kind))
 		return nil
 	end
 

@@ -100,7 +100,7 @@ function M.run(opts, callbacks)
 	if result.kind == "pick" then
 		local available_items = filter_items_by_callbacks(result.items, callbacks)
 		if #available_items == 0 then
-			notify.warn("no targets available")
+			notify.warn("No targets available. Create one with :Wiremux create")
 			return
 		end
 
