@@ -31,11 +31,12 @@ local M = {}
 
 ---@alias wiremux.ResolveResult wiremux.ResolveResult.Targets | wiremux.ResolveResult.Pick
 
+---Filter instances based on filter function
 ---@param instances wiremux.Instance[]
 ---@param filter_fn? fun(inst: wiremux.Instance, state: wiremux.State): boolean
 ---@param state wiremux.State
 ---@return wiremux.Instance[]
-local function filter_instances(instances, filter_fn, state)
+function M.filter_instances(instances, filter_fn, state)
 	return vim.iter(instances)
 		:filter(function(inst)
 			if inst.id == state.origin_pane_id then
@@ -149,7 +150,7 @@ function M.resolve(state, definitions, opts)
 	local global_filter = config.opts.filter or {}
 	local last_used = state.last_used_target_id
 
-	local instances = filter_instances(state.instances, action_filter.instances or global_filter.instances, state)
+	local instances = M.filter_instances(state.instances, action_filter.instances or global_filter.instances, state)
 	local filtered_defs = filter_definitions(definitions, action_filter.definitions or global_filter.definitions, state)
 
 	if opts.mode == "definitions" then

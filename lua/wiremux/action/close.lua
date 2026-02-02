@@ -17,8 +17,8 @@ function M.close(opts)
 		behavior = opts.behavior or config.opts.actions.close.behavior or "pick",
 		mode = "instances",
 	}, {
-		on_targets = function(targets)
-			backend.close(targets)
+		on_targets = function(targets, st)
+			backend.close(targets, st)
 		end,
 	})
 end

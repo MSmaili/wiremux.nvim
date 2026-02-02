@@ -43,13 +43,10 @@ local function parse_pane_line(line)
 	}
 end
 
+---Parse query results into state
+---@param results string[]
 ---@return wiremux.State
-function M.get()
-	local results = client.query({
-		query.current_pane(),
-		query.list_panes(),
-	})
-
+local function parse_state_results(results)
 	local origin_pane_id = vim.trim(results[1] or "")
 	local panes_output = results[2] or ""
 
@@ -71,6 +68,31 @@ function M.get()
 		last_used_target_id = last_used_target_id,
 		instances = instances,
 	}
+end
+
+---@return wiremux.State
+function M.get()
+	local results = client.query({
+		query.current_pane(),
+		query.list_panes(),
+	})
+
+	return parse_state_results(results)
+end
+
+---Get state asynchronously
+---@param callback fun(state: wiremux.State?) Callback with state or nil on error
+function M.get_async(callback)
+	client.query_async({
+		query.current_pane(),
+		query.list_panes(),
+	}, function(results)
+		if not results then
+			callback(nil)
+			return
+		end
+		callback(parse_state_results(results))
+	end)
 end
 
 ---@param pane_id string

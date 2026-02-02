@@ -7,6 +7,15 @@ local notify = require("wiremux.utils.notify")
 
 local BUFFER_NAME = "wiremux"
 
+---Update statusline from known state (only if already loaded)
+---@param st wiremux.State
+local function update_statusline(st)
+	local statusline = package.loaded["wiremux.statusline"]
+	if statusline then
+		statusline.update(st)
+	end
+end
+
 ---@param target wiremux.Instance
 ---@return string[]
 function M._focus_cmd(target)
@@ -51,6 +60,11 @@ function M.send(text, targets, opts, st)
 		return
 	end
 	notify.debug("send: sent to %d targets", #targets)
+
+	if targets[1] then
+		st.last_used_target_id = targets[1].id
+	end
+	update_statusline(st)
 end
 
 ---@param target wiremux.Instance
@@ -63,13 +77,19 @@ function M.focus(target)
 	end
 
 	client.execute(batch)
+
+	st.last_used_target_id = target.id
+	update_statusline(st)
 end
 
 ---@param targets wiremux.Instance[]
-function M.close(targets)
+---@param st wiremux.State
+function M.close(targets, st)
 	local batch = {}
 
+	local closed_ids = {}
 	for _, target in ipairs(targets) do
+		closed_ids[target.id] = true
 		if target.kind == "window" then
 			table.insert(batch, action.kill_window(target.window_id))
 		else
@@ -84,6 +104,20 @@ function M.close(targets)
 	end
 
 	notify.debug("close: closed %d targets", #targets)
+
+	local remaining = {}
+	for _, inst in ipairs(st.instances) do
+		if not closed_ids[inst.id] then
+			table.insert(remaining, inst)
+		end
+	end
+	st.instances = remaining
+
+	if st.last_used_target_id and closed_ids[st.last_used_target_id] then
+		st.last_used_target_id = remaining[1] and remaining[1].id or nil
+	end
+
+	update_statusline(st)
 end
 
 ---@param target_name string
@@ -119,7 +153,8 @@ function M.create(target_name, def, st)
 	end
 
 	notify.debug("create: %s %s target=%s", kind, id, target_name)
-	return {
+
+	local instance = {
 		id = id,
 		window_id = kind == "window" and id or "",
 		target = target_name,
@@ -128,6 +163,12 @@ function M.create(target_name, def, st)
 		kind = kind,
 		last_used = true,
 	}
+
+	table.insert(st.instances, instance)
+	st.last_used_target_id = instance.id
+	update_statusline(st)
+
+	return instance
 end
 
 ---Toggle zoom on current pane
@@ -175,6 +216,9 @@ function M.toggle_visibility(st)
 		notify.debug("toggle_visibility: toggling zoom")
 		M.toggle_zoom()
 	end
+
+	st.last_used_target_id = target.id
+	update_statusline(st)
 end
 
 return M

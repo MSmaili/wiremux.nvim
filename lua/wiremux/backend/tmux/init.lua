@@ -36,7 +36,8 @@ end
 
 ---Close a target pane/window
 ---@param targets wiremux.Instance
-function M.close(targets)
+---@param s wiremux.State
+function M.close(targets, s)
 	return require("wiremux.backend.tmux.operation").close(targets, s)
 end
 
