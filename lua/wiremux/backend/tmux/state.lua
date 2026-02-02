@@ -58,7 +58,7 @@ function M.get()
 
 	for line in panes_output:gmatch("[^\n]+") do
 		local inst = parse_pane_line(line)
-		if inst and inst.id ~= origin_pane_id then
+		if inst then
 			table.insert(instances, inst)
 			if inst.last_used then
 				last_used_target_id = inst.id

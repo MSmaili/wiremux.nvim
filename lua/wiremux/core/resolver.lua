@@ -36,12 +36,15 @@ local M = {}
 ---@param state wiremux.State
 ---@return wiremux.Instance[]
 local function filter_instances(instances, filter_fn, state)
-	if not filter_fn then
-		return instances
-	end
 	return vim.iter(instances)
 		:filter(function(inst)
-			return filter_fn(inst, state)
+			if inst.id == state.origin_pane_id then
+				return false
+			end
+			if filter_fn then
+				return filter_fn(inst, state)
+			end
+			return true
 		end)
 		:totable()
 end
@@ -160,19 +163,11 @@ function M.resolve(state, definitions, opts)
 		return resolve_by_behavior(instances, opts.behavior, last_used)
 	end
 
-	-- Show instances & target-defintions
-	local items = {}
-	vim.list_extend(items, build_instance_items(instances))
-	vim.list_extend(items, build_definition_items(filtered_defs))
-
-	if #instances > 0 then
-		local result = resolve_by_behavior(instances, opts.behavior, last_used)
-		if result.kind == "targets" then
-			return result
-		end
+	if #instances == 0 then
+		return pick_result(build_definition_items(filtered_defs))
 	end
 
-	return pick_result(items)
+	return resolve_by_behavior(instances, opts.behavior, last_used)
 end
 
 return M

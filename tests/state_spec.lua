@@ -80,20 +80,6 @@ describe("state", function()
 			assert.are.equal("%2", state.last_used_target_id)
 		end)
 
-		it("filters out origin pane", function()
-			client.query = function()
-				return {
-					"%0",
-					"%0:@1:origin:%0:/home:pane:false\n%1:@1:test:%0:/home:pane:false",
-				}
-			end
-
-			local state = state_module.get()
-
-			assert.are.equal(1, #state.instances)
-			assert.are.equal("%1", state.instances[1].id)
-		end)
-
 		it("skips panes without target metadata", function()
 			client.query = function()
 				return {
