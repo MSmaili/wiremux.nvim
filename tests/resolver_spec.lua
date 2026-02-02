@@ -58,7 +58,7 @@ describe("resolver", function()
 			assert.are.equal("%1", result.targets[1].id)
 		end)
 
-		it("sorts items by target name", function()
+		it("keeps items on same order", function()
 			local state = {
 				instances = {
 					{ id = "%1", kind = "pane", target = "zebra" },
@@ -68,8 +68,8 @@ describe("resolver", function()
 
 			local result = resolver.resolve(state, {}, { behavior = "pick" })
 
-			assert.are.equal("alpha #1", result.items[1].label)
-			assert.are.equal("zebra #1", result.items[2].label)
+			assert.are.equal("zebra #1", result.items[1].label)
+			assert.are.equal("alpha #1", result.items[2].label)
 		end)
 	end)
 

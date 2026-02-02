@@ -67,7 +67,7 @@ end
 ---@return wiremux.ResolveItem.Instance[]
 local function build_instance_items(instances)
 	local counts = {}
-	local items = vim.iter(instances)
+	return vim.iter(instances)
 		:map(function(inst)
 			local target = inst.target
 			counts[target] = (counts[target] or 0) + 1
@@ -79,17 +79,12 @@ local function build_instance_items(instances)
 			}
 		end)
 		:totable()
-
-	table.sort(items, function(a, b)
-		return a.target < b.target
-	end)
-	return items
 end
 
 ---@param definitions table<string, wiremux.target.definition>
 ---@return wiremux.ResolveItem.Definition[]
 local function build_definition_items(definitions)
-	local items = vim.iter(definitions or {})
+	return vim.iter(definitions or {})
 		:map(function(name, def)
 			return {
 				type = "definition",
@@ -99,11 +94,6 @@ local function build_definition_items(definitions)
 			}
 		end)
 		:totable()
-
-	table.sort(items, function(a, b)
-		return a.target < b.target
-	end)
-	return items
 end
 
 ---@param items wiremux.ResolveItem[]

@@ -37,9 +37,11 @@ local defaults = {
 		definitions = {},
 	},
 	actions = {
+		close = { behavior = "pick" },
+		create = { behavior = "pick", focus = true },
 		send = { behavior = "pick", focus = true },
 		focus = { behavior = "last", focus = true },
-		close = { behavior = "pick" },
+		toggle = { behavior = "last", focus = false },
 	},
 	context = {
 		resolvers = {},
