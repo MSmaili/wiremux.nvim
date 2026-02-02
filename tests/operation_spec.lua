@@ -131,7 +131,7 @@ describe("tmux operations", function()
 			end
 			notify.error = function(msg)
 				error_called = true
-				assert.matches("failed", msg)
+				assert.matches("Failed", msg)
 			end
 
 			local targets = { { id = "%1", kind = "pane", target = "test" } }

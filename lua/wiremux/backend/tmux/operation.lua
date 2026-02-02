@@ -140,23 +140,30 @@ end
 function M.toggle_visibility(st)
 	notify.debug("toggle_visibility: last_used_target_id = %s", st.last_used_target_id or "nil")
 
-	if not st.last_used_target_id then
-		notify.debug("toggle_visibility: no last_used_target_id, returning")
+	if #st.instances == 0 then
+		notify.debug("toggle_visibility: no instances available")
+		notify.warn("No targets available. Create one with :Wiremux create")
 		return
 	end
 
 	local target = nil
-	for _, inst in ipairs(st.instances) do
-		if inst.id == st.last_used_target_id then
-			target = inst
-			break
+
+	if st.last_used_target_id then
+		for _, inst in ipairs(st.instances) do
+			if inst.id == st.last_used_target_id then
+				target = inst
+				break
+			end
 		end
 	end
 
 	if not target then
-		notify.debug("toggle_visibility: target not found in instances")
-		notify.warn("Currently you do not have any active used pane, please focus/send to one instance first")
-		return
+		target = st.instances[1]
+		notify.debug("toggle_visibility: last_used not found, falling back to first instance %s", target.id)
+
+		local batch = {}
+		state.update_last_used(batch, st.last_used_target_id, target.id)
+		client.execute(batch)
 	end
 
 	-- For windows: switch to target window
