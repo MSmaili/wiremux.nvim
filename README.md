@@ -200,6 +200,65 @@ require("wiremux").setup({
 })
 ```
 
+## Statusline
+
+Display the number of active wiremux targets in your statusline. Updates instantly when targets are created, focused, or closed.
+
+### Quick Start
+
+Works with any statusline plugin. Add the component:
+
+```lua
+-- lualine
+{
+  require("wiremux").statusline.component(),
+  padding = { left = 1, right = 1 },
+}
+
+-- heirline (provider function)
+{ provider = require("wiremux").statusline.component() }
+
+-- feline (component)
+{ provider = require("wiremux").statusline.component() }
+```
+
+Shows `󰆍 3 [latest_target_name]` when targets exist, nothing when empty. Automatically hidden outside tmux.
+
+### Custom Statusline
+
+Use `get_info()` for full control:
+
+```lua
+local info = require("wiremux").statusline.get_info()
+-- info.loading  → true during initial fetch
+-- info.count    → number of targets (0, 1, 2...)
+-- info.last_used → { id, target, kind, name }
+
+-- Example: custom format with different icons for pane vs window
+function()
+  local info = require("wiremux").statusline.get_info()
+  if info.count == 0 then return "" end
+  
+  local icon = info.last_used.kind == "window" and "󰖯" or "󰆍"
+  return string.format("%s %d", icon, info.count)
+end
+
+-- Example: show target name only (no count)
+function()
+  local info = require("wiremux").statusline.get_info()
+  if info.last_used then
+    return "[" .. info.last_used.name .. "]"
+  end
+  return ""
+end
+```
+
+### API Reference
+
+- `statusline.get_info()` — Returns `{ loading, count, last_used }`
+- `statusline.component()` — Returns lualine component function
+- `statusline.refresh()` — Force immediate refresh (blocking)
+
 ## Commands
 
 ```vim

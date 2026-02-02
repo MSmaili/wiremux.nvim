@@ -11,8 +11,9 @@ CONTENTS                                                        *wiremux-content
 5. Placeholders (context) ......................... |wiremux-placeholders|
 6. Commands ....................................... |wiremux-commands|
 7. Lua API ........................................ |wiremux-api|
-8. Troubleshooting ................................ |wiremux-troubleshooting|
-9. Explanation / design notes ..................... |wiremux-explanation|
+8. Statusline ..................................... |wiremux-statusline|
+9. Troubleshooting ................................ |wiremux-troubleshooting|
+10. Explanation / design notes .................... |wiremux-explanation|
 
 ==============================================================================
 1. INTRODUCTION                                                *wiremux-introduction*
@@ -376,7 +377,66 @@ wiremux.send_motion({opts})
         Set operatorfunc and return "g@".
 
 ==============================================================================
-8. TROUBLESHOOTING                                          *wiremux-troubleshooting*
+8. STATUSLINE                                          *wiremux-statusline*
+
+                                                 *wiremux.statusline*
+wiremux.statusline
+        Display active wiremux targets in your statusline. See
+        |wiremux-statusline| for detailed documentation.
+
+                                            *wiremux.statusline.get_info()*
+wiremux.statusline.get_info()
+        Returns information about active targets. Non-blocking, returns
+        cached data. On first call initializes background timer.
+
+        Returns { loading, count, last_used }
+
+                                            *wiremux.statusline.component()*
+wiremux.statusline.component()
+        Returns a statusline component function. Works with any statusline
+        plugin (lualine, heirline, feline, etc.). Usage:
+>lua
+        { require("wiremux").statusline.component() }
+<
+
+                                            *wiremux.statusline.refresh()*
+wiremux.statusline.refresh()
+        Force immediate refresh (blocking).
+
+USAGE                                                   *wiremux-statusline-usage*
+
+Lualine component (simplest way):
+>lua
+    {
+      require("wiremux").statusline.component(),
+      padding = { left = 1, right = 1 },
+    }
+<
+
+Custom statusline with get_info():
+>lua
+    local info = require("wiremux").statusline.get_info()
+    if info.count == 0 then
+        return ""
+    end
+    return string.format("[tmux:%d]", info.count)
+<
+
+HOW IT WORKS                                       *wiremux-statusline-design*
+
+The statusline module uses a smart caching strategy:
+
+1. Lazy loading — Nothing loaded until get_info() or component() called
+2. Async updates — First call triggers async fetch, returns loading state
+3. Operation sync — Operations update cache directly without IPC
+4. Background refresh — 30s timer catches external tmux changes
+5. Debouncing — 500ms debounce prevents double-fetches
+6. FocusGained autocmd — Refreshes when returning to Neovim
+
+This gives instant status updates with minimal IPC calls.
+
+==============================================================================
+9. TROUBLESHOOTING                                          *wiremux-troubleshooting*
 
 If things do not work:
 
@@ -386,7 +446,7 @@ If things do not work:
     fallback works (`vim.ui.select`).
 
 ==============================================================================
-9. EXPLANATION / DESIGN NOTES                                  *wiremux-explanation*
+10. EXPLANATION / DESIGN NOTES                                  *wiremux-explanation*
 
 State is stored in tmux (pane variables like `@wiremux_*`), not in Neovim.
 That makes instances survive Neovim restarts and lets multiple Neovim
