@@ -17,12 +17,9 @@ local function update_statusline(st)
 end
 
 ---@param target wiremux.Instance
----@return string[]
-function M._focus_cmd(target)
-	if target.kind == "window" then
-		return action.select_window(target.id)
-	end
-	return action.select_pane(target.id)
+---@return string[], string[]
+function M._focus_cmds(target)
+	return action.select_window(target.window_id), action.select_pane(target.id)
 end
 
 ---@param text string
@@ -47,7 +44,9 @@ function M.send(text, targets, opts, st)
 	end
 
 	if opts.focus and targets[1] then
-		table.insert(batch, M._focus_cmd(targets[1]))
+		local win_cmd, pane_cmd = M._focus_cmds(targets[1])
+		table.insert(batch, win_cmd)
+		table.insert(batch, pane_cmd)
 	end
 
 	if targets[1] and st.last_used_target_id ~= targets[1].id then
@@ -70,13 +69,18 @@ end
 ---@param target wiremux.Instance
 function M.focus(target)
 	local st = state.get()
-	local batch = { M._focus_cmd(target) }
+	local win_cmd, pane_cmd = M._focus_cmds(target)
+	local batch = { win_cmd, pane_cmd }
 
 	if st.last_used_target_id ~= target.id then
 		state.update_last_used(batch, st.last_used_target_id, target.id)
 	end
 
-	client.execute(batch)
+	local ok = client.execute(batch)
+	if ok == nil then
+		notify.error(string.format("Failed to focus target %s. Pane may no longer exist.", target.id))
+		return
+	end
 
 	st.last_used_target_id = target.id
 	update_statusline(st)
