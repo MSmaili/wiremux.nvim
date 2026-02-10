@@ -16,6 +16,7 @@ function M.close(opts)
 		prompt = "Close",
 		behavior = opts.behavior or config.opts.actions.close.behavior or "pick",
 		mode = "instances",
+		filter = opts.filter,
 	}, {
 		on_targets = function(targets, st)
 			backend.close(targets, st)

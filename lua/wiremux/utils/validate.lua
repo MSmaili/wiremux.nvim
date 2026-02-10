@@ -37,7 +37,7 @@ local function validate_field(value, opts)
 	)
 end
 
----@param picker string|function|nil
+---@param picker string|function|table|nil
 ---@return string? error
 local function validate_picker(picker)
 	if picker == nil then
@@ -45,8 +45,22 @@ local function validate_picker(picker)
 	end
 
 	local picker_type = type(picker)
-	if picker_type ~= "string" and picker_type ~= "function" then
-		return string.format("picker must be string or function, got %s", picker_type)
+	if picker_type == "table" then
+		if picker.adapter ~= nil then
+			local adapter_type = type(picker.adapter)
+			if adapter_type ~= "string" and adapter_type ~= "function" then
+				return string.format("picker.adapter must be string or function, got %s", adapter_type)
+			end
+			if adapter_type == "string" then
+				local adapter_ok = pcall(require, "wiremux.picker." .. picker.adapter)
+				if not adapter_ok then
+					return string.format("invalid picker.adapter '%s', adapter not found", picker.adapter)
+				end
+			end
+		end
+		return nil
+	elseif picker_type ~= "string" and picker_type ~= "function" then
+		return string.format("picker must be string, function, or table, got %s", picker_type)
 	end
 
 	if picker_type == "string" then

@@ -8,15 +8,27 @@ local M = {}
 
 ---@class wiremux.config.FilterConfig
 ---@field instances? fun(inst: wiremux.Instance, state: wiremux.State): boolean
----@field definitions? fun(def: wiremux.target.definition, name: string, state: wiremux.State): boolean
+---@field definitions? fun(name: string, def: wiremux.target.definition): boolean
+
+---@class wiremux.config.InstanceConfig
+---@field filter? fun(inst: wiremux.Instance, state: wiremux.State): boolean
+---@field sort? fun(a: wiremux.Instance, b: wiremux.Instance): boolean
+
+---@class wiremux.config.TargetConfig
+---@field filter? fun(name: string, def: wiremux.target.definition): boolean
+---@field sort? fun(a: string, b: string): boolean
+
+---@class wiremux.config.PickerConfig
+---@field adapter? string|fun(items: any[], opts: wiremux.picker.Opts, on_choice: fun(item: any?))
+---@field instances? wiremux.config.InstanceConfig
+---@field targets? wiremux.config.TargetConfig
 
 ---@class wiremux.config.UserOptions
 ---@field log_level? wiremux.config.LogLevel
 ---@field targets? { definitions?: table<string, wiremux.target.definition> }
 ---@field actions? { send?: wiremux.config.ActionConfig, focus?: wiremux.config.ActionConfig, close?: wiremux.config.ActionConfig }
----@field picker? string|fun(items: any[], opts: wiremux.picker.Opts, on_choice: fun(item: any?))
+---@field picker? wiremux.config.PickerConfig
 ---@field context? { resolvers?: table<string, fun(): string> }
----@field filter? wiremux.config.FilterConfig
 
 -- User-facing config (all fields optional)
 ---@class wiremux.config.ActionConfig
@@ -30,6 +42,7 @@ local M = {}
 ---@field kind? "pane"|"window"|("pane"|"window")[] Target kind (default: "pane"). If table, prompts user to choose.
 ---@field split? "horizontal"|"vertical" Split direction for panes (default: "horizontal")
 ---@field shell? boolean Run command through shell (default: true)
+---@field label? string Custom display label for picker
 
 local defaults = {
 	log_level = "warn",
@@ -46,17 +59,47 @@ local defaults = {
 	context = {
 		resolvers = {},
 	},
-	filter = {
-		instances = function(inst, state)
-			return inst.origin == state.origin_pane_id
-		end,
+	picker = {
+		adapter = nil,
+		instances = {
+			filter = function(inst, state)
+				return inst.origin == state.origin_pane_id
+			end,
+			sort = function(a, b)
+				return (a.last_used_at or 0) > (b.last_used_at or 0)
+			end,
+		},
+		targets = {
+			filter = nil,
+			sort = nil,
+		},
 	},
 }
 
 M.opts = vim.deepcopy(defaults)
 
+local function validate_fn(value, name)
+	if value ~= nil and type(value) ~= "function" then
+		error(string.format("wiremux: %s must be a function", name))
+	end
+end
+
 function M.setup(user_opts)
 	M.opts = vim.tbl_deep_extend("force", defaults, user_opts or {})
+
+	if M.opts.picker then
+		local inst = M.opts.picker.instances
+		if inst then
+			validate_fn(inst.filter, "picker.instances.filter")
+			validate_fn(inst.sort, "picker.instances.sort")
+		end
+
+		local tgt = M.opts.picker.targets
+		if tgt then
+			validate_fn(tgt.filter, "picker.targets.filter")
+			validate_fn(tgt.sort, "picker.targets.sort")
+		end
+	end
 
 	if M.opts.log_level ~= "off" then
 		local errors = require("wiremux.utils.validate").validate(M.opts)

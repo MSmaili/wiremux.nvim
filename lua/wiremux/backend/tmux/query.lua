@@ -1,7 +1,7 @@
 local M = {}
 
 local PANE_FORMAT =
-	"#{pane_id}:#{window_id}:#{@wiremux_target}:#{@wiremux_origin}:#{@wiremux_origin_cwd}:#{@wiremux_kind}:#{@wiremux_last_used}"
+	"#{pane_id}:#{window_id}:#{@wiremux_target}:#{@wiremux_origin}:#{@wiremux_origin_cwd}:#{@wiremux_kind}:#{@wiremux_last_used_at}:#{window_name}"
 
 ---@return string[]
 function M.current_pane()

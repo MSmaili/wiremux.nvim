@@ -27,12 +27,8 @@ local component_func = nil
 ---@param state wiremux.State
 ---@return wiremux.statusline.Info
 local function state_to_info(state)
-	-- Get filter from config
-	local config = require("wiremux.config")
-	local filter_fn = config.opts.filter.instances
-
 	local resolver = require("wiremux.core.resolver")
-	local filtered_instances = resolver.filter_instances(state.instances, filter_fn, state)
+	local filtered_instances = resolver.filter_instances(state.instances, state, nil)
 
 	local count = #filtered_instances
 	local last_used = nil

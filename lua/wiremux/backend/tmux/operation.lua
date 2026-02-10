@@ -50,7 +50,7 @@ function M.send(text, targets, opts, st)
 	end
 
 	if targets[1] and st.last_used_target_id ~= targets[1].id then
-		state.update_last_used(batch, st.last_used_target_id, targets[1].id)
+		state.update_last_used(batch, targets[1].id)
 	end
 
 	local ok = client.execute(batch, { stdin = clean_text })
@@ -73,7 +73,7 @@ function M.focus(target)
 	local batch = { win_cmd, pane_cmd }
 
 	if st.last_used_target_id ~= target.id then
-		state.update_last_used(batch, st.last_used_target_id, target.id)
+		state.update_last_used(batch, target.id)
 	end
 
 	local ok = client.execute(batch)
@@ -137,7 +137,8 @@ function M.create(target_name, def, st)
 	local cmds = {}
 
 	if kind == "window" then
-		table.insert(cmds, action.new_window(target_name, use_shell and nil or cmd))
+		local window_name = def.label or target_name
+		table.insert(cmds, action.new_window(window_name, use_shell and nil or cmd))
 		table.insert(cmds, query.window_id())
 	else
 		table.insert(cmds, action.split_pane(def.split or "horizontal", st.origin_pane_id, use_shell and nil or cmd))
@@ -165,7 +166,8 @@ function M.create(target_name, def, st)
 		origin = st.origin_pane_id,
 		origin_cwd = vim.fn.getcwd(),
 		kind = kind,
-		last_used = true,
+		last_used_at = os.time(),
+		window_name = (kind == "window" and (def.label or target_name)) or nil,
 	}
 
 	table.insert(st.instances, instance)
@@ -207,7 +209,7 @@ function M.toggle_visibility(st)
 		notify.debug("toggle_visibility: last_used not found, falling back to first instance %s", target.id)
 
 		local batch = {}
-		state.update_last_used(batch, st.last_used_target_id, target.id)
+		state.update_last_used(batch, target.id)
 		client.execute(batch)
 	end
 

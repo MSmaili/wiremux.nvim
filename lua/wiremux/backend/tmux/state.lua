@@ -11,7 +11,8 @@ local client = require("wiremux.backend.tmux.client")
 ---@field target string
 ---@field origin string
 ---@field origin_cwd string
----@field last_used boolean
+---@field last_used_at number?
+---@field window_name string?
 
 ---@class wiremux.State
 ---@field origin_pane_id string?
@@ -22,11 +23,11 @@ local client = require("wiremux.backend.tmux.client")
 ---@return wiremux.Instance?
 local function parse_pane_line(line)
 	local parts = vim.split(line, ":", { plain = true })
-	if #parts ~= 7 then
+	if #parts < 8 then
 		return nil
 	end
 
-	local id, window_id, target, origin, origin_cwd, kind, last_used = unpack(parts)
+	local id, window_id, target, origin, origin_cwd, kind, last_used_at, window_name = unpack(parts, 1, 8)
 
 	if not target or target == "" then
 		return nil
@@ -39,7 +40,8 @@ local function parse_pane_line(line)
 		origin = origin ~= "" and origin or nil,
 		origin_cwd = origin_cwd ~= "" and origin_cwd or nil,
 		kind = kind == "window" and "window" or "pane",
-		last_used = last_used == "true",
+		last_used_at = tonumber(last_used_at),
+		window_name = window_name ~= "" and window_name or nil,
 	}
 end
 
@@ -52,12 +54,14 @@ local function parse_state_results(results)
 
 	local instances = {}
 	local last_used_target_id = nil
+	local max_used_at = 0
 
 	for line in panes_output:gmatch("[^\n]+") do
 		local inst = parse_pane_line(line)
 		if inst then
 			table.insert(instances, inst)
-			if inst.last_used then
+			if inst.last_used_at and inst.last_used_at > max_used_at then
+				max_used_at = inst.last_used_at
 				last_used_target_id = inst.id
 			end
 		end
@@ -106,18 +110,14 @@ function M.set_instance_metadata(pane_id, target, origin, origin_cwd, kind)
 		action.set_pane_option(pane_id, "@wiremux_origin", origin),
 		action.set_pane_option(pane_id, "@wiremux_origin_cwd", origin_cwd),
 		action.set_pane_option(pane_id, "@wiremux_kind", kind),
-		action.set_pane_option(pane_id, "@wiremux_last_used", "true"),
+		action.set_pane_option(pane_id, "@wiremux_last_used_at", tostring(os.time())),
 	})
 end
 
 ---@param batch string[][] Command batch to append to
----@param old_id string? Previous last_used pane ID
----@param new_id string New last_used pane ID
-function M.update_last_used(batch, old_id, new_id)
-	if old_id and old_id ~= new_id then
-		table.insert(batch, action.set_pane_option(old_id, "@wiremux_last_used", "false"))
-	end
-	table.insert(batch, action.set_pane_option(new_id, "@wiremux_last_used", "true"))
+---@param new_id string Pane ID to mark as used
+function M.update_last_used(batch, new_id)
+	table.insert(batch, action.set_pane_option(new_id, "@wiremux_last_used_at", tostring(os.time())))
 end
 
 return M

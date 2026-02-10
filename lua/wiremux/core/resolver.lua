@@ -33,10 +33,14 @@ local M = {}
 
 ---Filter instances based on filter function
 ---@param instances wiremux.Instance[]
----@param filter_fn? fun(inst: wiremux.Instance, state: wiremux.State): boolean
 ---@param state wiremux.State
+---@param action_filter? wiremux.config.FilterConfig
 ---@return wiremux.Instance[]
-function M.filter_instances(instances, filter_fn, state)
+function M.filter_instances(instances, state, action_filter)
+	local config = require("wiremux.config")
+	local filter_fn = (action_filter and action_filter.instances)
+		or (config.opts.picker and config.opts.picker.instances and config.opts.picker.instances.filter)
+
 	return vim.iter(instances)
 		:filter(function(inst)
 			if inst.id == state.origin_pane_id then
@@ -50,36 +54,78 @@ function M.filter_instances(instances, filter_fn, state)
 		:totable()
 end
 
+---Sort instances
+---@param instances wiremux.Instance[]
+---@return wiremux.Instance[]
+local function sort_instances(instances)
+	local config = require("wiremux.config")
+	local sort_fn = config.opts.picker and config.opts.picker.instances and config.opts.picker.instances.sort
+
+	if not sort_fn then
+		return instances
+	end
+
+	local sorted = vim.list_slice(instances)
+	table.sort(sorted, sort_fn)
+	return sorted
+end
+
+---Filter definitions
 ---@param definitions table<string, wiremux.target.definition>
----@param filter_fn? fun(def: wiremux.target.definition, name: string, state: wiremux.State): boolean
----@param state wiremux.State
+---@param action_filter? wiremux.config.FilterConfig
 ---@return table<string, wiremux.target.definition>
-local function filter_definitions(definitions, filter_fn, state)
+local function filter_definitions(definitions, action_filter)
+	local config = require("wiremux.config")
+	local filter_fn = (action_filter and action_filter.definitions)
+		or (config.opts.picker and config.opts.picker.targets and config.opts.picker.targets.filter)
+
 	if not filter_fn then
 		return definitions
 	end
+
 	local filtered = {}
 	for name, def in pairs(definitions) do
-		if filter_fn(def, name, state) then
+		if filter_fn(name, def) then
 			filtered[name] = def
 		end
 	end
 	return filtered
 end
 
+---Get display name for instance
+---@param inst wiremux.Instance
+---@param def wiremux.target.definition?
+---@return string
+local function get_display_name(inst, def)
+	if inst.kind == "window" and inst.window_name and inst.window_name ~= "" then
+		return inst.window_name
+	elseif def and def.label then
+		return def.label
+	else
+		return inst.target
+	end
+end
+
 ---@param instances wiremux.Instance[]
 ---@return wiremux.ResolveItem.Instance[]
 local function build_instance_items(instances)
+	local config = require("wiremux.config")
+	local definitions = config.opts.targets.definitions or {}
+
 	local counts = {}
 	return vim.iter(instances)
 		:map(function(inst)
 			local target = inst.target
 			counts[target] = (counts[target] or 0) + 1
+
+			local def = definitions[target]
+			local display = get_display_name(inst, def)
+
 			return {
 				type = "instance",
 				instance = inst,
 				target = target,
-				label = target .. " #" .. counts[target],
+				label = string.format("%s #%d", display, counts[target]),
 			}
 		end)
 		:totable()
@@ -126,7 +172,8 @@ local function resolve_by_behavior(instances, behavior, last_used)
 	end
 
 	if behavior == "pick" then
-		return pick_result(build_instance_items(instances))
+		local sorted = sort_instances(instances)
+		return pick_result(build_instance_items(sorted))
 	end
 
 	if behavior == "last" and last_used then
@@ -137,7 +184,8 @@ local function resolve_by_behavior(instances, behavior, last_used)
 		end
 	end
 
-	return pick_result(build_instance_items(instances))
+	local sorted = sort_instances(instances)
+	return pick_result(build_instance_items(sorted))
 end
 
 ---@param state wiremux.State
@@ -145,13 +193,10 @@ end
 ---@param opts wiremux.ResolveOpts
 ---@return wiremux.ResolveResult
 function M.resolve(state, definitions, opts)
-	local config = require("wiremux.config")
-	local action_filter = opts.filter or {}
-	local global_filter = config.opts.filter or {}
 	local last_used = state.last_used_target_id
 
-	local instances = M.filter_instances(state.instances, action_filter.instances or global_filter.instances, state)
-	local filtered_defs = filter_definitions(definitions, action_filter.definitions or global_filter.definitions, state)
+	local instances = M.filter_instances(state.instances, state, opts.filter)
+	local filtered_defs = filter_definitions(definitions, opts.filter)
 
 	if opts.mode == "definitions" then
 		return pick_result(build_definition_items(filtered_defs))

@@ -16,6 +16,7 @@ function M.create(opts)
 		prompt = "Create",
 		behavior = opts.behavior,
 		mode = "definitions",
+		filter = opts.filter,
 	}, {
 		on_definition = function(name, def, state)
 			backend.create(name, def, state)

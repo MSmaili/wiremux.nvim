@@ -49,12 +49,19 @@ local function resolve()
 	end
 
 	local cfg = require("wiremux.config").get()
-	if type(cfg.picker) == "function" then
-		cached_select = cfg.picker
-	elseif type(cfg.picker) == "string" then
-		cached_select = try_adapter(cfg.picker) or auto_detect()
-	else
+	local picker_cfg = cfg.picker
+
+	if not picker_cfg or type(picker_cfg) ~= "table" then
 		cached_select = auto_detect()
+	else
+		local adapter = picker_cfg.adapter
+		if type(adapter) == "function" then
+			cached_select = adapter
+		elseif type(adapter) == "string" then
+			cached_select = try_adapter(adapter) or auto_detect()
+		else
+			cached_select = auto_detect()
+		end
 	end
 
 	return cached_select
