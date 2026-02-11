@@ -55,6 +55,21 @@ Targets are named tmux panes/windows wiremux can create, focus, close, and send 
 
 ```lua
 require("wiremux").setup({
+  picker = {
+    adapter = "fzf-lua", -- "fzf-lua" | "vim.ui.select" | custom function
+    instances = {
+      filter = function(inst, state)  -- optional, default: filter by origin
+        return inst.origin == state.origin_pane_id
+      end,
+      sort = function(a, b)  -- optional, default: sort by recency (most recent first)
+        return (a.last_used_at or 0) > (b.last_used_at or 0)
+      end,
+    },
+    targets = {
+      filter = nil,  -- optional, no default filter
+      sort = nil,    -- optional, no default sort
+    },
+  },
   targets = {
     definitions = {
       opencode = {
@@ -62,11 +77,13 @@ require("wiremux").setup({
         kind = "pane",     -- "pane" | "window" | {"pane", "window"} (default: pane)
                            -- table = prompt to choose at runtime
         split = "vertical", -- for panes: "horizontal" | "vertical"
+        label = "OpenAI",  -- custom display name (optional)
       },
       claudecode = {
         cmd = "claudecode",
         kind = "pane",
         split = "horizontal",
+        label = "Claude",
       },
       -- Run directly (no shell wrapper). When the program exits, tmux closes the pane.
       ai_direct = {
@@ -104,7 +121,7 @@ Here is my actual lazy.nvim configuration:
 {
   "MSmaili/wiremux.nvim",
   opts = {
-    picker = "fzf-lua",
+    picker = { adapter = "fzf-lua" },
     targets = {
       definitions = {
         -- AI assistants (shell=false: pane closes when AI exits)
@@ -238,7 +255,7 @@ local info = require("wiremux").statusline.get_info()
 function()
   local info = require("wiremux").statusline.get_info()
   if info.count == 0 then return "" end
-  
+
   local icon = info.last_used.kind == "window" and "󰖯" or "󰆍"
   return string.format("%s %d", icon, info.count)
 end
@@ -303,20 +320,67 @@ When you restart Neovim, wiremux will still see your previously created targets 
 
 Filters control which targets appear in pickers. This matters when you have multiple Neovim instances or want to share AI assistants (instances) across projects.
 
-**Default (by origin):** Only show targets created from your current Neovim pane. Keeps your instances private to your current editor instance.
+**Default (by origin):** Only show instances created from your current Neovim pane. Keeps your instances private to your current editor instance.
 
-**By working directory:** Show all targets created from the same directory. Useful for sharing one instances per project across multiple Neovim instances.
+**By working directory:** Show all instances created from the same directory. Useful for sharing instances per project across multiple Neovim instances.
 
-**No filter:** Show all targets globally. One instance for everything.
+**No filter:** Show all instances globally. One instance for everything.
+
+### Global Filters
+
+Set default filters in `picker.instances.filter` and `picker.targets.filter`:
 
 ```lua
--- Share targets within the same project directory
 require("wiremux").setup({
-  filter = {
-    instances = function(inst, state)
-      return inst.origin_cwd == vim.fn.getcwd()
-    end,
+  picker = {
+    instances = {
+      -- Default: filter by origin (current Neovim pane)
+      filter = function(inst, state)
+        return inst.origin == state.origin
+      end,
+    },
+    targets = {
+      -- No default filter for target definitions
+      filter = nil,
+    },
   },
+})
+```
+
+### Common Filter Examples
+
+```lua
+require("wiremux").setup({
+  picker = {
+    instances = {
+      -- Show all instances globally (no filtering)
+      filter = nil,
+
+      -- OR: Filter by working directory
+      filter = function(inst, state)
+        return inst.origin_cwd == vim.fn.getcwd()
+      end,
+    },
+  },
+})
+```
+
+### Per-Action Filters
+
+Override global filters for specific actions using `opts.filter`:
+
+```lua
+-- Use global filter for most actions, but show all instances for this one
+require("wiremux").send("{file}", {
+  focus = true,
+  filter = nil  -- Override global filter to show all instances
+})
+
+-- Filter by directory for this specific action
+require("wiremux").focus({
+  filter = function(inst, state)
+    return inst.origin_cwd == vim.fn.getcwd()
+  end
 })
 ```
 

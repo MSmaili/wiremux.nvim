@@ -58,13 +58,15 @@ Define targets:
           cmd = "opencode",
           kind = "pane",
           split = "vertical",
-          shell = false -- recomanded if you want to
-                        -- close/kill pane/window when closing
+          shell = false, -- recommended if you want to
+                         -- close/kill pane/window when closing
+          label = "OpenAI", -- custom display name
         },
         claudecode = {
           cmd = "claudecode",
           kind = "window",
           split = "horizontal",
+          label = "Claude",
         },
       },
     },
@@ -133,6 +135,44 @@ Configure with: >lua
   })
 <
 
+Complete example:
+>lua
+  require("wiremux").setup({
+    picker = {
+      adapter = "fzf-lua", -- "fzf-lua" | "vim.ui.select" | custom function
+      instances = {
+        filter = function(inst, state)  -- optional, default: filter by origin
+          return inst.origin == state.origin_pane_id
+        end,
+        sort = function(a, b)  -- optional, default: sort by recency
+          return (a.last_used_at or 0) > (b.last_used_at or 0)
+        end,
+      },
+      targets = {
+        filter = nil,  -- optional, no default filter
+        sort = nil,    -- optional, no default sort
+      },
+    },
+    targets = {
+      definitions = {
+        opencode = {
+          cmd = "opencode",
+          kind = "pane",
+          split = "vertical",
+          label = "OpenAI",
+          shell = false,
+        },
+        claudecode = {
+          cmd = "claudecode", 
+          kind = "pane",
+          split = "horizontal",
+          label = "Claude",
+        },
+      },
+    },
+  })
+<
+
 Top-level options ~
 
 *wiremux-config-log-level*
@@ -162,6 +202,10 @@ kind                (string|table, default: "pane")
 split               (string, default: "horizontal")
                     For panes: "horizontal" or "vertical"
 
+*wiremux-config-definition-label*
+label               (string|nil)
+                    Custom display name for the target.
+
 *wiremux-config-definition-shell*
 shell               (boolean, default: true)
                     true: create pane, then type cmd
@@ -187,26 +231,60 @@ actions.send.submit (boolean)
 actions.*.focus     (boolean)
                     Focus target after action.
 
-Other options ~
+Picker configuration ~
 
 *wiremux-config-picker*
-picker              (string|function|nil)
+picker              (table)
+                    Picker configuration.
+
+*wiremux-config-picker-adapter*
+picker.adapter      (string|function|nil)
                     Picker to use. nil = auto-detect (fzf-lua preferred)
+                    "fzf-lua" | "vim.ui.select" | custom function
+
+*wiremux-config-picker-instances*
+picker.instances    (table)
+                    Configuration for instance filtering and sorting.
+
+*wiremux-config-picker-instances-filter*
+picker.instances.filter (string|function)
+                    "origin" - show targets from current Neovim instance
+                    "cwd" - show targets from current working directory  
+                    "global" - show all targets
+                    function - custom filter function
+
+*wiremux-config-picker-instances-sort*
+picker.instances.sort (string|function, default: "recency")
+                    "recency" - sort by most recent first
+                    function - custom sort function
+
+*wiremux-config-picker-targets*
+picker.targets      (table)
+                    Configuration for target definition filtering and sorting.
+
+*wiremux-config-picker-targets-filter*
+picker.targets.filter (string|function, default: "global")
+                    "global" - show all target definitions
+                    function - custom filter function
+
+*wiremux-config-picker-targets-sort*
+picker.targets.sort (string|function, default: "name")
+                    "name" - sort alphabetically by name
+                    function - custom sort function
+
+Other options ~
 
 *wiremux-config-context*
 context.resolvers   (table<string, function>)
                     Custom placeholder functions.
                     See |wiremux-placeholders|.
 
-*wiremux-config-filter*
-filter              (table)
-                    Global filters. See |wiremux-filters| for details.
-
 ==============================================================================
 4.1 FILTERS                                                    *wiremux-filters*
 
-Filters control which targets appear in pickers. This is useful when you have
-multiple Neovim instances or want to share AI assistants across projects.
+Filters control which targets appear in pickers. Configure them in the picker
+section. This is useful when you have multiple Neovim instances or want to
+share AI assistants across projects.
 
 Filter functions receive:
 - `inst` (Instance): { id, target, origin, origin_cwd, kind, last_used }
@@ -220,10 +298,12 @@ Only show targets created from the current Neovim pane. This keeps your AI
 assistant private to your current editor instance.
 >lua
   require("wiremux").setup({
-    filter = {
-      instances = function(inst, state)
-        return inst.origin == state.origin_pane_id
-      end,
+    picker = {
+      instances = {
+        filter = function(inst, state)
+          return inst.origin == state.origin_pane_id
+        end,
+      },
     },
   })
 <
@@ -235,10 +315,12 @@ AI assistant per project, shared across multiple Neovim instances in the
 same project.
 >lua
   require("wiremux").setup({
-    filter = {
-      instances = function(inst, state)
-        return inst.origin_cwd == vim.fn.getcwd()
-      end,
+    picker = {
+      instances = {
+        filter = function(inst, state)
+          return inst.origin_cwd == vim.fn.getcwd()
+        end,
+      },
     },
   })
 <
@@ -249,15 +331,40 @@ Show all targets regardless of where they were created. Useful if you want
 one global AI assistant for everything.
 >lua
   require("wiremux").setup({
-    filter = {
-      instances = nil,  -- or function() return true end
+    picker = {
+      instances = {
+        filter = nil,  -- no filter, show all
+      },
+    },
+  })
+<
+
+Custom sorting ~
+
+Control the order targets appear in pickers:
+>lua
+  require("wiremux").setup({
+    picker = {
+      instances = {
+        -- Default: sort by recency (most recent first)
+        sort = function(a, b)
+          return (a.last_used_at or 0) > (b.last_used_at or 0)
+        end,
+      },
+      targets = {
+        -- Default: no sorting (insertion order)
+        -- Example: sort alphabetically
+        sort = function(a, b)
+          return a < b
+        end,
+      },
     },
   })
 <
 
 Per-action filters ~
 
-You can also override filters for specific actions:
+You can also override filters for specific actions using `opts.filter`:
 >lua
   -- For send: only show pane targets (not windows)
   require("wiremux").send("text", {
