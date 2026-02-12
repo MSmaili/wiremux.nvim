@@ -4,6 +4,9 @@ M.state = {
 	get = function()
 		return require("wiremux.backend.tmux.state").get()
 	end,
+	get_async = function(callback)
+		return require("wiremux.backend.tmux.state").get_async(callback)
+	end,
 	set = function(s)
 		return require("wiremux.backend.tmux.state").set(s)
 	end,

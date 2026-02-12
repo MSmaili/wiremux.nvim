@@ -1,6 +1,6 @@
 local M = {}
 
-local notify = require("wiremux.utils.notify")
+local resolver = require("wiremux.core.resolver")
 
 ---@class wiremux.statusline.Info
 ---@field loading boolean true until first successful fetch
@@ -14,26 +14,19 @@ local cache = {
 	last_used = nil,
 }
 
-local REFRESH_INTERVAL = 30000
-local DEBOUNCE_MS = 500
-local timer = nil
-local debounce_timer = nil
-local initialized = false
-local fetching = false
 local augroup = vim.api.nvim_create_augroup("WiremuxStatusline", { clear = true })
 local component_func = nil
+local autocmd_set = false
 
 ---Convert wiremux.State to statusline info with filtering
 ---@param state wiremux.State
 ---@return wiremux.statusline.Info
 local function state_to_info(state)
-	local resolver = require("wiremux.core.resolver")
 	local filtered_instances = resolver.filter_instances(state.instances, state, nil)
 
 	local count = #filtered_instances
 	local last_used = nil
 
-	-- Find last_used from filtered instances only
 	if state.last_used_target_id then
 		for _, inst in ipairs(filtered_instances) do
 			if inst.id == state.last_used_target_id then
@@ -48,7 +41,6 @@ local function state_to_info(state)
 		end
 	end
 
-	-- Fallback to first filtered instance
 	if not last_used and count > 0 then
 		local inst = filtered_instances[1]
 		last_used = {
@@ -66,98 +58,61 @@ local function state_to_info(state)
 	}
 end
 
----Update cache in-place to preserve table reference
----@param info wiremux.statusline.Info
-local function update_cache_in_place(info)
+---Update cache from state
+---@param state wiremux.State
+function M.update(state)
+	local info = state_to_info(state)
 	cache.loading = info.loading
 	cache.count = info.count
 	cache.last_used = info.last_used
-end
 
----Fetch state async and update cache
-local function fetch()
-	if fetching then
-		return
-	end
-	fetching = true
-
-	require("wiremux.backend.tmux.state").get_async(function(state)
-		fetching = false
-		if not state then
-			notify.debug("statusline: fetch failed")
-			return
-		end
-
-		update_cache_in_place(state_to_info(state))
-		notify.debug("statusline: updated (count=%d)", cache.count)
-
-		-- Refresh statusline
-		vim.cmd("redrawstatus")
-	end)
-end
-
----Debounced fetch — collapses rapid calls into a single fetch
-local function fetch_debounced()
-	if debounce_timer then
-		debounce_timer:stop()
-		debounce_timer:close()
-	end
-	debounce_timer = vim.uv.new_timer()
-	debounce_timer:start(DEBOUNCE_MS, 0, vim.schedule_wrap(fetch))
-end
-
----Get statusline info (non-blocking, returns cached data)
----First call initializes the timer and triggers an async fetch
----@return wiremux.statusline.Info
-function M.get_info()
-	if not initialized then
-		initialized = true
-
-		timer = vim.uv.new_timer()
-		timer:start(REFRESH_INTERVAL, REFRESH_INTERVAL, vim.schedule_wrap(fetch))
-
-		autocmd_id = vim.api.nvim_create_autocmd("FocusGained", {
-			group = augroup,
-			callback = fetch_debounced,
-		})
-
-		fetch()
-	end
-
-	return cache
-end
-
----Update statusline from known state (no IPC)
----@param state wiremux.State
-function M.update(state)
-	update_cache_in_place(state_to_info(state))
-	-- Refresh statusline (works with all statusline plugins)
 	vim.cmd("redrawstatus")
 end
 
+---Get statusline info
+---Returns cached info.
+---@return wiremux.statusline.Info
+function M.get_info()
+	return cache
+end
+
+---Refresh statusline on FocusGained
+local function refresh()
+	local backend = require("wiremux.backend.tmux")
+	backend.state.get_async(function(state)
+		if state then
+			M.update(state)
+		end
+	end)
+end
+
 ---Returns a statusline component function
----Only shows when tmux backend is available. Returns empty string otherwise.
+---Only shows when backend is available. Returns empty string otherwise.
 ---Usage: { require("wiremux").statusline.component() }
 ---@return function
 function M.component()
 	if not component_func then
+		if not autocmd_set then
+			autocmd_set = true
+			vim.api.nvim_create_autocmd("FocusGained", {
+				group = augroup,
+				callback = refresh,
+			})
+			vim.schedule(refresh)
+		end
+
 		component_func = function()
-			-- Only show when tmux backend is available
-			if not require("wiremux.backend.tmux.client").is_available() then
+			if cache.loading then
 				return ""
 			end
 
-			local info = M.get_info()
-
-			if info.loading then
-				return "󰫃 wiremux"
-			elseif info.count == 0 then
+			if cache.count == 0 then
 				return ""
 			end
 
-			local text = string.format("󰆍 %d", info.count)
-			if info.last_used then
-				text = text .. string.format(" [%s]", info.last_used.name)
+			local text = string.format("󰆍 %d", cache.count)
+			if cache.last_used then
+				text = text .. string.format(" [%s]", cache.last_used.name)
 			end
 			return text
 		end

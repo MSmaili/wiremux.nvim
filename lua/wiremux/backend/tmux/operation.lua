@@ -7,15 +7,6 @@ local notify = require("wiremux.utils.notify")
 
 local BUFFER_NAME = "wiremux"
 
----Update statusline from known state (only if already loaded)
----@param st wiremux.State
-local function update_statusline(st)
-	local statusline = package.loaded["wiremux.statusline"]
-	if statusline then
-		statusline.update(st)
-	end
-end
-
 ---@param target wiremux.Instance
 ---@return string[], string[]
 function M._focus_cmds(target)
@@ -63,7 +54,6 @@ function M.send(text, targets, opts, st)
 	if targets[1] then
 		st.last_used_target_id = targets[1].id
 	end
-	update_statusline(st)
 end
 
 ---@param target wiremux.Instance
@@ -83,7 +73,7 @@ function M.focus(target)
 	end
 
 	st.last_used_target_id = target.id
-	update_statusline(st)
+	-- Statusline is updated by core/action after callback completes
 end
 
 ---@param targets wiremux.Instance[]
@@ -120,8 +110,6 @@ function M.close(targets, st)
 	if st.last_used_target_id and closed_ids[st.last_used_target_id] then
 		st.last_used_target_id = remaining[1] and remaining[1].id or nil
 	end
-
-	update_statusline(st)
 end
 
 ---@param target_name string
@@ -172,12 +160,9 @@ function M.create(target_name, def, st)
 
 	table.insert(st.instances, instance)
 	st.last_used_target_id = instance.id
-	update_statusline(st)
-
 	return instance
 end
 
----Toggle zoom on current pane
 function M.toggle_zoom()
 	client.execute({ action.resize_pane_zoom() })
 end
@@ -213,8 +198,6 @@ function M.toggle_visibility(st)
 		client.execute(batch)
 	end
 
-	-- For windows: switch to target window
-	-- For panes: toggle zoom
 	if target.kind == "window" then
 		notify.debug("toggle_visibility: switching to window %s", target.id)
 		client.execute({ action.select_window(target.id) })
@@ -224,7 +207,7 @@ function M.toggle_visibility(st)
 	end
 
 	st.last_used_target_id = target.id
-	update_statusline(st)
+	-- Statusline is updated by core/action after callback completes
 end
 
 return M

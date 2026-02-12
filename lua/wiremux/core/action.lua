@@ -1,5 +1,14 @@
 local M = {}
 
+---Update statusline from state (if statusline module is loaded)
+---@param state wiremux.State
+local function update_statusline(state)
+	local statusline = package.loaded["wiremux.statusline"]
+	if statusline then
+		statusline.update(state)
+	end
+end
+
 ---@class wiremux.action.RunOpts
 ---@field prompt string
 ---@field behavior wiremux.action.Behavior
@@ -70,11 +79,13 @@ local function dispatch_choice(choice, callbacks, state)
 	if choice.type == "instance" then
 		if callbacks.on_targets then
 			callbacks.on_targets({ choice.instance }, state)
+			update_statusline(state)
 		end
 	elseif choice.type == "definition" then
 		if callbacks.on_definition then
 			resolve_kind(choice.def, function(resolved_def)
 				callbacks.on_definition(choice.target, resolved_def, state)
+				update_statusline(state)
 			end)
 		end
 	end
@@ -119,6 +130,7 @@ function M.run(opts, callbacks)
 
 	if result.targets and callbacks.on_targets then
 		callbacks.on_targets(result.targets, state)
+		update_statusline(state)
 	end
 end
 
