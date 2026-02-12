@@ -68,6 +68,11 @@ local function validate_picker(picker)
 		if not adapter_ok then
 			return string.format("invalid picker '%s', adapter not found", picker)
 		end
+		return string.format(
+			"picker = '%s' is no longer supported. Use picker = { adapter = '%s' } instead",
+			picker,
+			picker
+		)
 	end
 
 	return nil

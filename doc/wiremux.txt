@@ -82,11 +82,47 @@ Pick from a custom prompt list:
 >lua
   vim.keymap.set({ "n", "x" }, "<leader>ap", function()
     require("wiremux").send({
-      { name = "Review changes", text = "Can you review my changes?\n{changes}" },
-      { name = "Fix diagnostics", text = "Fix {file}\n{diagnostics_all}" },
-      { name = "Fix quickfix", text = "Help me fix these:\n{quickfix}" },
+      { label = "Review changes", value = "Can you review my changes?\n{changes}" },
+      { label = "Fix diagnostics", value = "Fix {file}\n{diagnostics_all}" },
+      { label = "Fix quickfix", value = "Help me fix these:\n{quickfix}" },
     })
   end, { desc = "Wiremux: Select prompt" })
+<
+
+SendItem fields ~
+
+| Field     | Type                | Description                              |
+|-----------|---------------------|------------------------------------------|
+| value     | string              | Text/command to send (required)          |
+| label     | string (optional)   | Display name in picker                   |
+| submit    | boolean (optional)  | Auto-submit after sending                |
+| visible   | boolean or function | Show/hide item based on condition        |
+
+Commands with auto-submit:
+>lua
+  require("wiremux").send({
+    { label = "Run tests", value = "npm test", submit = true },
+    { label = "Run dev", value = "npm run dev", submit = true },
+  })
+<
+
+Conditional visibility:
+>lua
+  require("wiremux").send({
+    {
+      label = "TypeScript check",
+      value = "npx tsc --noEmit",
+      submit = true,
+      visible = function() return vim.bo.filetype == "typescript" end
+    },
+    {
+      label = "Test selection",
+      value = "jest -t '{selection}'",
+      visible = function()
+        return require("wiremux.context").is_available("selection")
+      end
+    },
+  })
 <
 
 ==============================================================================
@@ -407,6 +443,29 @@ Custom resolvers:
       },
     },
   })
+<
+
+Checking placeholder availability ~
+
+Use `context.is_available()` to check if a placeholder has a value:
+
+>lua
+  local context = require("wiremux.context")
+  if context.is_available("selection") then
+    -- selection is not empty
+  end
+<
+
+This is useful for conditional visibility in SendItem:
+
+>lua
+  {
+    label = "Test selection",
+    value = "jest -t '{selection}'",
+    visible = function()
+      return require("wiremux.context").is_available("selection")
+    end
+  }
 <
 
 ==============================================================================

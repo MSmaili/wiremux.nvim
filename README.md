@@ -149,31 +149,86 @@ Here is my actual lazy.nvim configuration:
     { "<leader>aD", function() require("wiremux").send("{diagnostics_all}", { focus = true }) end, desc = "Send all diagnostics" },
     -- Send via motion (operator)
     { "ga", function() return require("wiremux").send_motion() end, mode = { "x", "n" }, expr = true, desc = "Send motion" },
-    -- Prompt library
     {
       "<leader>ap",
       function()
         require("wiremux").send({
-          { name = "Review changes", text = "Can you review my changes?\n{changes}" },
-          { name = "Fix diagnostics (file)", text = "Can you help me fix the diagnostics in {file}?\n{diagnostics_all}" },
-          { name = "Fix diagnostics (line)", text = "Can you help me fix this diagnostic?\n{diagnostics}" },
-          { name = "Add docs", text = "Add documentation to {this}" },
-          { name = "Explain", text = "Explain {this}" },
-          { name = "Fix", text = "Can you fix {this}?" },
-          { name = "Optimize", text = "How can {this} be optimized?" },
-          { name = "Review file", text = "Can you review {file} for any issues?" },
-          { name = "Write tests", text = "Can you write tests for {this}?" },
-          { name = "Fix quickfix", text = "Can you help me fix these issues?\n{quickfix}" },
+          -- AI Prompts
+          { label = "Review changes", value = "Can you review my changes?\n{changes}" },
+          { label = "Fix diagnostics (file)", value = "Can you help me fix the diagnostics in {file}?\n{diagnostics_all}", visible = function() return require("wiremux.context").is_available("diagnostics_all") end },
+          { label = "Fix diagnostics (line)", value = "Can you help me fix this diagnostic?\n{diagnostics}", visible = function() return require("wiremux.context").is_available("diagnostics") end },
+          { label = "Add docs", value = "Add documentation to {this}" },
+          { label = "Explain", value = "Explain {this}" },
+          { label = "Fix", value = "Can you fix {this}?" },
+          { label = "Optimize", value = "How can {this} be optimized?" },
+          { label = "Review file", value = "Can you review {file} for any issues?" },
+          { label = "Write tests", value = "Can you write tests for {this}?" },
+          { label = "Fix quickfix", value = "Can you help me fix these issues?\n{quickfix}", visible = function() return require("wiremux.context").is_available("quickfix") end },
         })
       end,
       mode = { "n", "x" },
-      desc = "Select prompt",
+      desc = "AI prompts",
+    },
+    -- Run project commands (context-aware)
+    {
+      "<leader>ar",
+      function()
+        require("wiremux").send({
+          -- Node.js commands
+          { label = "npm test", value = "npm test", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },
+          { label = "npm run build", value = "npm run build", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },
+          { label = "npm run start", value = "npm run start", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },
+          -- Go commands
+          { label = "go build", value = "go build", submit = true, visible = function() return vim.bo.filetype == "go" end },
+          { label = "go test (all)", value = "go test ./...", submit = true, visible = function() return vim.bo.filetype == "go" end },
+          { label = "go test (selection)", value = "go test -run '{selection}'", submit = true, visible = function() return vim.bo.filetype == "go" and require("wiremux.context").is_available("selection") end },
+        })
+      end,
+      desc = "Run project command",
     },
   },
 }
 ```
 
 </details>
+
+### SendItem (Prompt/Command) Fields
+
+When using `send()` with an array of items, each item supports these fields:
+
+| Field     | Type                   | Description                                  |
+| --------- | ---------------------- | -------------------------------------------- |
+| `value`   | `string`               | **(Required)** The text or command to send   |
+| `label`   | `string?`              | Display name in picker (defaults to `value`) |
+| `submit`  | `boolean?`             | Auto-submit after sending (default: `false`) |
+| `visible` | `boolean \| function?` | Show/hide item (default: `true`)             |
+
+**Examples:**
+
+```lua
+-- Basic prompt (label optional)
+{ value = "Explain {this}" }
+
+-- Command with auto-submit
+{ label = "Run tests", value = "npm test", submit = true }
+
+-- Conditional visibility (only show when selection available)
+{
+  label = "Test selection",
+  value = "jest -t '{selection}'",
+  visible = function()
+    return require("wiremux.context").is_available("selection")
+  end
+}
+
+-- Filetype-specific command
+{
+  label = "Cargo test",
+  value = "cargo test",
+  submit = true,
+  visible = function() return vim.bo.filetype == "rust" end
+}
+```
 
 **Key patterns:**
 
