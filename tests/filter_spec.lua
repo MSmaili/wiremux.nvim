@@ -7,13 +7,17 @@ describe("resolver filtering", function()
 		package.loaded["wiremux.core.resolver"] = nil
 		package.loaded["wiremux.config"] = nil
 
-		-- Mock config
 		config = {
 			opts = {
-				filter = {
-					instances = function(inst, state)
-						return inst.origin == state.origin_pane_id
-					end,
+				targets = {
+					definitions = {},
+				},
+				picker = {
+					instances = {
+						filter = function(inst, state)
+							return inst.origin == state.origin_pane_id
+						end,
+					},
 				},
 			},
 		}
@@ -40,7 +44,7 @@ describe("resolver filtering", function()
 		end)
 
 		it("shows all when no filter", function()
-			config.opts.filter = nil
+			config.opts.picker.instances.filter = nil
 
 			local state = {
 				origin_pane_id = "%0",
@@ -144,7 +148,7 @@ describe("resolver filtering", function()
 			local result = resolver.resolve(state, definitions, {
 				behavior = "pick",
 				filter = {
-					definitions = function(def, name)
+					definitions = function(name, def)
 						return name ~= "test"
 					end,
 				},

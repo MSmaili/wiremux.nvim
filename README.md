@@ -125,12 +125,11 @@ Here is my actual lazy.nvim configuration:
     targets = {
       definitions = {
         -- AI assistants (shell=false: pane closes when AI exits)
-        opencode = { cmd = "opencode", kind = "pane", shell = false, split = "horizontal" },
-        claude = { cmd = "claude", kind = "pane", shell = false, split = "horizontal" },
-        kiro = { cmd = "kiro-cli", kind = "pane", shell = false, split = "horizontal" },
+        opencode = { cmd = "opencode", kind = { "pane", "window" }, shell = false, split = "horizontal" },
+        claude = { cmd = "claude", kind = { "pane", "window" }, shell = false, split = "horizontal" },
+        kiro = { cmd = "kiro-cli", kind = { "pane", "window" }, shell = false, split = "horizontal" },
         -- Interactive shells
-        shell = { kind = "window", shell = true, split = "horizontal" },
-        shell_pane = { kind = "pane", shell = true, split = "horizontal" },
+        shell = { kind = { "pane", "window" }, shell = true, split = "horizontal" },
       },
     },
   },

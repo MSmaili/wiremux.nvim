@@ -25,7 +25,7 @@ describe("state", function()
 					"list-panes",
 					"-a",
 					"-F",
-					"#{pane_id}:#{window_id}:#{@wiremux_target}:#{@wiremux_origin}:#{@wiremux_origin_cwd}:#{@wiremux_kind}:#{@wiremux_last_used}",
+					"#{pane_id}:#{window_id}:#{@wiremux_target}:#{@wiremux_origin}:#{@wiremux_origin_cwd}:#{@wiremux_kind}:#{@wiremux_last_used_at}:#{window_name}",
 				}
 			end,
 		}
@@ -52,7 +52,7 @@ describe("state", function()
 			client.query = function()
 				return {
 					"%0",
-					"%1:@1:test1:%0:/home:pane:false\n%2:@1:test2:%0:/home:pane:true",
+					"%1:@1:test1:%0:/home:pane:1000:\n%2:@1:test2:%0:/home:pane:2000:\n",
 				}
 			end
 
@@ -64,14 +64,14 @@ describe("state", function()
 			assert.are.equal("%0", state.instances[1].origin)
 			assert.are.equal("/home", state.instances[1].origin_cwd)
 			assert.are.equal("pane", state.instances[1].kind)
-			assert.are.equal(false, state.instances[1].last_used)
+			assert.are.equal(1000, state.instances[1].last_used_at)
 		end)
 
 		it("extracts last_used_target_id from pane metadata", function()
 			client.query = function()
 				return {
 					"%0",
-					"%1:@1:test1:%0:/home:pane:false\n%2:@1:test2:%0:/home:pane:true",
+					"%1:@1:test1:%0:/home:pane:1000:\n%2:@1:test2:%0:/home:pane:2000:\n",
 				}
 			end
 
@@ -84,7 +84,7 @@ describe("state", function()
 			client.query = function()
 				return {
 					"%0",
-					"%1:@1::%0:/home:pane:false\n%2:@1:test:%0:/home:pane:false",
+					"%1:@1::%0:/home:pane:1000:\n%2:@1:test:%0:/home:pane:2000:\n",
 				}
 			end
 
@@ -98,20 +98,21 @@ describe("state", function()
 			client.query = function()
 				return {
 					"%0",
-					"%1:@1:test:%0:/home:window:false",
+					"%1:@1:test:%0:/home:window:1000:mywindow\n",
 				}
 			end
 
 			local state = state_module.get()
 
 			assert.are.equal("window", state.instances[1].kind)
+			assert.are.equal("mywindow", state.instances[1].window_name)
 		end)
 
 		it("handles empty metadata fields", function()
 			client.query = function()
 				return {
 					"%0",
-					"%1:@1:test:::pane:false",
+					"%1:@1:test:::pane:1000:\n",
 				}
 			end
 
@@ -126,7 +127,7 @@ describe("state", function()
 			client.query = function()
 				return {
 					"%0",
-					"invalid\n%1:@1:test:%0:/home:pane:false",
+					"invalid\n%1:@1:test:%0:/home:pane:1000:\n",
 				}
 			end
 

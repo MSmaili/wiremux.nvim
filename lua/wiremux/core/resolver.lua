@@ -110,7 +110,7 @@ end
 ---@return wiremux.ResolveItem.Instance[]
 local function build_instance_items(instances)
 	local config = require("wiremux.config")
-	local definitions = config.opts.targets.definitions or {}
+	local definitions = (config.opts.targets and config.opts.targets.definitions) or {}
 
 	local counts = {}
 	return vim.iter(instances)

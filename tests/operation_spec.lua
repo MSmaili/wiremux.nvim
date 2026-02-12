@@ -43,14 +43,9 @@ describe("tmux operations", function()
 			end,
 		}
 
-		-- Mock state
 		state = {
-			update_last_used = function(batch, old_id, new_id)
-				-- Append to batch like the real function
-				if old_id and old_id ~= new_id then
-					table.insert(batch, action.set_pane_option(old_id, "@wiremux_last_used", "false"))
-				end
-				table.insert(batch, action.set_pane_option(new_id, "@wiremux_last_used", "true"))
+			update_last_used = function(batch, new_id)
+				table.insert(batch, action.set_pane_option(new_id, "@wiremux_last_used_at", tostring(1234567890)))
 			end,
 			set_instance_metadata = function() end,
 		}
@@ -152,10 +147,9 @@ describe("tmux operations", function()
 
 			operation.send("text", targets, {}, st)
 
-			-- Verify set_pane_option was called for last_used
 			local found = false
 			for _, cmd in ipairs(batch_cmds) do
-				if cmd[1] == "set-option" and cmd[5] == "@wiremux_last_used" then
+				if cmd[1] == "set-option" and cmd[5] == "@wiremux_last_used_at" then
 					found = true
 					break
 				end
@@ -175,10 +169,9 @@ describe("tmux operations", function()
 
 			operation.send("text", targets, {}, st)
 
-			-- Verify set_pane_option was called for last_used
 			local found = false
 			for _, cmd in ipairs(batch_cmds) do
-				if cmd[1] == "set-option" and cmd[5] == "@wiremux_last_used" then
+				if cmd[1] == "set-option" and cmd[5] == "@wiremux_last_used_at" then
 					found = true
 					break
 				end
