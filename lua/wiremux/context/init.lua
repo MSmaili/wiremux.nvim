@@ -35,6 +35,14 @@ function M.get(name)
 	return result
 end
 
+---Check if a placeholder resolves to a non-empty value
+---@param name string Placeholder name (without braces)
+---@return boolean is_available
+function M.is_available(name)
+	local value = M.get(name)
+	return value ~= nil and value ~= ""
+end
+
 ---Expand context variables in text
 ---@param text string Text with {variable} placeholders
 ---@return string

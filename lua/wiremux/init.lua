@@ -6,6 +6,12 @@ function M.setup(opts)
 	require("wiremux.config").setup(opts)
 end
 
+---Send text or prompt(s) to target
+---@overload fun(text: string, opts?: wiremux.config.ActionConfig)
+---@overload fun(text: wiremux.action.SendItem, opts?: wiremux.config.ActionConfig)
+---@overload fun(text: wiremux.action.SendItem[], opts?: wiremux.config.ActionConfig)
+---@param text string|wiremux.action.SendItem|wiremux.action.SendItem[] Text to send, single item, or array of items
+---@param opts? wiremux.config.ActionConfig
 function M.send(text, opts)
 	return require("wiremux.action.send").send(text, opts)
 end
