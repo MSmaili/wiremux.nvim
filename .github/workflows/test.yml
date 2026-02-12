@@ -11,19 +11,40 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - name: Install Neovim
+        run: |
+          # Detect architecture
+          ARCH=$(uname -m)
+          if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+            NVIM_URL="https://github.com/neovim/neovim/releases/download/stable/nvim-linux-arm64.tar.gz"
+          else
+            NVIM_URL="https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.tar.gz"
+          fi
+          
+          # Download and install
+          curl -LO "$NVIM_URL"
+          tar xzf nvim-linux-*.tar.gz
+          sudo mv nvim-linux-*/bin/nvim /usr/local/bin/
+          sudo mv nvim-linux-*/share/nvim /usr/local/share/
+          sudo mv nvim-linux-*/lib/nvim /usr/local/lib/ 2>/dev/null || true
+          rm -rf nvim-linux-*
+          
+          # Verify
+          nvim --version
 
       - name: Install dependencies
         run: |
-          if command -v sudo &> /dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y neovim tmux
-          else
-            apt-get update
-            apt-get install -y neovim tmux
-          fi
+          sudo apt-get update
+          sudo apt-get install -y tmux build-essential libreadline-dev
+
+      - name: Cache test dependencies
+        uses: actions/cache@v4
+        with:
+          path: .tests
+          key: ${{ runner.os }}-tests-${{ hashFiles('tests/minit.lua', 'scripts/test') }}
 
       - name: Run tests
-        run: |
-          nvim --headless -l tests/minit.lua tests/
+        run: ./scripts/test
         timeout-minutes: 5
