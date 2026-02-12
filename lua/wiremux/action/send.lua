@@ -73,8 +73,9 @@ local function do_send(expanded, opts, submit)
 			backend.send(expanded, targets, { focus = focus, submit = submit }, state)
 		end,
 		on_definition = function(name, def, state)
-			local inst = backend.create(name, def, state)
-			if inst then
+			local modified_def = def.cmd and def or vim.tbl_extend("force", def, { cmd = expanded })
+			local inst = backend.create(name, modified_def, state)
+			if inst and def.cmd then
 				backend.send(expanded, { inst }, { focus = focus, submit = submit }, state)
 			end
 		end,
