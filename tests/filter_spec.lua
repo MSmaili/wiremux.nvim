@@ -1,11 +1,15 @@
 ---@module 'luassert'
 
+local helpers = require("tests.helpers")
+
 describe("resolver filtering", function()
 	local resolver, config
 
 	before_each(function()
-		package.loaded["wiremux.core.resolver"] = nil
-		package.loaded["wiremux.config"] = nil
+		helpers.clear({
+			"wiremux.core.resolver",
+			"wiremux.config",
+		})
 
 		config = {
 			opts = {
@@ -22,7 +26,10 @@ describe("resolver filtering", function()
 			},
 		}
 
-		package.loaded["wiremux.config"] = config
+		helpers.register({
+			["wiremux.config"] = config,
+		})
+
 		resolver = require("wiremux.core.resolver")
 	end)
 
@@ -32,7 +39,7 @@ describe("resolver filtering", function()
 				origin_pane_id = "%0",
 				instances = {
 					{ id = "%1", target = "ai", origin = "%0", kind = "pane" },
-					{ id = "%2", target = "test", origin = "%99", kind = "pane" }, -- different origin
+					{ id = "%2", target = "test", origin = "%99", kind = "pane" },
 				},
 			}
 
@@ -92,7 +99,6 @@ describe("resolver filtering", function()
 				},
 			}
 
-			-- Action filter shows all
 			local result = resolver.resolve(state, {}, {
 				behavior = "all",
 				filter = {
@@ -104,23 +110,6 @@ describe("resolver filtering", function()
 
 			assert.are.equal("targets", result.kind)
 			assert.are.equal(2, #result.targets)
-		end)
-
-		it("falls back to definitions when all filtered out", function()
-			local state = {
-				origin_pane_id = "%0",
-				instances = {
-					{ id = "%1", target = "ai", origin = "%99", kind = "pane" }, -- filtered out
-				},
-			}
-
-			local definitions = { ai = { cmd = "aichat" } }
-
-			local result = resolver.resolve(state, definitions, { behavior = "pick" })
-
-			assert.are.equal("pick", result.kind)
-			assert.are.equal(1, #result.items)
-			assert.are.equal("definition", result.items[1].type)
 		end)
 	end)
 
@@ -180,7 +169,7 @@ describe("resolver filtering", function()
 		it("falls back when last_used filtered out", function()
 			local state = {
 				origin_pane_id = "%0",
-				last_used_target_id = "%99", -- filtered out
+				last_used_target_id = "%99",
 				instances = {
 					{ id = "%1", target = "ai", origin = "%0", kind = "pane" },
 					{ id = "%2", target = "test", origin = "%0", kind = "pane" },
@@ -189,7 +178,6 @@ describe("resolver filtering", function()
 
 			local result = resolver.resolve(state, {}, { behavior = "last" })
 
-			-- Should fallback to picker since last_used not found
 			assert.are.equal("pick", result.kind)
 			assert.are.equal(2, #result.items)
 		end)

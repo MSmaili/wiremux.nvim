@@ -1,21 +1,23 @@
 ---@module 'luassert'
 
+local helpers = require("tests.helpers")
+
 describe("state", function()
 	local state_module, client, query
 
 	before_each(function()
-		package.loaded["wiremux.backend.tmux.state"] = nil
-		package.loaded["wiremux.backend.tmux.client"] = nil
-		package.loaded["wiremux.backend.tmux.query"] = nil
+		helpers.clear({
+			"wiremux.backend.tmux.state",
+			"wiremux.backend.tmux.client",
+			"wiremux.backend.tmux.query",
+		})
 
-		-- Mock client
 		client = {
 			query = function()
 				return {}
 			end,
 		}
 
-		-- Mock query
 		query = {
 			current_pane = function()
 				return { "display", "-p", "#{pane_id}" }
@@ -30,8 +32,10 @@ describe("state", function()
 			end,
 		}
 
-		package.loaded["wiremux.backend.tmux.client"] = client
-		package.loaded["wiremux.backend.tmux.query"] = query
+		helpers.register({
+			["wiremux.backend.tmux.client"] = client,
+			["wiremux.backend.tmux.query"] = query,
+		})
 
 		state_module = require("wiremux.backend.tmux.state")
 	end)

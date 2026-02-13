@@ -1,61 +1,16 @@
 ---@module 'luassert'
 
+local helpers = require("tests.helpers_action")
+
 describe("action", function()
-	local action, backend, resolver, config, picker, notify
+	local mocks
 
 	before_each(function()
-		-- Clear modules
-		package.loaded["wiremux.core.action"] = nil
-		package.loaded["wiremux.backend.tmux"] = nil
-		package.loaded["wiremux.core.resolver"] = nil
-		package.loaded["wiremux.config"] = nil
-		package.loaded["wiremux.picker"] = nil
-		package.loaded["wiremux.utils.notify"] = nil
+		mocks = helpers.setup()
+	end)
 
-		-- Mock backend
-		backend = {
-			state = {
-				get = function()
-					return { instances = {}, last_used_target_id = nil }
-				end,
-			},
-			create = function(name, def, state)
-				return { id = "%1", kind = "pane", target = name }
-			end,
-		}
-
-		-- Mock resolver
-		resolver = {
-			resolve = function()
-				return { kind = "targets", targets = {} }
-			end,
-		}
-
-		-- Mock config
-		config = {
-			opts = {
-				targets = { definitions = {} },
-			},
-		}
-
-		-- Mock picker
-		picker = {
-			select = function() end,
-		}
-
-		-- Mock notify
-		notify = {
-			warn = function() end,
-			error = function() end,
-		}
-
-		package.loaded["wiremux.backend.tmux"] = backend
-		package.loaded["wiremux.core.resolver"] = resolver
-		package.loaded["wiremux.config"] = config
-		package.loaded["wiremux.picker"] = picker
-		package.loaded["wiremux.utils.notify"] = notify
-
-		action = require("wiremux.core.action")
+	after_each(function()
+		helpers.teardown()
 	end)
 
 	describe("run with targets result", function()
@@ -63,7 +18,7 @@ describe("action", function()
 			local executed = false
 			local received_targets
 
-			resolver.resolve = function()
+			mocks.resolver.resolve = function()
 				return {
 					kind = "targets",
 					targets = {
@@ -72,7 +27,7 @@ describe("action", function()
 				}
 			end
 
-			action.run({ prompt = "Test", behavior = "all" }, {
+			mocks.action.run({ prompt = "Test", behavior = "all" }, {
 				on_targets = function(targets, state)
 					executed = true
 					received_targets = targets
@@ -89,7 +44,7 @@ describe("action", function()
 		it("shows picker when result is pick", function()
 			local picker_shown = false
 
-			resolver.resolve = function()
+			mocks.resolver.resolve = function()
 				return {
 					kind = "pick",
 					items = {
@@ -98,13 +53,13 @@ describe("action", function()
 				}
 			end
 
-			picker.select = function(items, opts, callback)
+			mocks.picker.select = function(items, opts, callback)
 				picker_shown = true
 				assert.are.equal(1, #items)
 				assert.are.equal("Test Prompt", opts.prompt)
 			end
 
-			action.run({ prompt = "Test Prompt", behavior = "pick" }, {
+			mocks.action.run({ prompt = "Test Prompt", behavior = "pick" }, {
 				on_targets = function() end,
 			})
 
@@ -114,7 +69,7 @@ describe("action", function()
 		it("executes callback when instance is picked", function()
 			local executed = false
 
-			resolver.resolve = function()
+			mocks.resolver.resolve = function()
 				return {
 					kind = "pick",
 					items = {
@@ -127,12 +82,12 @@ describe("action", function()
 				}
 			end
 
-			picker.select = function(items, opts, callback)
+			mocks.picker.select = function(items, opts, callback)
 				-- Simulate user picking first item
 				callback(items[1])
 			end
 
-			action.run({ prompt = "Test", behavior = "pick" }, {
+			mocks.action.run({ prompt = "Test", behavior = "pick" }, {
 				on_targets = function(targets, state)
 					executed = true
 					assert.are.equal(1, #targets)
@@ -147,7 +102,7 @@ describe("action", function()
 			local create_called = false
 			local executed = false
 
-			resolver.resolve = function()
+			mocks.resolver.resolve = function()
 				return {
 					kind = "pick",
 					items = {
@@ -161,21 +116,21 @@ describe("action", function()
 				}
 			end
 
-			backend.create = function(name, def, state)
+			mocks.backend.create = function(name, def, state)
 				create_called = true
 				assert.are.equal("server", name)
 				return { id = "%1", kind = "pane", target = "server" }
 			end
 
-			picker.select = function(items, opts, callback)
+			mocks.picker.select = function(items, opts, callback)
 				callback(items[1])
 			end
 
-			action.run({ prompt = "Test", behavior = "pick" }, {
+			mocks.action.run({ prompt = "Test", behavior = "pick" }, {
 				on_definition = function(name, def, state)
 					executed = true
 					assert.are.equal("server", name)
-					local inst = backend.create(name, def, state)
+					local inst = mocks.backend.create(name, def, state)
 					assert.are.equal("%1", inst.id)
 				end,
 			})
@@ -187,7 +142,7 @@ describe("action", function()
 		it("handles create failure gracefully", function()
 			local error_shown = false
 
-			resolver.resolve = function()
+			mocks.resolver.resolve = function()
 				return {
 					kind = "pick",
 					items = {
@@ -201,24 +156,24 @@ describe("action", function()
 				}
 			end
 
-			backend.create = function()
+			mocks.backend.create = function()
 				return nil -- Simulate failure
 			end
 
-			notify.error = function(msg)
+			mocks.notify.error = function(msg)
 				error_shown = true
 				assert.matches("failed to create", msg)
 			end
 
-			picker.select = function(items, opts, callback)
+			mocks.picker.select = function(items, opts, callback)
 				callback(items[1])
 			end
 
-			action.run({ prompt = "Test", behavior = "pick" }, {
+			mocks.action.run({ prompt = "Test", behavior = "pick" }, {
 				on_definition = function(name, def, state)
-					local inst = backend.create(name, def, state)
+					local inst = mocks.backend.create(name, def, state)
 					if not inst then
-						notify.error("failed to create target: " .. name)
+						mocks.notify.error("failed to create target: " .. name)
 					end
 				end,
 			})
@@ -227,7 +182,7 @@ describe("action", function()
 		end)
 
 		it("handles picker cancellation", function()
-			resolver.resolve = function()
+			mocks.resolver.resolve = function()
 				return {
 					kind = "pick",
 					items = {
@@ -238,11 +193,11 @@ describe("action", function()
 				}
 			end
 
-			picker.select = function(items, opts, callback)
+			mocks.picker.select = function(items, opts, callback)
 				callback(nil) -- User cancelled
 			end
 
-			action.run({ prompt = "Test", behavior = "pick" }, {
+			mocks.action.run({ prompt = "Test", behavior = "pick" }, {
 				on_targets = function()
 					error("should not execute when cancelled")
 				end,
@@ -256,16 +211,16 @@ describe("action", function()
 		it("shows warning when no targets available", function()
 			local warned = false
 
-			resolver.resolve = function()
+			mocks.resolver.resolve = function()
 				return { kind = "pick", items = {} }
 			end
 
-			notify.warn = function(msg)
+			mocks.notify.warn = function(msg)
 				warned = true
 				assert.matches("No targets", msg)
 			end
 
-			action.run({ prompt = "Test", behavior = "pick" }, {
+			mocks.action.run({ prompt = "Test", behavior = "pick" }, {
 				on_targets = function()
 					error("should not execute")
 				end,

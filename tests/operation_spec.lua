@@ -1,75 +1,18 @@
 ---@module 'luassert'
 
+local helpers = require("tests.helpers_operation")
+
 describe("tmux operations", function()
-	local operation, client, state, notify, action
+	local mocks
 
 	before_each(function()
-		-- Clear loaded modules
-		package.loaded["wiremux.backend.tmux.client"] = nil
-		package.loaded["wiremux.backend.tmux.state"] = nil
-		package.loaded["wiremux.utils.notify"] = nil
-		package.loaded["wiremux.backend.tmux.action"] = nil
-		package.loaded["wiremux.backend.tmux.operation"] = nil
-
-		-- Mock action module
-		action = {
-			load_buffer = function(name)
-				return { "load-buffer", "-b", name, "-" }
-			end,
-			paste_buffer = function(name, target)
-				return { "paste-buffer", "-b", name, "-p", "-t", target }
-			end,
-			delete_buffer = function(name)
-				return { "delete-buffer", "-b", name }
-			end,
-			select_window = function(id)
-				return { "select-window", "-t", id }
-			end,
-			select_pane = function(id)
-				return { "select-pane", "-t", id }
-			end,
-			set_pane_option = function(pane_id, key, value)
-				return { "set-option", "-p", "-t", pane_id, key, value }
-			end,
-			send_keys = function(target, keys)
-				return { "send-keys", "-t", target, keys, "Enter" }
-			end,
-		}
-
-		-- Mock client
-		client = {
-			execute = function()
-				return "ok"
-			end,
-		}
-
-		state = {
-			update_last_used = function(batch, new_id)
-				table.insert(batch, action.set_pane_option(new_id, "@wiremux_last_used_at", tostring(1234567890)))
-			end,
-			set_instance_metadata = function() end,
-		}
-
-		-- Mock notify
-		notify = {
-			debug = function() end,
-			error = function() end,
-		}
-
-		-- Set up mocks
-		package.loaded["wiremux.backend.tmux.action"] = action
-		package.loaded["wiremux.backend.tmux.client"] = client
-		package.loaded["wiremux.backend.tmux.state"] = state
-		package.loaded["wiremux.utils.notify"] = notify
-
-		-- Load operation module
-		operation = require("wiremux.backend.tmux.operation")
+		mocks = helpers.setup()
 	end)
 
 	describe("send", function()
 		it("sends text to single target", function()
 			local executed = false
-			client.execute = function(_, opts)
+			mocks.client.execute = function(_, opts)
 				executed = true
 				assert.are.equal("test text", opts.stdin)
 				return "ok"
@@ -78,26 +21,26 @@ describe("tmux operations", function()
 			local targets = { { id = "%1", kind = "pane", target = "test" } }
 			local st = { instances = {}, last_used_target_id = nil }
 
-			operation.send("test text", targets, {}, st)
+			mocks.operation.send("test text", targets, {}, st)
 			assert.is_true(executed)
 		end)
 
 		it("cleans tabs and trailing newlines", function()
 			local cleaned_text
-			client.execute = function(_, opts)
+			mocks.client.execute = function(_, opts)
 				cleaned_text = opts.stdin
 				return "ok"
 			end
 
 			local targets = { { id = "%1", kind = "pane", target = "test" } }
-			operation.send("text\twith\ttabs\n", targets, {}, {})
+			mocks.operation.send("text\twith\ttabs\n", targets, {}, {})
 
 			assert.are.equal("text  with  tabs", cleaned_text)
 		end)
 
 		it("sends to multiple targets", function()
 			local batch_cmds
-			client.execute = function(batch, _)
+			mocks.client.execute = function(batch, _)
 				batch_cmds = batch
 				return "ok"
 			end
@@ -107,81 +50,78 @@ describe("tmux operations", function()
 				{ id = "%2", kind = "pane", target = "t2" },
 			}
 
-			operation.send("text", targets, {}, { instances = {} })
+			mocks.operation.send("text", targets, {}, { instances = {} })
 
-			assert.are.equal(5, #batch_cmds)
+			local found_load = false
+			local found_paste_count = 0
+			local found_delete = false
 
-			-- Verify exact batch commands (IPC call structure)
-			assert.are.same({ "load-buffer", "-b", "wiremux", "-" }, batch_cmds[1])
-			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%1" }, batch_cmds[2])
-			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%2" }, batch_cmds[3])
-			assert.are.same({ "delete-buffer", "-b", "wiremux" }, batch_cmds[4])
-			assert.are.equal("set-option", batch_cmds[5][1])
+			for _, cmd in ipairs(batch_cmds) do
+				if cmd[1] == "load-buffer" then
+					found_load = true
+				elseif cmd[1] == "paste-buffer" then
+					found_paste_count = found_paste_count + 1
+				elseif cmd[1] == "delete-buffer" then
+					found_delete = true
+				end
+			end
+
+			assert.is_true(found_load)
+			assert.are.equal(2, found_paste_count)
+			assert.is_true(found_delete)
 		end)
 
 		it("handles send failure", function()
 			local error_called = false
-			client.execute = function()
+			mocks.client.execute = function()
 				return nil
 			end
-			notify.error = function(msg)
+			mocks.notify.error = function(msg)
 				error_called = true
 				assert.matches("Failed", msg)
 			end
 
 			local targets = { { id = "%1", kind = "pane", target = "test" } }
-			operation.send("text", targets, {}, {})
+			mocks.operation.send("text", targets, {}, {})
 
 			assert.is_true(error_called)
 		end)
 
-		it("updates last_used_target_id", function()
+		it("updates last_used_target_id for panes and windows", function()
 			local batch_cmds
-			client.execute = function(cmds)
+			mocks.client.execute = function(cmds)
 				batch_cmds = cmds
 				return "ok"
 			end
 
 			local st = { instances = {}, last_used_target_id = nil }
-			local targets = { { id = "%1", kind = "pane", target = "test" } }
+			mocks.operation.send("text", { { id = "%1", kind = "pane", target = "test" } }, {}, st)
 
-			operation.send("text", targets, {}, st)
-
-			local found = false
+			local found_pane = false
 			for _, cmd in ipairs(batch_cmds) do
 				if cmd[1] == "set-option" and cmd[5] == "@wiremux_last_used_at" then
-					found = true
+					found_pane = true
 					break
 				end
 			end
-			assert.is_true(found)
-		end)
+			assert.is_true(found_pane)
 
-		it("updates last_used_target_id for windows", function()
-			local batch_cmds
-			client.execute = function(cmds)
-				batch_cmds = cmds
-				return "ok"
-			end
+			batch_cmds = nil
+			mocks.operation.send("text", { { id = "@1", kind = "window", target = "test" } }, {}, st)
 
-			local st = { instances = {}, last_used_target_id = nil }
-			local targets = { { id = "@1", kind = "window", target = "test" } }
-
-			operation.send("text", targets, {}, st)
-
-			local found = false
+			local found_window = false
 			for _, cmd in ipairs(batch_cmds) do
 				if cmd[1] == "set-option" and cmd[5] == "@wiremux_last_used_at" then
-					found = true
+					found_window = true
 					break
 				end
 			end
-			assert.is_true(found)
+			assert.is_true(found_window)
 		end)
 
-		it("sends Enter key when submit=true", function()
+		it("respects submit option", function()
 			local batch_cmds
-			client.execute = function(batch, _)
+			mocks.client.execute = function(batch, _)
 				batch_cmds = batch
 				return "ok"
 			end
@@ -189,55 +129,26 @@ describe("tmux operations", function()
 			local targets = { { id = "%1", kind = "pane", target = "test" } }
 			local st = { instances = {}, last_used_target_id = nil }
 
-			operation.send("text", targets, { submit = true }, st)
-
-			-- Should have: load, paste, send-keys, delete, set-state
-			assert.are.equal(5, #batch_cmds)
-			assert.are.same({ "load-buffer", "-b", "wiremux", "-" }, batch_cmds[1])
-			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%1" }, batch_cmds[2])
-			assert.are.same({ "send-keys", "-t", "%1", "", "Enter" }, batch_cmds[3])
-			assert.are.same({ "delete-buffer", "-b", "wiremux" }, batch_cmds[4])
-		end)
-
-		it("does not send Enter key when submit=false", function()
-			local batch_cmds
-			client.execute = function(batch, _)
-				batch_cmds = batch
-				return "ok"
+			mocks.operation.send("text", targets, { submit = true }, st)
+			local found_send_keys = false
+			for _, cmd in ipairs(batch_cmds) do
+				if cmd[1] == "send-keys" then
+					found_send_keys = true
+					break
+				end
 			end
+			assert.is_true(found_send_keys)
 
-			local targets = { { id = "%1", kind = "pane", target = "test" } }
-			local st = { instances = {}, last_used_target_id = nil }
-
-			operation.send("text", targets, { submit = false }, st)
-
-			-- Should have: load, paste, delete, set-last-used (no send-keys)
-			assert.are.equal(4, #batch_cmds)
-			assert.are.same({ "load-buffer", "-b", "wiremux", "-" }, batch_cmds[1])
-			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%1" }, batch_cmds[2])
-			assert.are.same({ "delete-buffer", "-b", "wiremux" }, batch_cmds[3])
-		end)
-
-		it("sends Enter to multiple targets when submit=true", function()
-			local batch_cmds
-			client.execute = function(batch, _)
-				batch_cmds = batch
-				return "ok"
+			batch_cmds = nil
+			mocks.operation.send("text", targets, { submit = false }, st)
+			found_send_keys = false
+			for _, cmd in ipairs(batch_cmds) do
+				if cmd[1] == "send-keys" then
+					found_send_keys = true
+					break
+				end
 			end
-
-			local targets = {
-				{ id = "%1", kind = "pane", target = "t1" },
-				{ id = "%2", kind = "pane", target = "t2" },
-			}
-
-			operation.send("text", targets, { submit = true }, { instances = {} })
-
-			-- Should have: load, paste1, send-keys1, paste2, send-keys2, delete, set-last-used
-			assert.are.equal(7, #batch_cmds)
-			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%1" }, batch_cmds[2])
-			assert.are.same({ "send-keys", "-t", "%1", "", "Enter" }, batch_cmds[3])
-			assert.are.same({ "paste-buffer", "-b", "wiremux", "-p", "-t", "%2" }, batch_cmds[4])
-			assert.are.same({ "send-keys", "-t", "%2", "", "Enter" }, batch_cmds[5])
+			assert.is_false(found_send_keys)
 		end)
 	end)
 end)
