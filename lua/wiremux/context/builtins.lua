@@ -36,7 +36,7 @@ end
 
 M.diagnostics = function()
 	local row = vim.api.nvim_win_get_cursor(0)[1]
-	local diags = vim.diagnostic.get(0, { lnum = row - 1 })
+	local diags = vim.diagnostic.get(0, { lnum = row - 1, namespace = nil })
 	if #diags == 0 then
 		return "No diagnostics on current line"
 	end
@@ -44,7 +44,7 @@ M.diagnostics = function()
 end
 
 M.diagnostics_all = function()
-	local diags = vim.diagnostic.get(0)
+	local diags = vim.diagnostic.get(0, { namespace = nil })
 	if #diags == 0 then
 		return "No diagnostics"
 	end
@@ -54,7 +54,7 @@ end
 M.buffers = function()
 	local bufs = {}
 	for _, b in ipairs(vim.api.nvim_list_bufs()) do
-		if vim.api.nvim_buf_is_loaded(b) and vim.bo[b].buflisted then
+		if vim.api.nvim_buf_is_loaded(b) and vim.api.nvim_get_option_value("buflisted", { buf = b }) then
 			local name = vim.api.nvim_buf_get_name(b)
 			if name ~= "" then
 				table.insert(bufs, name)

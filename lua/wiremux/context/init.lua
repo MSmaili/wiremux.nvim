@@ -53,7 +53,7 @@ function M.expand(text)
 
 	local cache = {}
 	return (
-		text:gsub("{(%w+)}", function(var)
+		text:gsub("{([%w_]+)}", function(var)
 			if cache[var] == nil then
 				cache[var] = M.get(var)
 			end
