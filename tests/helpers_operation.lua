@@ -5,6 +5,7 @@ local M = {}
 local MODULES = {
 	"wiremux.backend.tmux.client",
 	"wiremux.backend.tmux.state",
+	"wiremux.backend.tmux.query",
 	"wiremux.utils.notify",
 	"wiremux.backend.tmux.action",
 	"wiremux.backend.tmux.operation",
@@ -36,6 +37,34 @@ function M.setup()
 			send_keys = function(target, keys)
 				return { "send-keys", "-t", target, keys, "Enter" }
 			end,
+			new_window = function(name, command)
+				local cmd = { "new-window" }
+				if name then
+					vim.list_extend(cmd, { "-n", name })
+				end
+				if command then
+					table.insert(cmd, command)
+				end
+				return cmd
+			end,
+			split_pane = function(direction, target_pane, command)
+				local cmd = { "split-window", direction == "horizontal" and "-h" or "-v" }
+				if target_pane then
+					vim.list_extend(cmd, { "-t", target_pane })
+				end
+				if command then
+					table.insert(cmd, command)
+				end
+				return cmd
+			end,
+		},
+		query = {
+			window_id = function()
+				return { "display", "-p", "#{window_id}" }
+			end,
+			pane_id = function()
+				return { "display", "-p", "#{pane_id}" }
+			end,
 		},
 		client = {
 			execute = function()
@@ -56,6 +85,7 @@ function M.setup()
 		["wiremux.backend.tmux.action"] = mocks.action,
 		["wiremux.backend.tmux.client"] = mocks.client,
 		["wiremux.backend.tmux.state"] = mocks.state,
+		["wiremux.backend.tmux.query"] = mocks.query,
 		["wiremux.utils.notify"] = mocks.notify,
 	})
 

@@ -5,6 +5,7 @@ describe("resolver", function()
 
 	before_each(function()
 		package.loaded["wiremux.core.resolver"] = nil
+		package.loaded["wiremux.config"] = nil
 		resolver = require("wiremux.core.resolver")
 	end)
 
@@ -137,6 +138,97 @@ describe("resolver", function()
 			assert.are.equal("pick", result.kind)
 			assert.are.equal(2, #result.items)
 			assert.are.equal("definition", result.items[1].type)
+		end)
+	end)
+
+	describe("label with running_command", function()
+		it("includes running_command in label", function()
+			local state = {
+				instances = {
+					{ id = "%1", kind = "pane", target = "test", running_command = "npm" },
+					{ id = "%2", kind = "pane", target = "test", running_command = "node" },
+				},
+			}
+
+			local result = resolver.resolve(state, {}, { behavior = "pick" })
+
+			assert.are.equal("pick", result.kind)
+			assert.are.equal("test #1 [npm]", result.items[1].label)
+			assert.are.equal("test #2 [node]", result.items[2].label)
+		end)
+
+		it("omits running_command bracket when empty", function()
+			local state = {
+				instances = {
+					{ id = "%1", kind = "pane", target = "test" },
+					{ id = "%2", kind = "pane", target = "test" },
+				},
+			}
+
+			local result = resolver.resolve(state, {}, { behavior = "pick" })
+
+			assert.are.equal("test #1", result.items[1].label)
+			assert.are.equal("test #2", result.items[2].label)
+		end)
+	end)
+
+	describe("function label", function()
+		it("calls function label with inst and index", function()
+			local captured_inst, captured_index
+			local label_fn = function(inst, index)
+				captured_inst = inst
+				captured_index = index
+				return "custom " .. index .. " (" .. (inst.running_command or "") .. ")"
+			end
+
+			local config = require("wiremux.config")
+			config.opts.targets = {
+				definitions = {
+					myapp = { label = label_fn },
+				},
+			}
+
+			local state = {
+				instances = {
+					{ id = "%1", kind = "pane", target = "myapp", running_command = "npm" },
+					{ id = "%2", kind = "pane", target = "myapp", running_command = "node" },
+				},
+			}
+
+			local result = resolver.resolve(state, {}, { behavior = "pick" })
+
+			assert.are.equal("pick", result.kind)
+			assert.are.equal("custom 1 (npm)", result.items[1].label)
+			assert.are.equal("custom 2 (node)", result.items[2].label)
+			assert.are.equal("%2", captured_inst.id)
+			assert.are.equal(2, captured_index)
+		end)
+
+		it("handles function label error gracefully", function()
+			local config = require("wiremux.config")
+			config.opts.targets = {
+				definitions = {
+					myapp = {
+						label = function()
+							error("label failed")
+						end,
+					},
+				},
+			}
+
+			local state = {
+				instances = {
+					{ id = "%1", kind = "pane", target = "myapp" },
+					{ id = "%2", kind = "pane", target = "myapp" },
+				},
+			}
+
+			local result = resolver.resolve(state, {}, { behavior = "pick" })
+
+			assert.are.equal("pick", result.kind)
+			-- Falls back to target name format
+			assert.are.equal("myapp #1", result.items[1].label)
+			assert.are.equal("myapp #2", result.items[2].label)
 		end)
 	end)
 

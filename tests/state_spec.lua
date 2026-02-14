@@ -27,7 +27,7 @@ describe("state", function()
 					"list-panes",
 					"-a",
 					"-F",
-					"#{pane_id}:#{window_id}:#{@wiremux_target}:#{@wiremux_origin}:#{@wiremux_origin_cwd}:#{@wiremux_kind}:#{@wiremux_last_used_at}:#{window_name}",
+					"#{pane_id}:#{window_id}:#{@wiremux_target}:#{@wiremux_origin}:#{@wiremux_origin_cwd}:#{@wiremux_kind}:#{@wiremux_last_used_at}:#{window_name}:#{pane_current_command}",
 				}
 			end,
 		}
@@ -56,7 +56,7 @@ describe("state", function()
 			client.query = function()
 				return {
 					"%0",
-					"%1:@1:test1:%0:/home:pane:1000:\n%2:@1:test2:%0:/home:pane:2000:\n",
+					"%1:@1:test1:%0:/home:pane:1000::zsh\n%2:@1:test2:%0:/home:pane:2000::npm\n",
 				}
 			end
 
@@ -75,7 +75,7 @@ describe("state", function()
 			client.query = function()
 				return {
 					"%0",
-					"%1:@1:test1:%0:/home:pane:1000:\n%2:@1:test2:%0:/home:pane:2000:\n",
+					"%1:@1:test1:%0:/home:pane:1000::zsh\n%2:@1:test2:%0:/home:pane:2000::zsh\n",
 				}
 			end
 
@@ -88,7 +88,7 @@ describe("state", function()
 			client.query = function()
 				return {
 					"%0",
-					"%1:@1::%0:/home:pane:1000:\n%2:@1:test:%0:/home:pane:2000:\n",
+					"%1:@1::%0:/home:pane:1000::zsh\n%2:@1:test:%0:/home:pane:2000::zsh\n",
 				}
 			end
 
@@ -102,7 +102,7 @@ describe("state", function()
 			client.query = function()
 				return {
 					"%0",
-					"%1:@1:test:%0:/home:window:1000:mywindow\n",
+					"%1:@1:test:%0:/home:window:1000:mywindow:zsh\n",
 				}
 			end
 
@@ -116,7 +116,7 @@ describe("state", function()
 			client.query = function()
 				return {
 					"%0",
-					"%1:@1:test:::pane:1000:\n",
+					"%1:@1:test:::pane:1000::\n",
 				}
 			end
 
@@ -127,11 +127,39 @@ describe("state", function()
 			assert.is_nil(state.instances[1].origin_cwd)
 		end)
 
+		it("parses running_command field", function()
+			client.query = function()
+				return {
+					"%0",
+					"%1:@1:test:%0:/home:pane:1000::npm\n",
+				}
+			end
+
+			local state = state_module.get()
+
+			assert.are.equal(1, #state.instances)
+			assert.are.equal("npm", state.instances[1].running_command)
+		end)
+
+		it("handles colons in running_command", function()
+			client.query = function()
+				return {
+					"%0",
+					"%1:@1:test:%0:/home:pane:1000::node:inspect\n",
+				}
+			end
+
+			local state = state_module.get()
+
+			assert.are.equal(1, #state.instances)
+			assert.are.equal("node:inspect", state.instances[1].running_command)
+		end)
+
 		it("handles malformed lines gracefully", function()
 			client.query = function()
 				return {
 					"%0",
-					"invalid\n%1:@1:test:%0:/home:pane:1000:\n",
+					"invalid\n%1:@1:test:%0:/home:pane:1000::zsh\n",
 				}
 			end
 

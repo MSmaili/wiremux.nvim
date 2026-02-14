@@ -119,6 +119,26 @@ describe("tmux operations", function()
 			assert.is_true(found_window)
 		end)
 
+		it("skips last_used_at update when target is already last used", function()
+			local batch_cmds
+			mocks.client.execute = function(cmds)
+				batch_cmds = cmds
+				return "ok"
+			end
+
+			local st = { instances = {}, last_used_target_id = "%1" }
+			mocks.operation.send("text", { { id = "%1", kind = "pane", target = "test" } }, {}, st)
+
+			local found_last_used = false
+			for _, cmd in ipairs(batch_cmds) do
+				if cmd[1] == "set-option" and cmd[5] == "@wiremux_last_used_at" then
+					found_last_used = true
+					break
+				end
+			end
+			assert.is_false(found_last_used)
+		end)
+
 		it("respects submit option", function()
 			local batch_cmds
 			mocks.client.execute = function(batch, _)
@@ -149,6 +169,79 @@ describe("tmux operations", function()
 				end
 			end
 			assert.is_false(found_send_keys)
+		end)
+	end)
+
+	describe("create", function()
+		it("uses def.title for window name when provided", function()
+			local captured_cmds
+			mocks.client.execute = function(cmds)
+				captured_cmds = cmds
+				return "@99"
+			end
+
+			local st = { instances = {}, origin_pane_id = "%0" }
+			local def = { kind = "window", title = "My Title", label = "My Label" }
+
+			mocks.operation.create("myapp", def, st)
+
+			local new_window_cmd = captured_cmds[1]
+			assert.are.equal("new-window", new_window_cmd[1])
+			assert.are.equal("-n", new_window_cmd[2])
+			assert.are.equal("My Title", new_window_cmd[3])
+		end)
+
+		it("falls back to string label for window name when no title", function()
+			local captured_cmds
+			mocks.client.execute = function(cmds)
+				captured_cmds = cmds
+				return "@99"
+			end
+
+			local st = { instances = {}, origin_pane_id = "%0" }
+			local def = { kind = "window", label = "My Label" }
+
+			mocks.operation.create("myapp", def, st)
+
+			local new_window_cmd = captured_cmds[1]
+			assert.are.equal("My Label", new_window_cmd[3])
+		end)
+
+		it("falls back to target_name when no title or label", function()
+			local captured_cmds
+			mocks.client.execute = function(cmds)
+				captured_cmds = cmds
+				return "@99"
+			end
+
+			local st = { instances = {}, origin_pane_id = "%0" }
+			local def = { kind = "window" }
+
+			mocks.operation.create("myapp", def, st)
+
+			local new_window_cmd = captured_cmds[1]
+			assert.are.equal("myapp", new_window_cmd[3])
+		end)
+
+		it("ignores function label for window name", function()
+			local captured_cmds
+			mocks.client.execute = function(cmds)
+				captured_cmds = cmds
+				return "@99"
+			end
+
+			local st = { instances = {}, origin_pane_id = "%0" }
+			local def = {
+				kind = "window",
+				label = function()
+					return "dynamic"
+				end,
+			}
+
+			mocks.operation.create("myapp", def, st)
+
+			local new_window_cmd = captured_cmds[1]
+			assert.are.equal("myapp", new_window_cmd[3])
 		end)
 	end)
 end)
