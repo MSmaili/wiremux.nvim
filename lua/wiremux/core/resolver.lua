@@ -31,15 +31,33 @@ local M = {}
 
 ---@alias wiremux.ResolveResult wiremux.ResolveResult.Targets | wiremux.ResolveResult.Pick
 
+---Get filter function from action-level override or global picker config.
+---@param action_filter? wiremux.config.FilterConfig
+---@param action_key string Key in action_filter (e.g. "instances", "definitions")
+---@param config_path string[] Path into config.opts.picker (e.g. {"instances", "filter"})
+---@return function?
+local function get_filter_fn(action_filter, action_key, config_path)
+	if action_filter and action_filter[action_key] then
+		return action_filter[action_key]
+	end
+	local config = require("wiremux.config")
+	local node = config.opts.picker
+	for _, key in ipairs(config_path) do
+		if not node then
+			return nil
+		end
+		node = node[key]
+	end
+	return type(node) == "function" and node or nil
+end
+
 ---Filter instances based on filter function
 ---@param instances wiremux.Instance[]
 ---@param state wiremux.State
 ---@param action_filter? wiremux.config.FilterConfig
 ---@return wiremux.Instance[]
 function M.filter_instances(instances, state, action_filter)
-	local config = require("wiremux.config")
-	local filter_fn = (action_filter and action_filter.instances)
-		or (config.opts.picker and config.opts.picker.instances and config.opts.picker.instances.filter)
+	local filter_fn = get_filter_fn(action_filter, "instances", { "instances", "filter" })
 
 	return vim.iter(instances)
 		:filter(function(inst)
@@ -58,8 +76,7 @@ end
 ---@param instances wiremux.Instance[]
 ---@return wiremux.Instance[]
 local function sort_instances(instances)
-	local config = require("wiremux.config")
-	local sort_fn = config.opts.picker and config.opts.picker.instances and config.opts.picker.instances.sort
+	local sort_fn = get_filter_fn(nil, "", { "instances", "sort" })
 
 	if not sort_fn then
 		return instances
@@ -75,9 +92,7 @@ end
 ---@param action_filter? wiremux.config.FilterConfig
 ---@return table<string, wiremux.target.definition>
 local function filter_definitions(definitions, action_filter)
-	local config = require("wiremux.config")
-	local filter_fn = (action_filter and action_filter.definitions)
-		or (config.opts.picker and config.opts.picker.targets and config.opts.picker.targets.filter)
+	local filter_fn = get_filter_fn(action_filter, "definitions", { "targets", "filter" })
 
 	if not filter_fn then
 		return definitions
@@ -95,15 +110,34 @@ end
 ---Get display name for instance
 ---@param inst wiremux.Instance
 ---@param def wiremux.target.definition?
+---@param index number
 ---@return string
-local function get_display_name(inst, def)
-	if inst.kind == "window" and inst.window_name and inst.window_name ~= "" then
-		return inst.window_name
-	elseif def and def.label then
-		return def.label
-	else
-		return inst.target
+local function get_display_name(inst, def, index)
+	if def and type(def.label) == "function" then
+		local ok, result = pcall(def.label, inst, index)
+		if ok and type(result) == "string" then
+			return result
+		elseif not ok then
+			require("wiremux.utils.notify").debug("Label function error for %s: %s", inst.target, result)
+		end
 	end
+
+	local name
+	if inst.kind == "window" and inst.window_name and inst.window_name ~= "" then
+		name = inst.window_name
+	elseif def and type(def.label) == "string" then
+		name = def.label
+	else
+		name = inst.target
+	end
+
+	local label = string.format("%s #%d", name, index)
+
+	if inst.running_command and inst.running_command ~= "" then
+		label = label .. string.format(" [%s]", inst.running_command)
+	end
+
+	return label
 end
 
 ---@param instances wiremux.Instance[]
@@ -112,20 +146,22 @@ local function build_instance_items(instances)
 	local config = require("wiremux.config")
 	local definitions = (config.opts.targets and config.opts.targets.definitions) or {}
 
-	local counts = {}
+	local counts = vim.defaulttable(function()
+		return 0
+	end)
 	return vim.iter(instances)
 		:map(function(inst)
 			local target = inst.target
-			counts[target] = (counts[target] or 0) + 1
+			counts[target] = counts[target] + 1
 
 			local def = definitions[target]
-			local display = get_display_name(inst, def)
+			local label = get_display_name(inst, def, counts[target])
 
 			return {
 				type = "instance",
 				instance = inst,
 				target = target,
-				label = string.format("%s #%d", display, counts[target]),
+				label = label,
 			}
 		end)
 		:totable()
@@ -162,6 +198,13 @@ end
 ---@param behavior wiremux.action.Behavior
 ---@param last_used string?
 ---@return wiremux.ResolveResult
+---@param instances wiremux.Instance[]
+---@return wiremux.ResolveResult.Pick
+local function pick_from_instances(instances)
+	local sorted = sort_instances(instances)
+	return pick_result(build_instance_items(sorted))
+end
+
 local function resolve_by_behavior(instances, behavior, last_used)
 	if behavior == "all" then
 		return targets_result(instances)
@@ -169,11 +212,6 @@ local function resolve_by_behavior(instances, behavior, last_used)
 
 	if #instances == 1 then
 		return targets_result({ instances[1] })
-	end
-
-	if behavior == "pick" then
-		local sorted = sort_instances(instances)
-		return pick_result(build_instance_items(sorted))
 	end
 
 	if behavior == "last" and last_used then
@@ -184,8 +222,7 @@ local function resolve_by_behavior(instances, behavior, last_used)
 		end
 	end
 
-	local sorted = sort_instances(instances)
-	return pick_result(build_instance_items(sorted))
+	return pick_from_instances(instances)
 end
 
 ---@param state wiremux.State

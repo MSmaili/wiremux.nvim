@@ -5,6 +5,7 @@ local M = {}
 ---@field label? string Display name in picker (optional, defaults to value)
 ---@field submit? boolean Auto-submit after sending (default: false)
 ---@field visible? boolean|fun(): boolean Show this item in picker (default: true)
+---@field title? string Custom tmux window / zellij tab name when creating
 
 ---Check if item should be visible
 ---@param item wiremux.action.SendItem
@@ -53,7 +54,8 @@ end
 ---@param expanded string The text with placeholders expanded
 ---@param opts wiremux.config.ActionConfig
 ---@param submit boolean Whether to auto-submit
-local function do_send(expanded, opts, submit)
+---@param title? string Custom tmux window / zellij tab name when creating
+local function do_send(expanded, opts, submit, title)
 	local config = require("wiremux.config")
 	local action = require("wiremux.core.action")
 	local backend = require("wiremux.backend").get()
@@ -73,7 +75,10 @@ local function do_send(expanded, opts, submit)
 			backend.send(expanded, targets, { focus = focus, submit = submit }, state)
 		end,
 		on_definition = function(name, def, state)
-			local modified_def = def.cmd and def or vim.tbl_extend("force", def, { cmd = expanded })
+			local modified_def = vim.tbl_extend("force", {}, def, {
+				cmd = def.cmd or expanded,
+				title = title,
+			})
 			local inst = backend.create(name, modified_def, state)
 			if inst and def.cmd then
 				backend.send(expanded, { inst }, { focus = focus, submit = submit }, state)
@@ -127,7 +132,7 @@ function M._send_single_item(item, opts)
 		submit = opts.submit or config.opts.actions.send.submit
 	end
 
-	do_send(expanded, opts, submit)
+	do_send(expanded, opts, submit, item.title)
 end
 
 ---Send text or item(s) to target
@@ -147,17 +152,7 @@ function M.send(text, opts)
 		return M._send_single_item(text, opts)
 	end
 
-	local context = require("wiremux.context")
-	local config = require("wiremux.config")
-
-	local ok, expanded = pcall(context.expand, text)
-	if not ok then
-		require("wiremux.utils.notify").error(expanded)
-		return
-	end
-
-	local submit = opts.submit or config.opts.actions.send.submit
-	do_send(expanded, opts, submit)
+	return M._send_single_item({ value = text }, opts)
 end
 
 return M

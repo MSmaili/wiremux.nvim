@@ -42,7 +42,8 @@ local M = {}
 ---@field kind? "pane"|"window"|("pane"|"window")[] Target kind (default: "pane"). If table, prompts user to choose.
 ---@field split? "horizontal"|"vertical" Split direction for panes (default: "horizontal")
 ---@field shell? boolean Run command through shell (default: true)
----@field label? string Custom display label for picker
+---@field label? string|fun(inst: wiremux.Instance, index: number): string Custom display label for picker
+---@field title? string Custom tmux window / zellij tab name
 
 local defaults = {
 	log_level = "warn",

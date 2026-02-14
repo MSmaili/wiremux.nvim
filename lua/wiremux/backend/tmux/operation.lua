@@ -114,8 +114,17 @@ end
 
 ---@param target_name string
 ---@param def wiremux.target.definition
----@param st wiremux.State
----@return wiremux.Instance?
+---@return string
+local function get_window_name(def, target_name)
+	if def.title then
+		return def.title
+	end
+	if type(def.label) == "string" then
+		return def.label
+	end
+	return target_name
+end
+
 function M.create(target_name, def, st)
 	local query = require("wiremux.backend.tmux.query")
 
@@ -125,7 +134,7 @@ function M.create(target_name, def, st)
 	local cmds = {}
 
 	if kind == "window" then
-		local window_name = def.label or target_name
+		local window_name = get_window_name(def, target_name)
 		table.insert(cmds, action.new_window(window_name, use_shell and nil or cmd))
 		table.insert(cmds, query.window_id())
 	else
@@ -155,7 +164,7 @@ function M.create(target_name, def, st)
 		origin_cwd = vim.fn.getcwd(),
 		kind = kind,
 		last_used_at = os.time(),
-		window_name = (kind == "window" and (def.label or target_name)) or nil,
+		window_name = (kind == "window" and get_window_name(def, target_name)) or nil,
 	}
 
 	table.insert(st.instances, instance)
