@@ -18,6 +18,7 @@ function M.toggle(opts)
 	action.run({
 		prompt = "Toggle",
 		behavior = "last",
+		mode = opts.mode or "auto",
 		filter = opts.filter,
 	}, {
 		on_targets = function(_, state)

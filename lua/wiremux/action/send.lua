@@ -69,6 +69,7 @@ local function do_send(expanded, opts, submit, title)
 	action.run({
 		prompt = "Send to",
 		behavior = opts.behavior or config.opts.actions.send.behavior or "pick",
+		mode = opts.mode or "auto",
 		filter = opts.filter,
 	}, {
 		on_targets = function(targets, state)

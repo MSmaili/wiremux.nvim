@@ -1,6 +1,6 @@
 local M = {}
 
----@alias wiremux.ResolveMode "instances"|"definitions"|"both"
+---@alias wiremux.ResolveMode "instances"|"definitions"|"all"|"auto"
 
 ---@class wiremux.ResolveOpts
 ---@field behavior wiremux.action.Behavior
@@ -250,12 +250,15 @@ function M.resolve(state, definitions, opts)
 		return pick_result(build_definition_items(filtered_defs))
 	end
 
-	if opts.filter and opts.filter.definitions then
-		local result = pick_from_instances(instances)
-		vim.list_extend(result.items, build_definition_items(filtered_defs))
+	if opts.mode == "all" then
+		local result = resolve_by_behavior(instances, opts.behavior, last_used)
+		if result.kind == "pick" then
+			vim.list_extend(result.items, build_definition_items(filtered_defs))
+		end
 		return result
 	end
 
+	-- mode == "auto": instances first, fallback to definitions
 	return resolve_by_behavior(instances, opts.behavior, last_used)
 end
 
