@@ -9,7 +9,7 @@ local BUFFER_NAME = "wiremux"
 
 ---@param target wiremux.Instance
 ---@return string[], string[]
-function M._focus_cmds(target)
+local function get_focus_cmds(target)
 	return action.select_window(target.window_id), action.select_pane(target.id)
 end
 
@@ -35,7 +35,7 @@ function M.send(text, targets, opts, st)
 	end
 
 	if opts.focus and targets[1] then
-		local win_cmd, pane_cmd = M._focus_cmds(targets[1])
+		local win_cmd, pane_cmd = get_focus_cmds(targets[1])
 		table.insert(batch, win_cmd)
 		table.insert(batch, pane_cmd)
 	end
@@ -59,7 +59,7 @@ end
 ---@param target wiremux.Instance
 function M.focus(target)
 	local st = state.get()
-	local win_cmd, pane_cmd = M._focus_cmds(target)
+	local win_cmd, pane_cmd = get_focus_cmds(target)
 	local batch = { win_cmd, pane_cmd }
 
 	if st.last_used_target_id ~= target.id then

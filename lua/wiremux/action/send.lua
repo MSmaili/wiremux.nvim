@@ -87,10 +87,31 @@ local function do_send(expanded, opts, submit, title)
 	})
 end
 
+---Send a single send item
+---@param item wiremux.action.SendItem
+---@param opts wiremux.config.ActionConfig
+local function send_single_item(item, opts)
+	local context = require("wiremux.context")
+	local config = require("wiremux.config")
+
+	local ok, expanded = pcall(context.expand, item.value)
+	if not ok then
+		require("wiremux.utils.notify").error(expanded)
+		return
+	end
+
+	local submit = item.submit
+	if submit == nil then
+		submit = opts.submit or config.opts.actions.send.submit
+	end
+
+	do_send(expanded, opts, submit, item.title)
+end
+
 ---Send from send library (picker)
 ---@param items wiremux.action.SendItem[]
 ---@param opts wiremux.config.ActionConfig
-function M._send_from_library(items, opts)
+local function send_from_library(items, opts)
 	local picker_items = build_picker_items(items)
 
 	if #picker_items == 0 then
@@ -110,29 +131,8 @@ function M._send_from_library(items, opts)
 			return
 		end
 
-		M._send_single_item(choice.value, opts)
+		send_single_item(choice.value, opts)
 	end)
-end
-
----Send a single send item
----@param item wiremux.action.SendItem
----@param opts wiremux.config.ActionConfig
-function M._send_single_item(item, opts)
-	local context = require("wiremux.context")
-	local config = require("wiremux.config")
-
-	local ok, expanded = pcall(context.expand, item.value)
-	if not ok then
-		require("wiremux.utils.notify").error(expanded)
-		return
-	end
-
-	local submit = item.submit
-	if submit == nil then
-		submit = opts.submit or config.opts.actions.send.submit
-	end
-
-	do_send(expanded, opts, submit, item.title)
 end
 
 ---Send text or item(s) to target
@@ -145,14 +145,14 @@ function M.send(text, opts)
 	opts = opts or {}
 
 	if type(text) == "table" and vim.islist(text) then
-		return M._send_from_library(text, opts)
+		return send_from_library(text, opts)
 	end
 
 	if type(text) == "table" then
-		return M._send_single_item(text, opts)
+		return send_single_item(text, opts)
 	end
 
-	return M._send_single_item({ value = text }, opts)
+	return send_single_item({ value = text }, opts)
 end
 
 return M
