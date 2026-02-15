@@ -312,7 +312,9 @@ Works with any statusline plugin. Add the component:
 { provider = require("wiremux").statusline.component() }
 ```
 
-Shows `󰆍 3 [latest_target_name]` when targets exist, nothing when empty. Automatically hidden outside tmux.
+When the target exists, it shows something like:
+
+<img width="221" height="55" alt="image" src="https://github.com/user-attachments/assets/c95f24b8-a121-4b75-a83c-07b1639cb75f" />
 
 ### Custom Statusline
 
