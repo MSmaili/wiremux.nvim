@@ -60,13 +60,15 @@ Define targets:
           split = "vertical",
           shell = false, -- recommended if you want to
                          -- close/kill pane/window when closing
-          label = "OpenAI", -- custom display name
+          label = "OpenAI", -- custom display name (string or function)
+          title = "AI-OpenAI", -- tmux window name (for kind="window")
         },
         claudecode = {
           cmd = "claudecode",
           kind = "window",
           split = "horizontal",
           label = "Claude",
+          title = "AI-Claude",
         },
       },
     },
@@ -91,12 +93,13 @@ Pick from a custom prompt list:
 
 SendItem fields ~
 
-| Field     | Type                | Description                              |
-|-----------|---------------------|------------------------------------------|
-| value     | string              | Text/command to send (required)          |
-| label     | string (optional)   | Display name in picker                   |
-| submit    | boolean (optional)  | Auto-submit after sending                |
-| visible   | boolean or function | Show/hide item based on condition        |
+| Field     | Type                    | Description                              |
+|-----------|-------------------------|------------------------------------------|
+| value     | string                  | Text/command to send (required)          |
+| label     | string (optional)       | Display name in picker                   |
+| title     | string (optional)       | Custom tmux window / zellij tab name     |
+| submit    | boolean (optional)      | Auto-submit after sending                |
+| visible   | boolean or function     | Show/hide item based on condition        |
 
 Commands with auto-submit:
 >lua
@@ -124,6 +127,31 @@ Conditional visibility:
     },
   })
 <
+
+Dynamic labels for targets ~
+
+You can use a function for `label` to create dynamic display names:
+>lua
+  require("wiremux").setup({
+    targets = {
+      definitions = {
+        devserver = {
+          cmd = "npm run dev",
+          kind = "window",
+          title = "Dev-Server",
+          -- Dynamic label shows running command
+          label = function(inst, index)
+            local cmd = inst.running_command or "idle"
+            return string.format("Dev #%d [%s]", index, cmd)
+          end,
+        },
+      },
+    },
+  })
+<
+The `label` function receives:
+- `inst`: Instance info (id, target, kind, running_command, etc.)
+- `index`: Instance number (1, 2, 3...) for targets with multiple instances
 
 ==============================================================================
 3. HOW-TO GUIDES                                                   *wiremux-howto*
@@ -195,14 +223,16 @@ Complete example:
           cmd = "opencode",
           kind = "pane",
           split = "vertical",
-          label = "OpenAI",
+          label = "OpenAI",  -- display name in picker (string or function)
+          title = "AI-OpenAI", -- tmux window name (for kind="window")
           shell = false,
         },
         claudecode = {
-          cmd = "claudecode", 
+          cmd = "claudecode",
           kind = "pane",
           split = "horizontal",
           label = "Claude",
+          title = "AI-Claude",
         },
       },
     },
@@ -239,8 +269,15 @@ split               (string, default: "horizontal")
                     For panes: "horizontal" or "vertical"
 
 *wiremux-config-definition-label*
-label               (string|nil)
+label               (string|function|nil)
                     Custom display name for the target.
+                    If a function: `fun(inst, index): string` for dynamic labels.
+
+*wiremux-config-definition-title*
+title               (string|nil)
+                    Custom tmux window name when creating.
+                    Only used when `kind = "window"`.
+                    Defaults to `label` (if string) or target name.
 
 *wiremux-config-definition-shell*
 shell               (boolean, default: true)

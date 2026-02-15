@@ -2,9 +2,9 @@
 
 wiremux is a small Neovim plugin that sends text to tmux panes/windows.
 
-I built it for an AI workflow: I keep `opencode` / `claudecode` running in a dedicated tmux pane/window, then I send it context (selection, diagnostics, git diff, quickfix) with a keymap. No copy/paste and no context switching.
-
 The original inspiration was [folke/sidekick.nvim](https://github.com/folke/sidekick.nvim). wiremux aims to stay simpler and more tmux-first, while still being flexible enough to drive anything (AI, test runners, dev servers, REPLs).
+
+Initially I built just as a small replacment of sidekick (wanted to be only with multiplexer mode and to have more control), but then the desire to add things grove and now I use it also for running different commands, and have a flexibile filter/sorts for showing things
 
 **Key features:**
 
@@ -12,7 +12,7 @@ The original inspiration was [folke/sidekick.nvim](https://github.com/folke/side
 - **Context placeholders:** Send `{file}`, `{position}`, `{selection}`, `{diagnostics}`, `{changes}`, etc.
 - **Flexible filtering:** Control which targets are visible (by origin, by directory, or global)
 - **Zero startup cost:** Lazy-loaded, nothing runs until you use it
-- **Prompt library:** Send pre-defined prompts with context injection
+- **Custom list of commands:** Send pre-defined prompts/commands with context injection
 
 ## Requirements
 
@@ -77,13 +77,15 @@ require("wiremux").setup({
         kind = "pane",     -- "pane" | "window" | {"pane", "window"} (default: pane)
                            -- table = prompt to choose at runtime
         split = "vertical", -- for panes: "horizontal" | "vertical"
-        label = "OpenAI",  -- custom display name (optional)
+        label = "OpenAI",  -- custom display name (optional, string or function)
+        title = "AI-Chat", -- custom tmux window name (optional, defaults to label or target)
       },
       claudecode = {
         cmd = "claudecode",
         kind = "pane",
         split = "horizontal",
-        label = "Claude",
+        label = "Claude", -- can also be a function, see examples below
+        title = "Claude-Chat",
       },
       -- Run directly (no shell wrapper). When the program exits, tmux closes the pane.
       ai_direct = {
@@ -108,8 +110,10 @@ Notes:
 - `shell = true` (default) means: create a pane and then type `cmd` into it.
 - `shell = false` means: pass `cmd` directly to tmux when creating the pane/window.
   This is useful for "run the tool directly and let tmux close the pane when it exits".
+- `label` can be a string or function: `fun(inst: wiremux.Instance, index: number): string` for dynamic picker display.
+- `title` sets the tmux window name (only used when `kind = "window"`). Defaults to `label` (if string) or target name.
 
-## How I Use It (Real-world config)
+## How I Use It
 
 I run multiple instances(panes/windows) one for example an AI (opencode, claude, kiro) and anther instance running tests or some dev scripts and switch between them.
 Here is my actual lazy.nvim configuration:
@@ -130,6 +134,7 @@ Here is my actual lazy.nvim configuration:
         kiro = { cmd = "kiro-cli", kind = { "pane", "window" }, shell = false, split = "horizontal" },
         -- Interactive shells
         shell = { kind = { "pane", "window" }, shell = true, split = "horizontal" },
+        quick = { kind = { "pane", "window" }, shell = false, split = "horizontal" }, -- for running custom commands
       },
     },
   },
@@ -146,7 +151,7 @@ Here is my actual lazy.nvim configuration:
     { "<leader>av", function() require("wiremux").send("{selection}", { focus = true }) end, mode = { "x" }, desc = "Send selection" },
     -- Send diagnostics
     { "<leader>ad", function() require("wiremux").send("{diagnostics}", { focus = true }) end, desc = "Send line diagnostics" },
-    { "<leader>aD", function() require("wiremux").send("{diagnostics_all}", { focus = true }) end, desc = "Send all diagnostics" },
+    { "<leader>aD", function() require("wiremux").send("{diagnostics_all}", { focus = true }) end, desc = "Send all diagnostics on current buffer" },
     -- Send via motion (operator)
     { "ga", function() return require("wiremux").send_motion() end, mode = { "x", "n" }, expr = true, desc = "Send motion" },
     {
@@ -175,13 +180,24 @@ Here is my actual lazy.nvim configuration:
       function()
         require("wiremux").send({
           -- Node.js commands
-          { label = "npm test", value = "npm test", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },
+          { label = "npm test", value = "npm test; exec $SHELL", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },-- with execute shell is like saying shell = false, but only for this
           { label = "npm run build", value = "npm run build", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },
           { label = "npm run start", value = "npm run start", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },
           -- Go commands
           { label = "go build", value = "go build", submit = true, visible = function() return vim.bo.filetype == "go" end },
           { label = "go test (all)", value = "go test ./...", submit = true, visible = function() return vim.bo.filetype == "go" end },
           { label = "go test (selection)", value = "go test -run '{selection}'", submit = true, visible = function() return vim.bo.filetype == "go" and require("wiremux.context").is_available("selection") end },
+        },
+        {
+            filter = {
+                definitions = function(name, def) -- run commands on a new quick target
+                    return name == "quick"
+                end,
+                instances = function() -- hide instances, i just want to run commands and create new instance
+                    return false
+                end,
+            },
+            behavior = "pick",
         })
       end,
       desc = "Run project command",
@@ -196,12 +212,13 @@ Here is my actual lazy.nvim configuration:
 
 When using `send()` with an array of items, each item supports these fields:
 
-| Field     | Type                   | Description                                  |
-| --------- | ---------------------- | -------------------------------------------- |
-| `value`   | `string`               | **(Required)** The text or command to send   |
-| `label`   | `string?`              | Display name in picker (defaults to `value`) |
-| `submit`  | `boolean?`             | Auto-submit after sending (default: `false`) |
-| `visible` | `boolean \| function?` | Show/hide item (default: `true`)             |
+| Field     | Type                   | Description                                     |
+| --------- | ---------------------- | ----------------------------------------------- |
+| `value`   | `string`               | **(Required)** The text or command to send      |
+| `label`   | `string?`              | Display name in picker (defaults to `value`)    |
+| `title`   | `string?`              | Custom tmux window / zellij tab name (optional) |
+| `submit`  | `boolean?`             | Auto-submit after sending (default: `false`)    |
+| `visible` | `boolean \| function?` | Show/hide item (default: `true`)                |
 
 **Examples:**
 
@@ -228,13 +245,15 @@ When using `send()` with an array of items, each item supports these fields:
   submit = true,
   visible = function() return vim.bo.filetype == "rust" end
 }
+
+-- Dynamic window title
+{
+  label = "Run server",
+  value = "npm run dev",
+  title = "Dev-Server",  -- tmux window will be named "Dev-Server"
+  submit = true,
+}
 ```
-
-**Key patterns:**
-
-- **`{this}`** — My most used placeholder. In normal mode it sends position. In visual mode it sends position + selection.
-- **`shell = false`** — When the AI exits, tmux closes the pane. No zombie shells.
-- **`ga` operator** — `gaiw` sends inner word, `gaap` sends paragraph, visual + `ga` sends selection.
 
 ## Placeholders (context)
 
@@ -353,7 +372,8 @@ Most actions can run in one of these modes:
 - `last`: reuse the last used target
 - `all`: apply to all matching targets
 
-In other words this means, when you press the action based on the behaviour we show a picker or the last one.
+In other words this means, when you press the action based on the behaviour we show a picker or we send to the last used instance.
+Behaviour can be changed globaly or per action
 
 ## Troubleshooting
 
@@ -453,6 +473,7 @@ wiremux is designed to have minimal impact on your editor:
 
 AI assisted tools were used during development, but all generated code was reviewed, understood, and adjusted manually.
 The design and implementation decisions are intentional, and the plugin is kept deliberately simple and minimal.
+A bigger usage of AI was writing tests and docs.
 
 ## Credits
 
