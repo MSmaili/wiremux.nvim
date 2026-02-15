@@ -135,10 +135,10 @@ function M.create(target_name, def, st)
 
 	if kind == "window" then
 		local window_name = get_window_name(def, target_name)
-		table.insert(cmds, action.new_window(window_name, use_shell and nil or cmd))
+		table.insert(cmds, action.new_window(window_name, not use_shell and cmd or nil))
 		table.insert(cmds, query.window_id())
 	else
-		table.insert(cmds, action.split_pane(def.split or "horizontal", st.origin_pane_id, use_shell and nil or cmd))
+		table.insert(cmds, action.split_pane(def.split or "horizontal", st.origin_pane_id, not use_shell and cmd or nil))
 		table.insert(cmds, query.pane_id())
 	end
 
