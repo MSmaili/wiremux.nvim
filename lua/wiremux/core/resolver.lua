@@ -250,6 +250,12 @@ function M.resolve(state, definitions, opts)
 		return pick_result(build_definition_items(filtered_defs))
 	end
 
+	if opts.filter and opts.filter.definitions then
+		local result = pick_from_instances(instances)
+		vim.list_extend(result.items, build_definition_items(filtered_defs))
+		return result
+	end
+
 	return resolve_by_behavior(instances, opts.behavior, last_used)
 end
 
