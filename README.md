@@ -2,6 +2,10 @@
 
 wiremux is a small Neovim plugin that sends text to tmux panes/windows.
 
+<p align="center">
+  <video src="https://github.com/MSmaili/wiremux.nvim/releases/download/v2.0.0/demo.mp4" controls width="800"></video>
+</p>
+
 Think of it as a way to wire up your editor to anything running in tmux:
 
 - AI assistants,
