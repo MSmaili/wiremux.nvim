@@ -131,7 +131,7 @@ local function get_display_name(inst, def, index)
 		name = inst.target
 	end
 
-	local label = string.format("%s #%d", name, index)
+	local label = string.format("%s %s", name, inst.id:match("%d+") or inst.id)
 
 	if inst.running_command and inst.running_command ~= "" then
 		label = label .. string.format(" [%s]", inst.running_command)
