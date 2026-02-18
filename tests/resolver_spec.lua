@@ -41,8 +41,8 @@ describe("resolver", function()
 			assert.are.equal("pick", result.kind)
 			assert.are.equal(2, #result.items)
 			assert.are.equal("instance", result.items[1].type)
-			assert.are.equal("test #1", result.items[1].label)
-			assert.are.equal("test #2", result.items[2].label)
+			assert.are.equal("test 1", result.items[1].label)
+			assert.are.equal("test 2", result.items[2].label)
 		end)
 
 		it("skips picker when only one instance exists", function()
@@ -69,8 +69,8 @@ describe("resolver", function()
 
 			local result = resolver.resolve(state, {}, { behavior = "pick" })
 
-			assert.are.equal("zebra #1", result.items[1].label)
-			assert.are.equal("alpha #1", result.items[2].label)
+			assert.are.equal("zebra 1", result.items[1].label)
+			assert.are.equal("alpha 2", result.items[2].label)
 		end)
 	end)
 
@@ -153,8 +153,8 @@ describe("resolver", function()
 			local result = resolver.resolve(state, {}, { behavior = "pick" })
 
 			assert.are.equal("pick", result.kind)
-			assert.are.equal("test #1 [npm]", result.items[1].label)
-			assert.are.equal("test #2 [node]", result.items[2].label)
+			assert.are.equal("test 1 [npm]", result.items[1].label)
+			assert.are.equal("test 2 [node]", result.items[2].label)
 		end)
 
 		it("omits running_command bracket when empty", function()
@@ -167,8 +167,8 @@ describe("resolver", function()
 
 			local result = resolver.resolve(state, {}, { behavior = "pick" })
 
-			assert.are.equal("test #1", result.items[1].label)
-			assert.are.equal("test #2", result.items[2].label)
+			assert.are.equal("test 1", result.items[1].label)
+			assert.are.equal("test 2", result.items[2].label)
 		end)
 	end)
 
@@ -226,9 +226,8 @@ describe("resolver", function()
 			local result = resolver.resolve(state, {}, { behavior = "pick" })
 
 			assert.are.equal("pick", result.kind)
-			-- Falls back to target name format
-			assert.are.equal("myapp #1", result.items[1].label)
-			assert.are.equal("myapp #2", result.items[2].label)
+			assert.are.equal("myapp 1", result.items[1].label)
+			assert.are.equal("myapp 2", result.items[2].label)
 		end)
 	end)
 
