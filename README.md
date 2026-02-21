@@ -72,6 +72,14 @@ require("wiremux").setup({
 })
 ```
 
+### Core Concepts
+
+Understanding the distinction between **definitions** and **instances** is key:
+
+- **Definition** — a template in your config that describes how to create a target (command, split direction, etc.)
+- **Instance** — a running tmux pane or window created from a definition
+- **Target** — either a definition or an instance
+
 ### Target Definition Fields
 
 | Field   | Type                            | Default        | Description                                                    |
@@ -246,20 +254,6 @@ require("wiremux").send({
 | `submit`  | `boolean?`             | Auto-submit after sending (default: `false`) |
 | `visible` | `boolean \| function?` | Show/hide item (default: `true`)             |
 
-### Filtering Targets Per-Action
-
-You can override which targets and instances show up for a specific `send()` call:
-
-```lua
--- Only show "quick" definitions, skip existing instances
-require("wiremux").send({ ... }, {
-  mode = "definitions",
-  filter = {
-    definitions = function(name) return name == "quick" end,
-  },
-})
-```
-
 ## Placeholders
 
 wiremux expands `{placeholders}` before sending.
@@ -293,6 +287,96 @@ require("wiremux").setup({
 })
 ```
 
+## Target Resolution
+
+When you trigger an action (send, toggle, etc.), wiremux resolves which targets to use. Four options control this: **target**, **behavior**, **mode**, and **filters**.
+
+### Target
+
+If you know exactly which target you want, pass its name directly to skip the picker entirely. Works with all actions:
+
+```lua
+require("wiremux").send("{this}", { target = "claude" })
+require("wiremux").focus({ target = "claude" })
+require("wiremux").close({ target = "shell" })
+require("wiremux").create({ target = "shell" })
+```
+
+If matching instances exist, they're used. Otherwise wiremux falls back to creating from the definition. Filters still apply — if a filter excludes the target, it won't be found.
+
+### Behavior
+
+Behavior controls **how to handle multiple targets**:
+
+- **`pick`** — show a picker when multiple targets are available
+- **`last`** — reuse the most recently used target
+- **`all`** — send to all targets
+
+Set globally in `actions` config or override per-call via opts.
+
+### Mode
+
+Mode controls **the source of targets** (instances vs definitions). Only applies to `send()` and `toggle()` — other actions (create, close, focus) don't use mode.
+
+`send()` and `toggle()` default to `mode = "auto"` — they try existing instances first, and fall back to creating from definitions if none exist. You can override this:
+
+- **`auto`** — instances first, fall back to definitions (default for send/toggle)
+- **`instances`** — only show existing instances
+- **`definitions`** — only show target definitions (useful for "run command" flows)
+- **`all`** — show instances and definitions
+
+```lua
+-- Only offer to create new targets, skip existing instances
+require("wiremux").send({ ... }, { mode = "definitions" })
+```
+
+### Filters
+
+Filters control **which specific items to show** from those sources (by name, by cwd, etc.).
+
+- **mode** — what sources to include (instances, definitions, or both)
+- **filter** — which specific items to show from those sources (by name, by cwd, etc.)
+
+**Order of operations:** filters run first, then mode selects from the filtered results. This means if you set `mode = "definitions"` but filter out all definitions, you'll get an empty picker — mode doesn't override filter.
+
+**Global filters** — set in `picker.instances.filter` and `picker.targets.filter`:
+
+```lua
+picker = {
+  instances = {
+    -- Default: only show instances from current Neovim pane
+    filter = function(inst, state) return inst.origin == state.origin_pane_id end,
+    -- By working directory instead:
+    filter = function(inst, state) return inst.origin_cwd == vim.fn.getcwd() end,
+    -- Show everything:
+    filter = nil,
+  },
+}
+```
+
+**Per-action filters** — override for a specific call:
+
+```lua
+-- Only show "quick" definitions, skip existing instances
+require("wiremux").send({ ... }, {
+  mode = "definitions",
+  filter = {
+    definitions = function(name) return name == "quick" end,
+  },
+})
+```
+
+## Commands
+
+```vim
+:Wiremux send <text>
+:Wiremux send-motion
+:Wiremux focus
+:Wiremux create
+:Wiremux close
+:Wiremux toggle
+```
+
 ## Statusline
 
 Display the number of active wiremux targets in your statusline.
@@ -322,68 +406,6 @@ end
 ```
 
 **API:** `statusline.get_info()` returns `{ loading, count, last_used }` — `statusline.component()` returns a lualine-compatible function — `statusline.refresh()` forces an immediate refresh.
-
-## Commands
-
-```vim
-:Wiremux send <text>
-:Wiremux send-motion
-:Wiremux focus
-:Wiremux create
-:Wiremux close
-:Wiremux toggle
-```
-
-## Behaviors
-
-Actions run in one of three behaviors:
-
-- **`pick`** — show a picker when multiple instances are available
-- **`last`** — reuse the most recently used target
-- **`all`** — show all targets
-
-Set globally in `actions` config or override per-call via opts.
-
-### Mode
-
-`send()` and `toggle()` default to `mode = "auto"` — they try existing instances first, and fall back to creating from definitions if none exist. You can override this:
-
-- **`auto`** — instances first, fall back to definitions (default for send/toggle)
-- **`instances`** — only show existing instances
-- **`definitions`** — only show target definitions (useful for "run command" flows)
-- **`all`** — show instances and definitions
-
-```lua
--- Only offer to create new targets, skip existing instances
-require("wiremux").send({ ... }, { mode = "definitions" })
-```
-
-## Filters
-
-Filters control which targets appear in pickers.
-
-**Global filters** — set in `picker.instances.filter` and `picker.targets.filter`:
-
-```lua
-picker = {
-  instances = {
-    -- Default: only show instances from current Neovim pane
-    filter = function(inst, state) return inst.origin == state.origin_pane_id end,
-    -- By working directory instead:
-    filter = function(inst, state) return inst.origin_cwd == vim.fn.getcwd() end,
-    -- Show everything:
-    filter = nil,
-  },
-}
-```
-
-**Per-action filters** — override for a specific call:
-
-```lua
-require("wiremux").send("{file}", {
-  filter = { instances = function(inst, state) return inst.origin_cwd == vim.fn.getcwd() end },
-})
-```
 
 ## Persistence
 
