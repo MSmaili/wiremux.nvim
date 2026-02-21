@@ -22,6 +22,7 @@ function M.toggle(opts)
 		behavior = "last",
 		mode = opts.mode or "auto",
 		filter = opts.filter,
+		target = opts.target,
 	}, {
 		on_targets = function(targets, state)
 			backend.toggle_visibility(state)

@@ -17,6 +17,7 @@ function M.focus(opts)
 		behavior = opts.behavior or config.opts.actions.focus.behavior or "last",
 		mode = "instances",
 		filter = opts.filter,
+		target = opts.target,
 	}, {
 		on_targets = function(targets, _)
 			backend.focus(targets[1])

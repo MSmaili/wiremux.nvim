@@ -17,6 +17,7 @@ function M.create(opts)
 		behavior = opts.behavior,
 		mode = "definitions",
 		filter = opts.filter,
+		target = opts.target,
 	}, {
 		on_definition = function(name, def, state)
 			backend.create(name, def, state)

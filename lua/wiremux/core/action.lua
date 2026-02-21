@@ -14,6 +14,7 @@ end
 ---@field behavior wiremux.action.Behavior
 ---@field mode? wiremux.ResolveMode
 ---@field filter? wiremux.config.FilterConfig
+---@field target? string
 
 ---@class wiremux.action.Callbacks
 ---@field on_targets? fun(targets: wiremux.Instance[], state: wiremux.State)
@@ -106,12 +107,18 @@ function M.run(opts, callbacks)
 		behavior = opts.behavior,
 		mode = opts.mode,
 		filter = opts.filter,
+		target = opts.target,
 	})
 
 	if result.kind == "pick" then
 		local available_items = filter_items_by_callbacks(result.items, callbacks)
 		if #available_items == 0 then
 			notify.warn("No targets available. Create one with :Wiremux create")
+			return
+		end
+
+		if opts.target and #available_items == 1 then
+			dispatch_choice(available_items[1], callbacks, state)
 			return
 		end
 

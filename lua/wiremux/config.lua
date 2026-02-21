@@ -36,6 +36,7 @@ local M = {}
 ---@field focus? boolean
 ---@field submit? boolean
 ---@field filter? wiremux.config.FilterConfig
+---@field target? string Target definition name. Sends directly to matching instance, auto-creates if none exist.
 
 ---@class wiremux.target.definition
 ---@field cmd? string Command to run in the new pane/window

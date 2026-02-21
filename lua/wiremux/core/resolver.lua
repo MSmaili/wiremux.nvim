@@ -6,6 +6,7 @@ local M = {}
 ---@field behavior wiremux.action.Behavior
 ---@field mode? wiremux.ResolveMode
 ---@field filter? wiremux.config.FilterConfig
+---@field target? string Target definition name for explicit targeting
 
 ---@class wiremux.ResolveItem.Instance
 ---@field type "instance"
@@ -225,6 +226,33 @@ local function resolve_by_behavior(instances, behavior, last_used)
 	return pick_from_instances(instances)
 end
 
+---Resolve when an explicit target name is provided.
+---Filters instances by target name (on top of normal filters), auto-creates if none found.
+---@param state wiremux.State
+---@param instances wiremux.Instance[]
+---@param definitions table<string, wiremux.target.definition>
+---@param opts wiremux.ResolveOpts
+---@return wiremux.ResolveResult
+local function resolve_explicit_target(state, instances, definitions, opts)
+	local target_instances = vim.iter(instances)
+		:filter(function(inst)
+			return inst.target == opts.target
+		end)
+		:totable()
+
+	if #target_instances > 0 then
+		return resolve_by_behavior(target_instances, opts.behavior, state.last_used_target_id)
+	end
+
+	local def = definitions[opts.target]
+	if def then
+		return pick_result(build_definition_items({ [opts.target] = def }))
+	end
+
+	require("wiremux.utils.notify").warn(string.format("Target '%s' not found in definitions", opts.target))
+	return pick_result({})
+end
+
 ---@param state wiremux.State
 ---@param definitions table<string, wiremux.target.definition>
 ---@param opts wiremux.ResolveOpts
@@ -234,6 +262,10 @@ function M.resolve(state, definitions, opts)
 
 	local instances = M.filter_instances(state.instances, state, opts.filter)
 	local filtered_defs = filter_definitions(definitions, opts.filter)
+
+	if opts.target then
+		return resolve_explicit_target(state, instances, filtered_defs, opts)
+	end
 
 	if opts.mode == "definitions" then
 		return pick_result(build_definition_items(filtered_defs))

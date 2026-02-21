@@ -71,6 +71,7 @@ local function do_send(expanded, opts, submit, title)
 		behavior = opts.behavior or config.opts.actions.send.behavior or "pick",
 		mode = opts.mode or "auto",
 		filter = opts.filter,
+		target = opts.target,
 	}, {
 		on_targets = function(targets, state)
 			backend.send(expanded, targets, { focus = focus, submit = submit }, state)
