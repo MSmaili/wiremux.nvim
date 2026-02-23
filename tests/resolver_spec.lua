@@ -231,6 +231,119 @@ describe("resolver", function()
 		end)
 	end)
 
+	describe("resolve with explicit target", function()
+		it("sends directly to matching instance", function()
+			local state = {
+				instances = {
+					{ id = "%1", kind = "pane", target = "shell" },
+					{ id = "%2", kind = "pane", target = "ai" },
+				},
+			}
+
+			local result = resolver.resolve(state, {}, { behavior = "pick", target = "shell" })
+
+			assert.are.equal("targets", result.kind)
+			assert.are.equal(1, #result.targets)
+			assert.are.equal("%1", result.targets[1].id)
+		end)
+
+		it("returns definition to auto-create when no matching instance exists", function()
+			local state = {
+				instances = {
+					{ id = "%1", kind = "pane", target = "ai" },
+				},
+			}
+			local definitions = {
+				shell = { kind = "pane", cmd = "bash" },
+			}
+
+			local result = resolver.resolve(state, definitions, { behavior = "pick", target = "shell" })
+
+			assert.are.equal("pick", result.kind)
+			assert.are.equal(1, #result.items)
+			assert.are.equal("definition", result.items[1].type)
+			assert.are.equal("shell", result.items[1].target)
+			assert.are.equal("bash", result.items[1].def.cmd)
+		end)
+
+		it("shows picker when two matching instances exist", function()
+			local state = {
+				instances = {
+					{ id = "%1", kind = "pane", target = "shell" },
+					{ id = "%2", kind = "pane", target = "shell" },
+					{ id = "%3", kind = "pane", target = "ai" },
+				},
+			}
+
+			local result = resolver.resolve(state, {}, { behavior = "pick", target = "shell" })
+
+			assert.are.equal("pick", result.kind)
+			assert.are.equal(2, #result.items)
+			assert.are.equal("shell", result.items[1].target)
+			assert.are.equal("shell", result.items[2].target)
+		end)
+
+		it("respects behavior='last' among matching instances", function()
+			local state = {
+				instances = {
+					{ id = "%1", kind = "pane", target = "shell" },
+					{ id = "%2", kind = "pane", target = "shell" },
+				},
+				last_used_target_id = "%2",
+			}
+
+			local result = resolver.resolve(state, {}, { behavior = "last", target = "shell" })
+
+			assert.are.equal("targets", result.kind)
+			assert.are.equal(1, #result.targets)
+			assert.are.equal("%2", result.targets[1].id)
+		end)
+
+		it("warns when target definition does not exist", function()
+			local warned = false
+			package.loaded["wiremux.utils.notify"] = {
+				warn = function(msg)
+					warned = true
+					assert.matches("not found", msg)
+				end,
+				debug = function() end,
+			}
+
+			local state = { instances = {} }
+
+			local result = resolver.resolve(state, {}, { behavior = "pick", target = "nonexistent" })
+
+			assert.is_true(warned)
+			assert.are.equal("pick", result.kind)
+			assert.are.equal(0, #result.items)
+		end)
+
+		it("applies instance filters before target filtering", function()
+			local config = require("wiremux.config")
+			config.opts.picker = {
+				instances = {
+					filter = function(inst)
+						return inst.origin == "%0"
+					end,
+				},
+			}
+
+			local state = {
+				origin_pane_id = "%0",
+				instances = {
+					{ id = "%1", kind = "pane", target = "shell", origin = "%0" },
+					{ id = "%2", kind = "pane", target = "shell", origin = "%99" },
+				},
+			}
+
+			local result = resolver.resolve(state, {}, { behavior = "pick", target = "shell" })
+
+			assert.are.equal("targets", result.kind)
+			assert.are.equal(1, #result.targets)
+			assert.are.equal("%1", result.targets[1].id)
+		end)
+	end)
+
 	describe("resolve with no instances", function()
 		it("falls back to definitions", function()
 			local state = { instances = {} }

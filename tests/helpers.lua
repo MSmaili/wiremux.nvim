@@ -22,6 +22,9 @@ function M.mock_backend(extra)
 		create = function(name, def, state)
 			return { id = "%1", kind = "pane", target = name }
 		end,
+		wait_for_ready = function(inst, opts, callback)
+			callback()
+		end,
 	}
 	if extra then
 		for k, v in pairs(extra) do
