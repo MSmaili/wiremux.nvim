@@ -23,4 +23,11 @@ function M.window_id()
 	return { "display", "-p", "#{window_id}" }
 end
 
+---Capture the visible text content of a pane
+---@param pane_id string
+---@return string[]
+function M.capture_pane(pane_id)
+	return { "capture-pane", "-p", "-t", pane_id }
+end
+
 return M

@@ -84,7 +84,9 @@ local function do_send(expanded, opts, submit, title)
 			})
 			local inst = backend.create(name, modified_def, state)
 			if inst and has_own_cmd then
-				backend.send(expanded, { inst }, { focus = focus, submit = submit }, state)
+				backend.wait_for_ready(inst, { timeout_ms = def.startup_timeout }, function()
+					backend.send(expanded, { inst }, { focus = focus, submit = submit }, state)
+				end)
 			end
 		end,
 	})

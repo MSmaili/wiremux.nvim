@@ -44,4 +44,13 @@ function M.close(targets, s)
 	return require("wiremux.backend.tmux.operation").close(targets, s)
 end
 
+---Wait until a newly created pane has rendered its TUI and is ready for input.
+---Polls pane content asynchronously; calls callback when stable or timed out.
+---@param inst wiremux.Instance
+---@param opts? { timeout_ms?: number }
+---@param callback fun()
+function M.wait_for_ready(inst, opts, callback)
+	return require("wiremux.backend.tmux.watch").wait_for_ready(inst.id, callback, opts)
+end
+
 return M

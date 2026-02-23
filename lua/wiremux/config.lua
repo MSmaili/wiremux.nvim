@@ -45,6 +45,7 @@ local M = {}
 ---@field shell? boolean Run command through shell (default: true)
 ---@field label? string|fun(inst: wiremux.Instance, index: number): string Custom display label for picker
 ---@field title? string Custom tmux window / zellij tab name
+---@field startup_timeout? number Max milliseconds to wait for TUI to render before sending (default: 3500)
 
 local defaults = {
 	log_level = "warn",
