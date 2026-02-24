@@ -1,24 +1,24 @@
 # wiremux.nvim
 
-wiremux is a small Neovim plugin that sends text to tmux panes/windows.
+Send text from Neovim to tmux panes and windows - perfect for AI assistants, terminals, and dev tools.
 
-![demo](https://github.com/MSmaili/wiremux.nvim/releases/download/v2.0.0/demo.gif)
+https://github.com/user-attachments/assets/77d5735d-515b-467e-87c5-417189a6359e
 
-Think of it as a way to wire up your editor to anything running in tmux:
+## What is wiremux?
 
-- AI assistants,
-- test runners,
-- dev servers.
+Wiremux connects your editor to anything running in tmux. Common uses:
 
-You define targets, create instances of them, and send text with context placeholders like `{file}`, `{selection}` etc.
+- **Chat with AI assistants** (Claude, OpenCode, etc.) about your code
+- **Run tests or build commands** without leaving your editor
+- **Quick terminal access** for any shell commands
 
-**Key features:**
+It works by creating "targets" (tmux panes/windows) and sending them text with smart placeholders like `{file}`, `{selection}`, or `{this}`.
 
-- **Persistent targets** -> state lives in tmux, so your targets survives Neovim restarts
-- **Context placeholders** -> `{file}`, `{selection}`, `{diagnostics}`, `{changes}`, etc.
-- **Command picker** -> pass a list of prompts/commands to `send()` and pick from them
-- **Flexible filtering** -> control which targets show up per-action or globally
-- **Zero startup cost** -> lazy-loaded, nothing runs until you use it
+### Why wiremux?
+
+- **Persistent** - Your targets survive Neovim restarts (stored in tmux)
+- **Smart text** - Send context-aware snippets with placeholders
+- **Zero startup cost** - Lazy-loaded, nothing runs until you use it
 
 ## Requirements
 
@@ -28,24 +28,24 @@ You define targets, create instances of them, and send text with context placeho
 
 ## Installation
 
-### lazy.nvim
+Add wiremux to your plugin manager. The optional `fzf-lua` dependency gives you a nicer picker interface.
+
+### lazy.nvim (recommended)
 
 ```lua
 {
   "MSmaili/wiremux.nvim",
   dependencies = {
-    -- Optional: nicer picker UI
-    "ibhagwan/fzf-lua",
+    "ibhagwan/fzf-lua", -- optional, for better picker UI
   },
-  opts = {
-    -- see Quick Start
-  },
+  opts = {},
 }
 ```
 
-### packer.nvim
+### Other Managers
 
 ```lua
+-- packer.nvim
 use {
   "MSmaili/wiremux.nvim",
   requires = { "ibhagwan/fzf-lua" }, -- optional
@@ -53,46 +53,13 @@ use {
     require("wiremux").setup()
   end,
 }
+
+-- vim-plug
+Plug 'MSmaili/wiremux.nvim'
 ```
-
-## Quick Start
-
-A **target** is a named definition for a tmux pane or window that wiremux can create, send text to, and manage.
-
-```lua
-require("wiremux").setup({
-  picker = { adapter = "fzf-lua" },
-  targets = {
-    definitions = {
-      opencode = { cmd = "opencode", kind = "pane", split = "horizontal", shell = false },
-      claude   = { cmd = "claude",   kind = "pane", split = "horizontal", shell = false },
-      shell    = { kind = "pane",    split = "horizontal" },
-    },
-  },
-})
-```
-
-### Core Concepts
-
-Understanding the distinction between **definitions** and **instances** is key:
-
-- **Definition** — a template in your config that describes how to create a target (command, split direction, etc.)
-- **Instance** — a running tmux pane or window created from a definition
-- **Target** — either a definition or an instance
-
-### Target Definition Fields
-
-| Field   | Type                            | Default        | Description                                                    |
-| ------- | ------------------------------- | -------------- | -------------------------------------------------------------- |
-| `cmd`   | `string?`                       | —              | Command to run when creating the pane/window                   |
-| `kind`  | `"pane"` \| `"window"` \| table | `"pane"`       | Target kind. Table like `{"pane","window"}` prompts at runtime |
-| `split` | `"horizontal"` \| `"vertical"`  | `"horizontal"` | Split direction (only for panes)                               |
-| `shell` | `boolean`                       | `true`         | `true`: types `cmd` into a shell. `false`: runs `cmd` directly |
-| `label` | `string` \| `function?`         | target name    | Display name in picker. Function: `fn(inst, index) -> string`  |
-| `title` | `string?`                       | label or name  | Tmux window name (only used when `kind = "window"`)            |
 
 <details>
-<summary><strong>Default Options</strong></summary>
+<summary><strong>Default Configuration</strong></summary>
 
 These are the full defaults from `config.lua`. You only need to override what you want to change.
 
@@ -136,123 +103,113 @@ These are the full defaults from `config.lua`. You only need to override what yo
 
 </details>
 
-<details>
-<summary><strong>Full Setup Example</strong></summary>
+## Quick Start
 
-My actual lazy.nvim config — multiple AI assistants, project-aware commands, and a quick shell target:
+### Step 1: Define Your First Target
+
+A **target** is a tmux pane or window that wiremux manages. Add this minimal setup:
 
 ```lua
-{
-  "MSmaili/wiremux.nvim",
-  opts = {
-    picker = { adapter = "fzf-lua" },
-    targets = {
-      definitions = {
-        -- AI assistants (shell=false: pane closes when AI exits)
-        opencode = { cmd = "opencode", kind = { "pane", "window" }, shell = false, split = "horizontal" },
-        claude = { cmd = "claude", kind = { "pane", "window" }, shell = false, split = "horizontal" },
-        kiro = { cmd = "kiro-cli", kind = { "pane", "window" }, shell = false, split = "horizontal" },
-        -- Interactive shells
-        shell = { kind = { "pane", "window" }, shell = true, split = "horizontal" },
-        quick = { kind = { "pane", "window" }, shell = false, split = "horizontal" },
-      },
+require("wiremux").setup({
+  targets = {
+    definitions = {
+      -- A simple terminal
+      terminal = { kind = "pane", split = "horizontal" },
     },
   },
-  keys = {
-    -- Toggle visibility of last used target
-    { "<leader>aa", function() require("wiremux").toggle() end, desc = "Toggle target" },
-    -- Create new target from definitions
-    { "<leader>ac", function() require("wiremux").create() end, desc = "Create target" },
-    -- Send file path
-    { "<leader>af", function() require("wiremux").send("{file}", { focus = true }) end, desc = "Send file" },
-    -- Send "this" (position + selection in visual mode)
-    { "<leader>at", function() require("wiremux").send("{this}", { focus = true }) end, mode = { "x", "n" }, desc = "Send this" },
-    -- Send visual selection
-    { "<leader>av", function() require("wiremux").send("{selection}", { focus = true }) end, mode = { "x" }, desc = "Send selection" },
-    -- Send diagnostics
-    { "<leader>ad", function() require("wiremux").send("{diagnostics}", { focus = true }) end, desc = "Send line diagnostics" },
-    { "<leader>aD", function() require("wiremux").send("{diagnostics_all}", { focus = true }) end, desc = "Send all diagnostics on current buffer" },
-    -- Send via motion (operator)
-    { "ga", function() return require("wiremux").send_motion() end, mode = { "x", "n" }, expr = true, desc = "Send motion" },
-    {
-      "<leader>ap",
-      function()
-        require("wiremux").send({
-          -- AI Prompts
-          { label = "Review changes", value = "Can you review my changes?\n{changes}" },
-          { label = "Fix diagnostics (file)", value = "Can you help me fix the diagnostics in {file}?\n{diagnostics_all}", visible = function() return require("wiremux.context").is_available("diagnostics_all") end },
-          { label = "Fix diagnostics (line)", value = "Can you help me fix this diagnostic?\n{diagnostics}", visible = function() return require("wiremux.context").is_available("diagnostics") end },
-          { label = "Add docs", value = "Add documentation to {this}" },
-          { label = "Explain", value = "Explain {this}" },
-          { label = "Fix", value = "Can you fix {this}?" },
-          { label = "Optimize", value = "How can {this} be optimized?" },
-          { label = "Review file", value = "Can you review {file} for any issues?" },
-          { label = "Write tests", value = "Can you write tests for {this}?" },
-          { label = "Fix quickfix", value = "Can you help me fix these issues?\n{quickfix}", visible = function() return require("wiremux.context").is_available("quickfix") end },
-        })
-      end,
-      mode = { "n", "x" },
-      desc = "AI prompts",
-    },
-    -- Run project commands (context-aware)
-    {
-      "<leader>ar",
-      function()
-        require("wiremux").send({
-          { label = "npm test", value = "npm test; exec $SHELL", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },
-          { label = "npm run build", value = "npm run build", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },
-          { label = "npm run start", value = "npm run start", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },
-          { label = "go build", value = "go build", submit = true, visible = function() return vim.bo.filetype == "go" end },
-          { label = "go test (all)", value = "go test ./...", submit = true, visible = function() return vim.bo.filetype == "go" end },
-          { label = "go test (selection)", value = "go test -run '{selection}'", submit = true, visible = function() return vim.bo.filetype == "go" and require("wiremux.context").is_available("selection") end },
-        },
-        {
-            mode = "definitions", -- this makes possible to show only the target definitions
-            filter = {
-                definitions = function(name) return name == "quick" end,
-            },
-            behavior = "pick",
-        })
-      end,
-      desc = "Run project command",
-    },
-  },
-}
-```
-
-</details>
-
-## Sending Text
-
-The `send()` function is the main way to interact with targets. You can send a string directly, or pass a table of items to create a picker.
-
-**String mode** — sends text directly:
-
-```lua
-require("wiremux").send("{file}", { focus = true })
-require("wiremux").send("{selection}")
-```
-
-**Picker mode** — pass a table of items and wiremux shows a picker to choose from:
-
-```lua
-require("wiremux").send({
-  { label = "Explain",      value = "Explain {this}" },
-  { label = "Review",       value = "Can you review my changes?\n{changes}" },
-  { label = "Write tests",  value = "Can you write tests for {this}?" },
-  { label = "Run tests",    value = "npm test; exec $SHELL", submit = true }, -- the exec $SHELL is useful if running on a non-shel env, and you want to keep open on failure
 })
 ```
 
-### SendItem Fields
+<details>
+<summary><strong>Target Definition Fields Reference</strong></summary>
 
-| Field     | Type                   | Description                                  |
-| --------- | ---------------------- | -------------------------------------------- |
-| `value`   | `string`               | **(Required)** The text or command to send   |
-| `label`   | `string?`              | Display name in picker (defaults to `value`) |
-| `title`   | `string?`              | Custom tmux window name (optional)           |
-| `submit`  | `boolean?`             | Auto-submit after sending (default: `false`) |
-| `visible` | `boolean \| function?` | Show/hide item (default: `true`)             |
+| Field   | Type                            | Default        | Description                                                          |
+| ------- | ------------------------------- | -------------- | -------------------------------------------------------------------- |
+| `cmd`   | `string?`                       | -              | Command to run when creating the pane/window                         |
+| `kind`  | `"pane"` \| `"window"` \| table | `"pane"`       | Target type. Use table like `{"pane","window"}` to prompt at runtime |
+| `split` | `"horizontal"` \| `"vertical"`  | `"horizontal"` | Split direction (panes only)                                         |
+| `shell` | `boolean`                       | `true`         | `true`: types `cmd` into a shell. `false`: runs `cmd` directly       |
+| `label` | `string` \| `function?`         | target name    | Display name in picker                                               |
+| `title` | `string?`                       | label or name  | Tmux window name (windows only)                                      |
+
+</details>
+
+### Step 2: Create and Use It
+
+Run `:Wiremux create` — a picker appears listing your defined targets. Select "terminal" and wiremux opens a tmux pane. Or use Lua:
+
+```lua
+-- Create the target (opens a tmux pane)
+require("wiremux").create()
+
+-- Send text to it
+require("wiremux").send("ls -la")
+```
+
+### Step 3: Add Keyboard Shortcuts
+
+```lua
+-- Using lazy.nvim keys:
+keys = {
+  -- Toggle terminal visibility
+  { "<leader>tt", function() require("wiremux").toggle() end, desc = "Toggle terminal" },
+  -- Send current file path
+  { "<leader>tf", function() require("wiremux").send("{file}") end, desc = "Send file path" },
+  -- Send visual selection
+  { "<leader>tv", function() require("wiremux").send("{selection}") end, mode = "x", desc = "Send selection" },
+}
+```
+
+### Understanding the Basics
+
+Two key concepts to remember:
+
+| Concept        | What it is                                           | Example                             |
+| -------------- | ---------------------------------------------------- | ----------------------------------- |
+| **Definition** | A template describing how to create a target         | `{ cmd = "claude", kind = "pane" }` |
+| **Instance**   | A running tmux pane/window created from a definition | The actual claude pane open in tmux |
+
+Definitions live in your config. Instances are created on-demand and persist in tmux.
+
+## Sending Text
+
+The `send()` function is your main tool. You can send simple strings or create a picker menu.
+
+### Basic Sending
+
+Send text directly to your target:
+
+```lua
+-- Send the current file path
+require("wiremux").send("{file}")
+
+-- Send with focus (jumps to the target pane)
+require("wiremux").send("{selection}", { focus = true })
+
+-- Send a custom message
+require("wiremux").send("Hello from Neovim!")
+```
+
+### Using the Picker
+
+Pass a list of items to get a menu:
+
+```lua
+require("wiremux").send({
+  { label = "Explain this", value = "Explain {this}" },
+  { label = "Review changes", value = "Review my changes:\n{changes}" },
+  { label = "Run tests", value = "npm test", submit = true },
+})
+```
+
+Each item in the picker can have:
+
+| Field     | What it does                    | Example                                          |
+| --------- | ------------------------------- | ------------------------------------------------ |
+| `value`   | **(Required)** The text to send | `"Explain {file}"`                               |
+| `label`   | Display name in the picker      | `"Explain file"`                                 |
+| `submit`  | Auto-press Enter after sending  | `true` (useful for commands)                     |
+| `visible` | Show/hide this item dynamically | `function() return vim.bo.filetype == "lua" end` |
 
 ## Placeholders
 
@@ -287,95 +244,134 @@ require("wiremux").setup({
 })
 ```
 
-## Target Resolution
+## Advanced Configuration
 
-When you trigger an action (send, toggle, etc.), wiremux resolves which targets to use. Four options control this: **target**, **behavior**, **mode**, and **filters**.
+### Target Resolution Options
 
-### Target
+When you run an action, wiremux decides which targets to show. You can control this with four options:
 
-If you know exactly which target you want, pass its name directly to skip the picker entirely. Works with all actions:
+**1. Specific Target** - Skip the picker and use a named target:
 
 ```lua
 require("wiremux").send("{this}", { target = "claude" })
 require("wiremux").focus({ target = "claude" })
-require("wiremux").close({ target = "shell" })
-require("wiremux").create({ target = "shell" })
 ```
 
-If matching instances exist, they're used. Otherwise wiremux falls back to creating from the definition. Filters still apply — if a filter excludes the target, it won't be found.
+If matching instances exist, they're used. Otherwise wiremux falls back to creating from the definition. Filters still apply; if a filter excludes the target, it won't be found.
 
-### Behavior
+**2. Behavior** - How to handle multiple targets:
 
-Behavior controls **how to handle multiple targets**:
+| Behavior | What happens           | Use when...                   |
+| -------- | ---------------------- | ----------------------------- |
+| `pick`   | Show picker to choose  | You want to select each time  |
+| `last`   | Use most recent target | You want quick repeat actions |
+| `all`    | Send to every target   | Broadcasting to multiple AIs  |
 
-- **`pick`** — show a picker when multiple targets are available
-- **`last`** — reuse the most recently used target
-- **`all`** — send to all targets
+**3. Mode** - Where to look for targets (only for `send()` and `toggle()`):
 
-Set globally in `actions` config or override per-call via opts.
+| Mode          | What it shows                     | Use when...              |
+| ------------- | --------------------------------- | ------------------------ |
+| `auto`        | Instances first, then definitions | Default - smart fallback |
+| `instances`   | Only existing panes/windows       | Managing current targets |
+| `definitions` | Only templates to create new      | Starting fresh sessions  |
+| `all`         | Everything                        | Full overview            |
 
-### Mode
+**4. Filters** - Fine-grained control:
 
-Mode controls **the source of targets** (instances vs definitions). Only applies to `send()` and `toggle()` — other actions (create, close, focus) don't use mode.
-
-`send()` and `toggle()` default to `mode = "auto"` — they try existing instances first, and fall back to creating from definitions if none exist. You can override this:
-
-- **`auto`** — instances first, fall back to definitions (default for send/toggle)
-- **`instances`** — only show existing instances
-- **`definitions`** — only show target definitions (useful for "run command" flows)
-- **`all`** — show instances and definitions
-
-```lua
--- Only offer to create new targets, skip existing instances
-require("wiremux").send({ ... }, { mode = "definitions" })
-```
-
-### Filters
-
-Filters control **which specific items to show** from those sources (by name, by cwd, etc.).
-
-- **mode** — what sources to include (instances, definitions, or both)
-- **filter** — which specific items to show from those sources (by name, by cwd, etc.)
-
-**Order of operations:** filters run first, then mode selects from the filtered results. This means if you set `mode = "definitions"` but filter out all definitions, you'll get an empty picker — mode doesn't override filter.
-
-**Global filters** — set in `picker.instances.filter` and `picker.targets.filter`:
+By default, only targets created from your current tmux pane are shown. You can override this:
 
 ```lua
+-- Show all targets regardless of which pane created them
 picker = {
   instances = {
-    -- Default: only show instances from current Neovim pane
-    filter = function(inst, state) return inst.origin == state.origin_pane_id end,
-    -- By working directory instead:
-    filter = function(inst, state) return inst.origin_cwd == vim.fn.getcwd() end,
-    -- Show everything:
     filter = nil,
+  },
+}
+
+-- Only show targets from current directory
+picker = {
+  instances = {
+    filter = function(inst, state)
+      return inst.origin_cwd == vim.fn.getcwd()
+    end,
   },
 }
 ```
 
-**Per-action filters** — override for a specific call:
+### Complete Real-World Setup
+
+Here's a comprehensive example with multiple AIs, project commands, and smart filtering:
 
 ```lua
--- Only show "quick" definitions, skip existing instances
-require("wiremux").send({ ... }, {
-  mode = "definitions",
-  filter = {
-    definitions = function(name) return name == "quick" end,
+{
+  "MSmaili/wiremux.nvim",
+  opts = {
+    picker = { adapter = "fzf-lua" },
+    targets = {
+      definitions = {
+        -- AI assistants
+        claude = { cmd = "claude", kind = { "pane", "window" }, shell = false },
+        opencode = { cmd = "opencode", kind = { "pane", "window" }, shell = false },
+        -- Interactive shell
+        shell = { kind = { "pane", "window" }, shell = true },
+        -- Quick command runner
+        quick = { kind = { "pane", "window" }, shell = false },
+      },
+    },
   },
-})
+  keys = {
+    { "<leader>aa", function() require("wiremux").toggle() end, desc = "Toggle target" },
+    { "<leader>ac", function() require("wiremux").create() end, desc = "Create target" },
+    -- Send context
+    { "<leader>af", function() require("wiremux").send("{file}") end, desc = "Send file" },
+    { "<leader>at", function() require("wiremux").send("{this}") end, mode = { "x", "n" }, desc = "Send this" },
+    { "<leader>av", function() require("wiremux").send("{selection}") end, mode = "x", desc = "Send selection" },
+    { "<leader>ad", function() require("wiremux").send("{diagnostics}") end, desc = "Send diagnostics" },
+    -- Send motion (works like an operator: ga + motion, e.g. gaip sends a paragraph)
+    { "ga", function() require("wiremux").send_motion() end, desc = "Send motion to target" },
+    -- AI prompts picker
+    {
+      "<leader>ap",
+      function()
+        require("wiremux").send({
+          { label = "Review changes", value = "Can you review my changes?\n{changes}" },
+          { label = "Fix diagnostics", value = "Can you help me fix this?\n{diagnostics}", visible = function() return require("wiremux.context").is_available("diagnostics") end },
+          { label = "Explain", value = "Explain {this}" },
+          { label = "Write tests", value = "Can you write tests for {this}?" },
+        })
+      end,
+      mode = { "n", "x" },
+      desc = "AI prompts",
+    },
+    -- Project commands (only show "quick" target)
+    {
+      "<leader>ar",
+      function()
+        require("wiremux").send({
+          { label = "npm test", value = "npm test; exec $SHELL", submit = true, visible = function() return vim.fn.filereadable("package.json") == 1 end },
+          { label = "go test", value = "go test ./...", submit = true, visible = function() return vim.bo.filetype == "go" end },
+        }, { mode = "definitions", filter = { definitions = function(name) return name == "quick" end } })
+      end,
+      desc = "Run command",
+    },
+  },
+}
 ```
 
-## Commands
+## Actions & Commands
 
-```vim
-:Wiremux send <text>
-:Wiremux send-motion
-:Wiremux focus
-:Wiremux create
-:Wiremux close
-:Wiremux toggle
-```
+These are the main ways to interact with wiremux targets. You can use them as **Lua functions** (for keybindings) or **Vim commands** (for command line):
+
+| Lua Function    | Vim Command            | What it does                              | Common use case                                            |
+| --------------- | ---------------------- | ----------------------------------------- | ---------------------------------------------------------- |
+| `send()`        | `:Wiremux send <text>` | Sends text to a target                    | Send code, prompts, or commands to an AI or terminal       |
+| `send_motion()` | `:Wiremux send-motion` | Sends text covered by a motion (operator) | Works like `y`: map to `ga`, then `gaip` sends a paragraph |
+| `create()`      | `:Wiremux create`      | Creates a new target from a definition    | Start a new AI assistant or terminal pane                  |
+| `toggle()`      | `:Wiremux toggle`      | Shows/hides the last used target          | Quick hide/show your AI or terminal                        |
+| `focus()`       | `:Wiremux focus`       | Switches focus to a target                | Jump to your terminal or AI pane                           |
+| `close()`       | `:Wiremux close`       | Closes a target                           | Shut down an AI or terminal you're done with               |
+
+**Tip:** Lua functions give you more power (placeholders, options, dynamic content), while commands are great for quick command-line use or when mapping from Vimscript.
 
 ## Statusline
 
@@ -405,11 +401,11 @@ function()
 end
 ```
 
-**API:** `statusline.get_info()` returns `{ loading, count, last_used }` — `statusline.component()` returns a lualine-compatible function — `statusline.refresh()` forces an immediate refresh.
+**API:** `statusline.get_info()` returns `{ loading, count, last_used }` - `statusline.component()` returns a lualine-compatible function - `statusline.refresh()` forces an immediate refresh.
 
 ## Persistence
 
-wiremux stores state in tmux pane variables — not in Neovim. Your targets survive editor restarts, and multiple Neovim instances can share them.
+wiremux stores state in tmux pane variables, not in Neovim. Your targets survive editor restarts, and multiple Neovim instances can share them.
 
 ## Troubleshooting
 
@@ -422,6 +418,6 @@ wiremux stores state in tmux pane variables — not in Neovim. Your targets surv
 
 ## Credits
 
-- [folke/sidekick.nvim](https://github.com/folke/sidekick.nvim) — inspiration for the idea and reference for a few implementation patterns
+- [folke/sidekick.nvim](https://github.com/folke/sidekick.nvim) - inspiration for the idea and reference for a few implementation patterns
 
 AI-assisted tools were used during development. All generated code was reviewed and adjusted manually.
