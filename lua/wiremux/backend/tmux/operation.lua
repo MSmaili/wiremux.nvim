@@ -26,7 +26,7 @@ function M.send(text, targets, opts, st)
 	for _, t in ipairs(targets) do
 		table.insert(batch, action.paste_buffer(BUFFER_NAME, t.id))
 		if opts.submit then
-			table.insert(batch, action.send_keys(t.id, ""))
+			table.insert(batch, action.send_keys(t.id, "Enter"))
 		end
 	end
 
@@ -151,7 +151,7 @@ function M.create(target_name, def, st)
 	state.set_instance_metadata(id, target_name, st.origin_pane_id or "", vim.fn.getcwd(), kind)
 
 	if use_shell and cmd then
-		client.execute({ action.send_keys(id, cmd) })
+		client.execute({ action.send_keys(id, { cmd, "Enter" }) })
 	end
 
 	notify.debug("create: %s %s target=%s", kind, id, target_name)
