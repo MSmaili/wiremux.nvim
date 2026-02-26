@@ -34,9 +34,7 @@ function M.setup()
 			set_pane_option = function(pane_id, key, value)
 				return { "set-option", "-p", "-t", pane_id, key, value }
 			end,
-			send_keys = function(target, keys)
-				return { "send-keys", "-t", target, keys, "Enter" }
-			end,
+			send_keys = require("wiremux.backend.tmux.action").send_keys,
 			new_window = function(name, command)
 				local cmd = { "new-window" }
 				if name then

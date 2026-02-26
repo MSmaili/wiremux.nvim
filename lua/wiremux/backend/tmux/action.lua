@@ -50,10 +50,16 @@ function M.select_window(window_id)
 end
 
 ---@param target_id string
----@param keys string
+---@param keys string|string[] e.g. "Enter", { cmd, "Enter" }, { "Escape", "i" }, { "C-c" }
 ---@return string[]
 function M.send_keys(target_id, keys)
-	return { "send-keys", "-t", target_id, keys, "Enter" }
+	local cmd = { "send-keys", "-t", target_id }
+	if type(keys) == "table" then
+		vim.list_extend(cmd, keys)
+	else
+		table.insert(cmd, keys)
+	end
+	return cmd
 end
 
 ---@param buffer_name string
