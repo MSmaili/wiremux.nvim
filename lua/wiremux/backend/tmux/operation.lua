@@ -25,9 +25,6 @@ function M.send(text, targets, opts, st)
 
 	for _, t in ipairs(targets) do
 		table.insert(batch, action.paste_buffer(BUFFER_NAME, t.id))
-		if opts.submit then
-			table.insert(batch, action.send_keys(t.id, ""))
-		end
 	end
 
 	if #targets > 0 then
@@ -49,6 +46,15 @@ function M.send(text, targets, opts, st)
 		notify.error("Failed to send text to targets. Check that tmux panes are still active.")
 		return
 	end
+
+	if opts.submit then
+		local submit_batch = {}
+		for _, t in ipairs(targets) do
+			table.insert(submit_batch, action.send_keys(t.id, ""))
+		end
+		client.execute(submit_batch)
+	end
+
 	notify.debug("send: sent to %d targets", #targets)
 
 	if targets[1] then
@@ -138,7 +144,10 @@ function M.create(target_name, def, st)
 		table.insert(cmds, action.new_window(window_name, not use_shell and cmd or nil))
 		table.insert(cmds, query.window_id())
 	else
-		table.insert(cmds, action.split_pane(def.split or "horizontal", st.origin_pane_id, not use_shell and cmd or nil))
+		table.insert(
+			cmds,
+			action.split_pane(def.split or "horizontal", st.origin_pane_id, not use_shell and cmd or nil)
+		)
 		table.insert(cmds, query.pane_id())
 	end
 
