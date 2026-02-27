@@ -13,6 +13,17 @@ local function get_focus_cmds(target)
 	return action.select_window(target.window_id), action.select_pane(target.id)
 end
 
+---@param targets wiremux.Instance[]
+local function submit(targets)
+	vim.defer_fn(function()
+		local batch = {}
+		for _, t in ipairs(targets) do
+			table.insert(batch, action.send_keys(t.id, ""))
+		end
+		client.execute(batch)
+	end, 300)
+end
+
 ---@param text string
 ---@param targets wiremux.Instance[]
 ---@param opts? { focus?: boolean, submit?: boolean }
@@ -48,11 +59,7 @@ function M.send(text, targets, opts, st)
 	end
 
 	if opts.submit then
-		local submit_batch = {}
-		for _, t in ipairs(targets) do
-			table.insert(submit_batch, action.send_keys(t.id, ""))
-		end
-		client.execute(submit_batch)
+		submit(targets)
 	end
 
 	notify.debug("send: sent to %d targets", #targets)
