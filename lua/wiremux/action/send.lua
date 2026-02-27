@@ -117,6 +117,16 @@ end
 ---@param items wiremux.action.SendItem[]
 ---@param opts wiremux.config.ActionConfig
 local function send_from_library(items, opts)
+	local context = require("wiremux.context")
+
+	local expanded = {}
+	for _, item in ipairs(items) do
+		local ok, value = pcall(context.expand, item.value)
+		if ok then
+			expanded[item] = value
+		end
+	end
+
 	local picker_items = build_picker_items(items)
 
 	if #picker_items == 0 then
@@ -136,7 +146,15 @@ local function send_from_library(items, opts)
 			return
 		end
 
-		send_single_item(choice.value, opts)
+		local item = choice.value
+		local config = require("wiremux.config")
+
+		local submit = item.submit
+		if submit == nil then
+			submit = opts.submit or config.opts.actions.send.submit
+		end
+
+		do_send(expanded[item] or item.value, opts, submit, item.title)
 	end)
 end
 
