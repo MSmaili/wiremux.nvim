@@ -505,6 +505,31 @@ This is useful for conditional visibility in SendItem:
   }
 <
 
+Interactive input ~
+                                                              *wiremux-input*
+The `{input}` placeholder prompts the user via `vim.ui.input()` at send
+time. Use it when part of the text needs to come from the user.
+
+  {input}                 prompt with label "Input", no default
+  {input:Search query}    prompt with label "Search query"
+  {input:Query:foo bar}   prompt with label "Query", default "foo bar"
+  {input:URL:http://example.com}  prompt "URL", default "http://example.com"
+
+>lua
+  -- Single input with a default value
+  require("wiremux").send("grep -r '{input:Search query:TODO}' {file}")
+
+  -- Multiple distinct inputs in one send
+  require("wiremux").send(
+    "git log --author='{input:Author}' --grep='{input:Grep pattern}'"
+  )
+<
+
+All sync placeholders resolve first, then each `{input}` prompts in
+order. Identical `{input}` expressions are deduplicated (prompted once,
+reused everywhere). Cancelling any prompt aborts the entire send.
+Placeholders typed into the prompt are sent as literal text (not expanded).
+
 ==============================================================================
 6. COMMANDS                                                      *wiremux-commands*
 
