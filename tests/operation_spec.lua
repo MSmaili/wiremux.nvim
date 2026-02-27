@@ -140,35 +140,36 @@ describe("tmux operations", function()
 		end)
 
 		it("respects submit option", function()
-			local batch_cmds
+			local executed_batches = {}
 			mocks.client.execute = function(batch, _)
-				batch_cmds = batch
+				table.insert(executed_batches, batch)
 				return "ok"
+			end
+
+			local deferred_submit
+			local original_defer_fn = vim.defer_fn
+			vim.defer_fn = function(fn, _)
+				deferred_submit = fn
 			end
 
 			local targets = { { id = "%1", kind = "pane", target = "test" } }
 			local st = { instances = {}, last_used_target_id = nil }
 
 			mocks.operation.send("text", targets, { submit = true }, st)
-			local found_send_keys = false
-			for _, cmd in ipairs(batch_cmds) do
-				if cmd[1] == "send-keys" then
-					found_send_keys = true
-					break
-				end
-			end
-			assert.is_true(found_send_keys)
+			assert.are.equal(1, #executed_batches)
+			assert.is_function(deferred_submit)
 
-			batch_cmds = nil
+			deferred_submit()
+			assert.are.equal(2, #executed_batches)
+			assert.are.equal("send-keys", executed_batches[2][1][1])
+
+			executed_batches = {}
+			deferred_submit = nil
 			mocks.operation.send("text", targets, { submit = false }, st)
-			found_send_keys = false
-			for _, cmd in ipairs(batch_cmds) do
-				if cmd[1] == "send-keys" then
-					found_send_keys = true
-					break
-				end
-			end
-			assert.is_false(found_send_keys)
+			assert.are.equal(1, #executed_batches)
+			assert.is_nil(deferred_submit)
+
+			vim.defer_fn = original_defer_fn
 		end)
 	end)
 
