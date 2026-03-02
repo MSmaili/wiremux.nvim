@@ -181,11 +181,17 @@ describe("tmux operations", function()
 			assert.is_true(pre_keys_idx < paste_idx)
 		end)
 
-		it("sends post_keys after paste-buffer", function()
-			local batch_cmds
+		it("sends post_keys in deferred batch after paste-buffer", function()
+			local executed_batches = {}
 			mocks.client.execute = function(batch, _)
-				batch_cmds = batch
+				table.insert(executed_batches, batch)
 				return "ok"
+			end
+
+			local deferred_fn
+			local original_defer_fn = vim.defer_fn
+			vim.defer_fn = function(fn, _)
+				deferred_fn = fn
 			end
 
 			local targets = { { id = "%1", kind = "pane", target = "test" } }
@@ -193,25 +199,35 @@ describe("tmux operations", function()
 
 			mocks.operation.send("text", targets, { post_keys = { "Escape" } }, st)
 
-			local paste_idx, post_keys_idx
-			for i, cmd in ipairs(batch_cmds) do
-				if cmd[1] == "paste-buffer" then
-					paste_idx = i
-				elseif cmd[1] == "send-keys" and vim.deep_equal(cmd, { "send-keys", "-t", "%1", "Escape" }) then
-					post_keys_idx = i
+			-- post_keys should NOT be in main batch
+			local main_batch = executed_batches[1]
+			for _, cmd in ipairs(main_batch) do
+				if cmd[1] == "send-keys" and vim.tbl_contains(cmd, "Escape") then
+					error("post_keys should not be in main batch")
 				end
 			end
 
-			assert.is_not_nil(paste_idx)
-			assert.is_not_nil(post_keys_idx)
-			assert.is_true(post_keys_idx > paste_idx)
+			-- post_keys should be in deferred batch
+			assert.is_function(deferred_fn)
+			deferred_fn()
+			assert.are.equal(2, #executed_batches)
+			assert.are.equal("send-keys", executed_batches[2][1][1])
+			assert.is_true(vim.tbl_contains(executed_batches[2][1], "Escape"))
+
+			vim.defer_fn = original_defer_fn
 		end)
 
-		it("sends pre_keys, paste, post_keys in correct order", function()
-			local batch_cmds
+		it("sends pre_keys in main batch, post_keys in deferred batch", function()
+			local executed_batches = {}
 			mocks.client.execute = function(batch, _)
-				batch_cmds = batch
+				table.insert(executed_batches, batch)
 				return "ok"
+			end
+
+			local deferred_fn
+			local original_defer_fn = vim.defer_fn
+			vim.defer_fn = function(fn, _)
+				deferred_fn = fn
 			end
 
 			local targets = { { id = "%1", kind = "pane", target = "test" } }
@@ -222,29 +238,42 @@ describe("tmux operations", function()
 				post_keys = { "Escape" },
 			}, st)
 
-			local pre_idx, paste_idx, post_idx
-			for i, cmd in ipairs(batch_cmds) do
+			-- Main batch: pre_keys + paste, no post_keys
+			local main_batch = executed_batches[1]
+			local pre_idx, paste_idx
+			for i, cmd in ipairs(main_batch) do
 				if cmd[1] == "send-keys" and vim.tbl_contains(cmd, "i") then
 					pre_idx = i
 				elseif cmd[1] == "paste-buffer" then
 					paste_idx = i
 				elseif cmd[1] == "send-keys" and vim.tbl_contains(cmd, "Escape") then
-					post_idx = i
+					error("post_keys should not be in main batch")
 				end
 			end
-
 			assert.is_not_nil(pre_idx)
 			assert.is_not_nil(paste_idx)
-			assert.is_not_nil(post_idx)
 			assert.is_true(pre_idx < paste_idx)
-			assert.is_true(paste_idx < post_idx)
+
+			-- Deferred batch: post_keys
+			assert.is_function(deferred_fn)
+			deferred_fn()
+			assert.are.equal(2, #executed_batches)
+			assert.is_true(vim.tbl_contains(executed_batches[2][1], "Escape"))
+
+			vim.defer_fn = original_defer_fn
 		end)
 
 		it("sends pre_keys/post_keys for each target in multi-target send", function()
-			local batch_cmds
+			local executed_batches = {}
 			mocks.client.execute = function(batch, _)
-				batch_cmds = batch
+				table.insert(executed_batches, batch)
 				return "ok"
+			end
+
+			local deferred_fn
+			local original_defer_fn = vim.defer_fn
+			vim.defer_fn = function(fn, _)
+				deferred_fn = fn
 			end
 
 			local targets = {
@@ -258,23 +287,36 @@ describe("tmux operations", function()
 				post_keys = { "Escape" },
 			}, st)
 
+			-- Main batch: pre_keys + paste for each target
+			local main_batch = executed_batches[1]
 			local pre_count = 0
 			local paste_count = 0
-			local post_count = 0
 
-			for _, cmd in ipairs(batch_cmds) do
+			for _, cmd in ipairs(main_batch) do
 				if cmd[1] == "send-keys" and vim.tbl_contains(cmd, "i") then
 					pre_count = pre_count + 1
 				elseif cmd[1] == "paste-buffer" then
 					paste_count = paste_count + 1
-				elseif cmd[1] == "send-keys" and vim.tbl_contains(cmd, "Escape") then
-					post_count = post_count + 1
 				end
 			end
 
 			assert.are.equal(2, pre_count)
 			assert.are.equal(2, paste_count)
+
+			-- Deferred batch: post_keys for each target
+			assert.is_function(deferred_fn)
+			deferred_fn()
+			assert.are.equal(2, #executed_batches)
+
+			local post_count = 0
+			for _, cmd in ipairs(executed_batches[2]) do
+				if cmd[1] == "send-keys" and vim.tbl_contains(cmd, "Escape") then
+					post_count = post_count + 1
+				end
+			end
 			assert.are.equal(2, post_count)
+
+			vim.defer_fn = original_defer_fn
 		end)
 
 		it("respects submit option", function()
