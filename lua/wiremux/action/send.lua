@@ -55,11 +55,8 @@ end
 ---Execute the send action with expanded text
 ---@param expanded string The text with placeholders expanded
 ---@param opts wiremux.config.ActionConfig
----@param submit boolean Whether to auto-submit
----@param title? string Custom tmux window / zellij tab name when creating
----@param pre_keys? string[] Keystrokes to send before pasting
----@param post_keys? string[] Keystrokes to send after pasting
-local function do_send(expanded, opts, submit, title, pre_keys, post_keys)
+---@param send_opts { submit: boolean, title?: string, pre_keys?: string|string[], post_keys?: string|string[] }
+local function do_send(expanded, opts, send_opts)
 	local config = require("wiremux.config")
 	local action = require("wiremux.core.action")
 	local backend = require("wiremux.backend").get()
@@ -69,12 +66,7 @@ local function do_send(expanded, opts, submit, title, pre_keys, post_keys)
 	end
 
 	local focus = opts.focus or config.opts.actions.send.focus
-	local send_opts = {
-		focus = focus,
-		submit = submit,
-		pre_keys = pre_keys,
-		post_keys = post_keys,
-	}
+	local backend_opts = vim.tbl_extend("force", send_opts, { focus = focus })
 
 	action.run({
 		prompt = "Send to",
@@ -84,18 +76,18 @@ local function do_send(expanded, opts, submit, title, pre_keys, post_keys)
 		target = opts.target,
 	}, {
 		on_targets = function(targets, state)
-			backend.send(expanded, targets, send_opts, state)
+			backend.send(expanded, targets, backend_opts, state)
 		end,
 		on_definition = function(name, def, state)
 			local has_own_cmd = def.cmd ~= nil
 			local modified_def = vim.tbl_extend("force", {}, def, {
 				cmd = def.cmd or expanded,
-				title = title,
+				title = send_opts.title,
 			})
 			local inst = backend.create(name, modified_def, state)
 			if inst and has_own_cmd then
 				backend.wait_for_ready(inst, { timeout_ms = def.startup_timeout }, function()
-					backend.send(expanded, { inst }, send_opts, state)
+					backend.send(expanded, { inst }, backend_opts, state)
 				end)
 			end
 		end,
@@ -123,7 +115,12 @@ local function send_single_item(item, opts)
 	local pre_keys = item.pre_keys or opts.pre_keys
 	local post_keys = item.post_keys or opts.post_keys
 
-	do_send(expanded, opts, submit, item.title, pre_keys, post_keys)
+	do_send(expanded, opts, {
+		submit = submit,
+		title = item.title,
+		pre_keys = pre_keys,
+		post_keys = post_keys,
+	})
 end
 
 ---Send from send library (picker)
@@ -170,7 +167,12 @@ local function send_from_library(items, opts)
 		local pre_keys = item.pre_keys or opts.pre_keys
 		local post_keys = item.post_keys or opts.post_keys
 
-		do_send(expanded[item] or item.value, opts, submit, item.title, pre_keys, post_keys)
+		do_send(expanded[item] or item.value, opts, {
+			submit = submit,
+			title = item.title,
+			pre_keys = pre_keys,
+			post_keys = post_keys,
+		})
 	end)
 end
 
