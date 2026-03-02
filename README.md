@@ -204,12 +204,42 @@ require("wiremux").send({
 
 Each item in the picker can have:
 
-| Field     | What it does                    | Example                                          |
-| --------- | ------------------------------- | ------------------------------------------------ |
-| `value`   | **(Required)** The text to send | `"Explain {file}"`                               |
-| `label`   | Display name in the picker      | `"Explain file"`                                 |
-| `submit`  | Auto-press Enter after sending  | `true` (useful for commands)                     |
-| `visible` | Show/hide this item dynamically | `function() return vim.bo.filetype == "lua" end` |
+| Field       | What it does                          | Example                                          |
+| ----------- | ------------------------------------- | ------------------------------------------------ |
+| `value`     | **(Required)** The text to send       | `"Explain {file}"`                               |
+| `label`     | Display name in the picker            | `"Explain file"`                                 |
+| `submit`    | Auto-press Enter after sending        | `true` (useful for commands)                     |
+| `visible`   | Show/hide this item dynamically       | `function() return vim.bo.filetype == "lua" end` |
+| `pre_keys`  | Keystrokes to send before pasting     | `"C-c"`, `{"C-c", "i"}`                         |
+| `post_keys` | Keystrokes to send after pasting      | `"Escape"`, `{"Escape", "Enter"}`                |
+
+### Sending Keystrokes Before/After
+
+Some TUI apps need keystrokes sent before/after the pasted text — for example, `C-c` to cancel any in-progress input, or `Escape` to return to a neutral state after pasting:
+
+```lua
+-- Cancel current input before pasting, return to normal state after
+require("wiremux").send({
+  value = "my text",
+  pre_keys = { "C-c" },
+  post_keys = { "Escape" },
+})
+
+-- Vim-mode editors: enter insert mode before pasting, Escape after
+require("wiremux").send({
+  value = "my text",
+  pre_keys = { "i" },
+  post_keys = { "Escape" },
+})
+
+-- Per-call opts: all items in this keymap use the same keys
+require("wiremux").send({
+  { label = "Explain", value = "Explain {this}" },
+  { label = "Review", value = "Review {changes}" },
+}, { pre_keys = { "i" }, target = "claude" })
+```
+
+Item-level `pre_keys`/`post_keys` override opts-level when both are set.
 
 ## Placeholders
 

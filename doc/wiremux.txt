@@ -100,6 +100,8 @@ SendItem fields ~
 | title     | string (optional)       | Custom tmux window / zellij tab name     |
 | submit    | boolean (optional)      | Auto-submit after sending                |
 | visible   | boolean or function     | Show/hide item based on condition        |
+| pre_keys  | string or string[]      | Keystrokes to send before pasting        |
+| post_keys | string or string[]      | Keystrokes to send after pasting         |
 
 Commands with auto-submit:
 >lua
@@ -127,6 +129,34 @@ Conditional visibility:
     },
   })
 <
+
+Sending keystrokes before/after ~
+                                              *wiremux-howto-pre-post-keys*
+
+Some TUI apps need keystrokes sent before/after the pasted text. For example,
+`C-c` to cancel in-progress input, or `Escape` to return to a neutral state:
+>lua
+  -- Cancel current input before pasting, return to normal state after
+  require("wiremux").send({
+    value = "my text",
+    pre_keys = { "C-c" },
+    post_keys = { "Escape" },
+  })
+
+  -- Vim-mode editors: enter insert mode before pasting, Escape after
+  require("wiremux").send({
+    value = "my text",
+    pre_keys = { "i" },
+    post_keys = { "Escape" },
+  })
+
+  -- Per-call opts (fallback for all items)
+  require("wiremux").send({
+    { label = "Explain", value = "Explain {this}" },
+    { label = "Review", value = "Review {changes}" },
+  }, { pre_keys = { "i" }, target = "claude" })
+<
+Item-level `pre_keys`/`post_keys` override opts-level when both are set.
 
 Dynamic labels for targets ~
 

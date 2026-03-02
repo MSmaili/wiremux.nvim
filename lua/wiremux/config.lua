@@ -37,6 +37,8 @@ local M = {}
 ---@field submit? boolean
 ---@field filter? wiremux.config.FilterConfig
 ---@field target? string Target definition name. Sends directly to matching instance, auto-creates if none exist.
+---@field pre_keys? string|string[] Keystrokes to send before action (e.g. {"C-c"}, {"i"})
+---@field post_keys? string|string[] Keystrokes to send after action (e.g. {"Escape"})
 
 ---@class wiremux.target.definition
 ---@field cmd? string Command to run in the new pane/window

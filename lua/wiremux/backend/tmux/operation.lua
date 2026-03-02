@@ -26,7 +26,7 @@ end
 
 ---@param text string
 ---@param targets wiremux.Instance[]
----@param opts? { focus?: boolean, submit?: boolean }
+---@param opts? { focus?: boolean, submit?: boolean, pre_keys?: string|string[], post_keys?: string|string[] }
 ---@param st wiremux.State
 function M.send(text, targets, opts, st)
 	opts = opts or {}
@@ -35,7 +35,13 @@ function M.send(text, targets, opts, st)
 	local batch = { action.load_buffer(BUFFER_NAME) }
 
 	for _, t in ipairs(targets) do
+		if opts.pre_keys then
+			table.insert(batch, action.send_keys(t.id, opts.pre_keys))
+		end
 		table.insert(batch, action.paste_buffer(BUFFER_NAME, t.id))
+		if opts.post_keys then
+			table.insert(batch, action.send_keys(t.id, opts.post_keys))
+		end
 	end
 
 	if #targets > 0 then

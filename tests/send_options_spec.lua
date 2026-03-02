@@ -135,6 +135,103 @@ describe("send with options", function()
 	end)
 end)
 
+describe("send with pre_keys/post_keys", function()
+	local mocks
+
+	before_each(function()
+		mocks = helpers.setup()
+	end)
+
+	it("passes pre_keys from SendItem to backend.send opts", function()
+		local send_opts
+
+		mocks.backend.send = function(text, targets, opts, state)
+			send_opts = opts
+		end
+
+		mocks.action.run = function(opts, callbacks)
+			callbacks.on_targets({ { id = "%1", kind = "pane", target = "test" } }, {})
+		end
+
+		mocks.send.send({ value = "text", pre_keys = { "i" } })
+
+		assert.are.same({ "i" }, send_opts.pre_keys)
+	end)
+
+	it("passes post_keys from SendItem to backend.send opts", function()
+		local send_opts
+
+		mocks.backend.send = function(text, targets, opts, state)
+			send_opts = opts
+		end
+
+		mocks.action.run = function(opts, callbacks)
+			callbacks.on_targets({ { id = "%1", kind = "pane", target = "test" } }, {})
+		end
+
+		mocks.send.send({ value = "text", post_keys = { "Escape" } })
+
+		assert.are.same({ "Escape" }, send_opts.post_keys)
+	end)
+
+	it("falls back to opts.pre_keys when item has none", function()
+		local send_opts
+
+		mocks.backend.send = function(text, targets, opts, state)
+			send_opts = opts
+		end
+
+		mocks.action.run = function(opts, callbacks)
+			callbacks.on_targets({ { id = "%1", kind = "pane", target = "test" } }, {})
+		end
+
+		mocks.send.send({ value = "text" }, { pre_keys = { "i" } })
+
+		assert.are.same({ "i" }, send_opts.pre_keys)
+	end)
+
+	it("item pre_keys overrides opts.pre_keys", function()
+		local send_opts
+
+		mocks.backend.send = function(text, targets, opts, state)
+			send_opts = opts
+		end
+
+		mocks.action.run = function(opts, callbacks)
+			callbacks.on_targets({ { id = "%1", kind = "pane", target = "test" } }, {})
+		end
+
+		mocks.send.send({ value = "text", pre_keys = { "a" } }, { pre_keys = { "i" } })
+
+		assert.are.same({ "a" }, send_opts.pre_keys)
+	end)
+
+	it("passes pre_keys/post_keys from library item through picker", function()
+		local send_opts
+
+		mocks.backend.send = function(text, targets, opts, state)
+			send_opts = opts
+		end
+
+		mocks.action.run = function(opts, callbacks)
+			callbacks.on_targets({ { id = "%1", kind = "pane", target = "test" } }, {})
+		end
+
+		local items = {
+			{ value = "text", label = "Test", pre_keys = { "i" }, post_keys = { "Escape" } },
+		}
+
+		mocks.picker.select = function(picker_items, opts, on_choice)
+			on_choice(picker_items[1])
+		end
+
+		mocks.send.send(items)
+
+		assert.are.same({ "i" }, send_opts.pre_keys)
+		assert.are.same({ "Escape" }, send_opts.post_keys)
+	end)
+end)
+
 describe("context expansion", function()
 	local mocks
 

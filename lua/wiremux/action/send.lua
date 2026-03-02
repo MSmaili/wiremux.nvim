@@ -6,6 +6,8 @@ local M = {}
 ---@field submit? boolean Auto-submit after sending (default: false)
 ---@field visible? boolean|fun(): boolean Show this item in picker (default: true)
 ---@field title? string Custom tmux window / zellij tab name when creating
+---@field pre_keys? string|string[] Keystrokes to send before pasting (e.g. {"C-c"}, {"i"})
+---@field post_keys? string|string[] Keystrokes to send after pasting (e.g. {"Escape"})
 
 ---Check if item should be visible
 ---@param item wiremux.action.SendItem
@@ -55,7 +57,9 @@ end
 ---@param opts wiremux.config.ActionConfig
 ---@param submit boolean Whether to auto-submit
 ---@param title? string Custom tmux window / zellij tab name when creating
-local function do_send(expanded, opts, submit, title)
+---@param pre_keys? string[] Keystrokes to send before pasting
+---@param post_keys? string[] Keystrokes to send after pasting
+local function do_send(expanded, opts, submit, title, pre_keys, post_keys)
 	local config = require("wiremux.config")
 	local action = require("wiremux.core.action")
 	local backend = require("wiremux.backend").get()
@@ -65,6 +69,12 @@ local function do_send(expanded, opts, submit, title)
 	end
 
 	local focus = opts.focus or config.opts.actions.send.focus
+	local send_opts = {
+		focus = focus,
+		submit = submit,
+		pre_keys = pre_keys,
+		post_keys = post_keys,
+	}
 
 	action.run({
 		prompt = "Send to",
@@ -74,7 +84,7 @@ local function do_send(expanded, opts, submit, title)
 		target = opts.target,
 	}, {
 		on_targets = function(targets, state)
-			backend.send(expanded, targets, { focus = focus, submit = submit }, state)
+			backend.send(expanded, targets, send_opts, state)
 		end,
 		on_definition = function(name, def, state)
 			local has_own_cmd = def.cmd ~= nil
@@ -85,7 +95,7 @@ local function do_send(expanded, opts, submit, title)
 			local inst = backend.create(name, modified_def, state)
 			if inst and has_own_cmd then
 				backend.wait_for_ready(inst, { timeout_ms = def.startup_timeout }, function()
-					backend.send(expanded, { inst }, { focus = focus, submit = submit }, state)
+					backend.send(expanded, { inst }, send_opts, state)
 				end)
 			end
 		end,
@@ -110,7 +120,10 @@ local function send_single_item(item, opts)
 		submit = opts.submit or config.opts.actions.send.submit
 	end
 
-	do_send(expanded, opts, submit, item.title)
+	local pre_keys = item.pre_keys or opts.pre_keys
+	local post_keys = item.post_keys or opts.post_keys
+
+	do_send(expanded, opts, submit, item.title, pre_keys, post_keys)
 end
 
 ---Send from send library (picker)
@@ -154,7 +167,10 @@ local function send_from_library(items, opts)
 			submit = opts.submit or config.opts.actions.send.submit
 		end
 
-		do_send(expanded[item] or item.value, opts, submit, item.title)
+		local pre_keys = item.pre_keys or opts.pre_keys
+		local post_keys = item.post_keys or opts.post_keys
+
+		do_send(expanded[item] or item.value, opts, submit, item.title, pre_keys, post_keys)
 	end)
 end
 

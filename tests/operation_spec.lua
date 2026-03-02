@@ -155,6 +155,128 @@ describe("tmux operations", function()
 			assert.is_false(found_last_used)
 		end)
 
+		it("sends pre_keys before paste-buffer", function()
+			local batch_cmds
+			mocks.client.execute = function(batch, _)
+				batch_cmds = batch
+				return "ok"
+			end
+
+			local targets = { { id = "%1", kind = "pane", target = "test" } }
+			local st = { instances = {}, last_used_target_id = nil }
+
+			mocks.operation.send("text", targets, { pre_keys = { "i" } }, st)
+
+			local pre_keys_idx, paste_idx
+			for i, cmd in ipairs(batch_cmds) do
+				if cmd[1] == "send-keys" and vim.deep_equal(cmd, { "send-keys", "-t", "%1", "i" }) then
+					pre_keys_idx = i
+				elseif cmd[1] == "paste-buffer" then
+					paste_idx = i
+				end
+			end
+
+			assert.is_not_nil(pre_keys_idx)
+			assert.is_not_nil(paste_idx)
+			assert.is_true(pre_keys_idx < paste_idx)
+		end)
+
+		it("sends post_keys after paste-buffer", function()
+			local batch_cmds
+			mocks.client.execute = function(batch, _)
+				batch_cmds = batch
+				return "ok"
+			end
+
+			local targets = { { id = "%1", kind = "pane", target = "test" } }
+			local st = { instances = {}, last_used_target_id = nil }
+
+			mocks.operation.send("text", targets, { post_keys = { "Escape" } }, st)
+
+			local paste_idx, post_keys_idx
+			for i, cmd in ipairs(batch_cmds) do
+				if cmd[1] == "paste-buffer" then
+					paste_idx = i
+				elseif cmd[1] == "send-keys" and vim.deep_equal(cmd, { "send-keys", "-t", "%1", "Escape" }) then
+					post_keys_idx = i
+				end
+			end
+
+			assert.is_not_nil(paste_idx)
+			assert.is_not_nil(post_keys_idx)
+			assert.is_true(post_keys_idx > paste_idx)
+		end)
+
+		it("sends pre_keys, paste, post_keys in correct order", function()
+			local batch_cmds
+			mocks.client.execute = function(batch, _)
+				batch_cmds = batch
+				return "ok"
+			end
+
+			local targets = { { id = "%1", kind = "pane", target = "test" } }
+			local st = { instances = {}, last_used_target_id = nil }
+
+			mocks.operation.send("text", targets, {
+				pre_keys = { "i" },
+				post_keys = { "Escape" },
+			}, st)
+
+			local pre_idx, paste_idx, post_idx
+			for i, cmd in ipairs(batch_cmds) do
+				if cmd[1] == "send-keys" and vim.tbl_contains(cmd, "i") then
+					pre_idx = i
+				elseif cmd[1] == "paste-buffer" then
+					paste_idx = i
+				elseif cmd[1] == "send-keys" and vim.tbl_contains(cmd, "Escape") then
+					post_idx = i
+				end
+			end
+
+			assert.is_not_nil(pre_idx)
+			assert.is_not_nil(paste_idx)
+			assert.is_not_nil(post_idx)
+			assert.is_true(pre_idx < paste_idx)
+			assert.is_true(paste_idx < post_idx)
+		end)
+
+		it("sends pre_keys/post_keys for each target in multi-target send", function()
+			local batch_cmds
+			mocks.client.execute = function(batch, _)
+				batch_cmds = batch
+				return "ok"
+			end
+
+			local targets = {
+				{ id = "%1", kind = "pane", target = "t1" },
+				{ id = "%2", kind = "pane", target = "t2" },
+			}
+			local st = { instances = {}, last_used_target_id = nil }
+
+			mocks.operation.send("text", targets, {
+				pre_keys = { "i" },
+				post_keys = { "Escape" },
+			}, st)
+
+			local pre_count = 0
+			local paste_count = 0
+			local post_count = 0
+
+			for _, cmd in ipairs(batch_cmds) do
+				if cmd[1] == "send-keys" and vim.tbl_contains(cmd, "i") then
+					pre_count = pre_count + 1
+				elseif cmd[1] == "paste-buffer" then
+					paste_count = paste_count + 1
+				elseif cmd[1] == "send-keys" and vim.tbl_contains(cmd, "Escape") then
+					post_count = post_count + 1
+				end
+			end
+
+			assert.are.equal(2, pre_count)
+			assert.are.equal(2, paste_count)
+			assert.are.equal(2, post_count)
+		end)
+
 		it("respects submit option", function()
 			local executed_batches = {}
 			mocks.client.execute = function(batch, _)
