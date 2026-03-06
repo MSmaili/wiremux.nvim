@@ -103,4 +103,16 @@ function M.resize_pane_zoom(pane_id)
 	return cmd
 end
 
+---@param direction "horizontal"|"vertical"
+---@param size string
+---@param pane_id? string
+---@return string[]
+function M.resize_pane(direction, size, pane_id)
+	local cmd = { "resize-pane", direction == "horizontal" and "-x" or "-y", size }
+	if pane_id then
+		vim.list_extend(cmd, { "-t", pane_id })
+	end
+	return cmd
+end
+
 return M

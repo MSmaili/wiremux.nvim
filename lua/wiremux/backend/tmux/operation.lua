@@ -151,10 +151,15 @@ function M.create(target_name, def, st)
 		table.insert(cmds, action.new_window(window_name, not use_shell and cmd or nil))
 		table.insert(cmds, query.window_id())
 	else
+		local split = def.split or "horizontal"
 		table.insert(
 			cmds,
-			action.split_pane(def.split or "horizontal", st.origin_pane_id, not use_shell and cmd or nil)
+			action.split_pane(split, st.origin_pane_id, not use_shell and cmd or nil)
 		)
+		local size = def.size
+		if size then
+			table.insert(cmds, action.resize_pane(split, def.size))
+		end
 		table.insert(cmds, query.pane_id())
 	end
 
