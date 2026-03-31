@@ -244,6 +244,30 @@ require("wiremux").setup({
 })
 ```
 
+### Interactive input
+
+The `{input}` placeholder prompts the user via `vim.ui.input()` before sending. Use it when part of the text needs to come from the user at send time.
+
+| Syntax                    | Prompt label   | Default value |
+| ------------------------- | -------------- | ------------- |
+| `{input}`                 | "Input"        | —             |
+| `{input:Search query}`    | "Search query" | —             |
+| `{input:Query:foo bar}`   | "Query"        | `foo bar`     |
+| `{input:URL:http://example.com}` | "URL" | `http://example.com` |
+
+```lua
+-- Basic usage
+require("wiremux").send("question:\n{input:Question}\n\ncontext:\n{this}")
+
+-- Single input with a default value
+require("wiremux").send("grep -r '{input:Search query:TODO}' {file}")
+
+-- Multiple distinct inputs in one send
+require("wiremux").send("git log --author='{input:Author}' --grep='{input:Grep pattern}'")
+```
+
+All sync placeholders (`{file}`, `{selection}`, etc.) resolve first, then each `{input}` prompts in order. Cancelling any prompt aborts the entire send. Text entered by the user is sent as-is — placeholders typed into the prompt are **not** expanded.
+
 ## Advanced Configuration
 
 ### Target Resolution Options

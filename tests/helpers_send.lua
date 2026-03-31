@@ -11,6 +11,7 @@ local MODULES = {
 	"wiremux.picker",
 	"wiremux.utils.notify",
 	"wiremux.context",
+	"wiremux.context.input",
 }
 
 function M.setup()
@@ -39,6 +40,23 @@ function M.setup()
 				return text
 			end,
 		},
+		input = {
+			find = function()
+				return {}
+			end,
+			has_inputs = function()
+				return false
+			end,
+			replace = function(text)
+				return text
+			end,
+			resolve = function(keys, on_done)
+				on_done({})
+			end,
+			parse = function(key)
+				return "Input", nil
+			end,
+		},
 	}
 
 	helpers.register({
@@ -53,6 +71,7 @@ function M.setup()
 		["wiremux.picker"] = mocks.picker,
 		["wiremux.utils.notify"] = mocks.notify,
 		["wiremux.context"] = mocks.context,
+		["wiremux.context.input"] = mocks.input,
 	})
 
 	mocks.send = require("wiremux.action.send")

@@ -54,6 +54,7 @@ function M.expand(text)
 	local cache = {}
 	return (
 		text:gsub("{([%w_]+)}", function(var)
+			if var == "input" then return nil end
 			if cache[var] == nil then
 				cache[var] = M.get(var)
 			end

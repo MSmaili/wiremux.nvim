@@ -97,11 +97,13 @@ end
 ---@param opts wiremux.config.ActionConfig
 local function send_single_item(item, opts)
 	local context = require("wiremux.context")
+	local input = require("wiremux.context.input")
 	local config = require("wiremux.config")
 
-	local ok, expanded = pcall(context.expand, item.value)
+	-- Expand sync placeholders
+	local ok, text = pcall(context.expand, item.value)
 	if not ok then
-		require("wiremux.utils.notify").error(expanded)
+		require("wiremux.utils.notify").error(text)
 		return
 	end
 
@@ -110,7 +112,20 @@ local function send_single_item(item, opts)
 		submit = opts.submit or config.opts.actions.send.submit
 	end
 
-	do_send(expanded, opts, submit, item.title)
+	-- Handle async {input} placeholders
+	local keys = input.find(text)
+	if #keys == 0 then
+		do_send(text, opts, submit, item.title)
+		return
+	end
+
+	input.resolve(keys, function(values)
+		if not values then
+			return
+		end
+		local resolved = input.replace(text, values)
+		do_send(resolved, opts, submit, item.title)
+	end)
 end
 
 ---Send from send library (picker)

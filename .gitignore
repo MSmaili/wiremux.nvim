@@ -6,3 +6,5 @@
 /doc/tags
 foo.*
 tt.*
+tmp_*
+.tmp_*
