@@ -335,7 +335,7 @@ describe("tmux operations", function()
 			local targets = { { id = "%1", kind = "pane", target = "test" } }
 			local st = { instances = {}, last_used_target_id = nil }
 
-			mocks.operation.send("text", targets, { submit = true }, st)
+			mocks.operation.send("text", targets, { post_keys = { "Enter" } }, st)
 			assert.are.equal(1, #executed_batches)
 			assert.is_function(deferred_submit)
 
@@ -345,7 +345,7 @@ describe("tmux operations", function()
 
 			executed_batches = {}
 			deferred_submit = nil
-			mocks.operation.send("text", targets, { submit = false }, st)
+			mocks.operation.send("text", targets, {}, st)
 			assert.are.equal(1, #executed_batches)
 			assert.is_nil(deferred_submit)
 

@@ -62,8 +62,19 @@ describe("send single item", function()
 
 		-- Test visible returns true
 		mocks.send.send({
-			{ value = "shown", visible = function() fn_called = true return true end },
-			{ value = "hidden", visible = function() return false end },
+			{
+				value = "shown",
+				visible = function()
+					fn_called = true
+					return true
+				end,
+			},
+			{
+				value = "hidden",
+				visible = function()
+					return false
+				end,
+			},
 		})
 
 		assert.is_true(fn_called)
@@ -89,7 +100,8 @@ describe("send single item", function()
 			submit = true,
 		})
 
-		assert.is_true(send_opts.submit)
+		assert.is_nil(send_opts.submit)
+		assert.are.same({ "Enter" }, send_opts.post_keys)
 	end)
 
 	it("falls back to config submit option", function()
@@ -108,7 +120,8 @@ describe("send single item", function()
 		mocks.config.opts.actions.send.submit = true
 		mocks.send.send({ value = "npm test" })
 
-		assert.is_true(send_opts.submit)
+		assert.is_nil(send_opts.submit)
+		assert.are.same({ "Enter" }, send_opts.post_keys)
 	end)
 end)
 

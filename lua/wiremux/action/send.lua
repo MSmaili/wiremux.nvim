@@ -52,10 +52,19 @@ local function build_picker_items(items)
 	return picker_items
 end
 
+---Append "Enter" to post_keys when submit is enabled
+---@param post_keys? string|string[]
+---@return string[]
+local function append_submit(post_keys)
+	local keys = type(post_keys) == "table" and { unpack(post_keys) } or (post_keys and { post_keys } or {})
+	table.insert(keys, "Enter")
+	return keys
+end
+
 ---Execute the send action with expanded text
 ---@param expanded string The text with placeholders expanded
 ---@param opts wiremux.config.ActionConfig
----@param send_opts { submit: boolean, title?: string, pre_keys?: string|string[], post_keys?: string|string[] }
+---@param send_opts { title?: string, pre_keys?: string|string[], post_keys?: string|string[] }
 local function do_send(expanded, opts, send_opts)
 	local config = require("wiremux.config")
 	local action = require("wiremux.core.action")
@@ -115,8 +124,11 @@ local function send_single_item(item, opts)
 	local pre_keys = item.pre_keys or opts.pre_keys
 	local post_keys = item.post_keys or opts.post_keys
 
+	if submit then
+		post_keys = append_submit(post_keys)
+	end
+
 	do_send(expanded, opts, {
-		submit = submit,
 		title = item.title,
 		pre_keys = pre_keys,
 		post_keys = post_keys,
@@ -167,8 +179,11 @@ local function send_from_library(items, opts)
 		local pre_keys = item.pre_keys or opts.pre_keys
 		local post_keys = item.post_keys or opts.post_keys
 
+		if submit then
+			post_keys = append_submit(post_keys)
+		end
+
 		do_send(expanded[item] or item.value, opts, {
-			submit = submit,
 			title = item.title,
 			pre_keys = pre_keys,
 			post_keys = post_keys,

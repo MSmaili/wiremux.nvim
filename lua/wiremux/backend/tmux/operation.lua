@@ -13,20 +13,13 @@ local function get_focus_cmds(target)
 	return action.select_window(target.window_id), action.select_pane(target.id)
 end
 
--- NOTE: submit may be deprecated in the future in favor of post_keys (see #17).
--- send_deferred unifies both paths so the eventual migration is a single-point change.
 ---@param targets wiremux.Instance[]
----@param opts { submit?: boolean, post_keys?: string|string[] }
+---@param opts { post_keys: string|string[] }
 local function _send_deferred(targets, opts)
 	vim.defer_fn(function()
 		local batch = {}
 		for _, t in ipairs(targets) do
-			if opts.post_keys then
-				table.insert(batch, action.send_keys(t.id, opts.post_keys))
-			end
-			if opts.submit then
-				table.insert(batch, action.send_keys(t.id, "Enter"))
-			end
+			table.insert(batch, action.send_keys(t.id, opts.post_keys))
 		end
 		client.execute(batch)
 	end, 300)
@@ -34,7 +27,7 @@ end
 
 ---@param text string
 ---@param targets wiremux.Instance[]
----@param opts? { focus?: boolean, submit?: boolean, pre_keys?: string|string[], post_keys?: string|string[] }
+---@param opts? { focus?: boolean, pre_keys?: string|string[], post_keys?: string|string[] }
 ---@param st wiremux.State
 function M.send(text, targets, opts, st)
 	opts = opts or {}
@@ -69,7 +62,7 @@ function M.send(text, targets, opts, st)
 		return
 	end
 
-	if opts.post_keys or opts.submit then
+	if opts.post_keys then
 		_send_deferred(targets, opts)
 	end
 
