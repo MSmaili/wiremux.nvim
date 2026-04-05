@@ -23,18 +23,42 @@ local M = {}
 ---@field instances? wiremux.config.InstanceConfig
 ---@field targets? wiremux.config.TargetConfig
 
+---@class wiremux.config.ComposeUIConfig
+---@field width? number Width as fraction of screen (default: 0.6)
+---@field height? number Height as fraction of screen (default: 0.4)
+---@field title? string Window title (default: " Compose Message ")
+---@field border? string|string[] Border style (default: "rounded")
+---@field style? string Window style (default: "minimal")
+---@field close_behavior? "ask"|"hide"|"discard" Behavior when close action is triggered (default: "ask")
+---@field on_new_payload? "ask"|"keep"|"replace" Behavior when compose opens with a new payload while an unsent draft exists (default: "ask")
+---@field wo? table<string, any> Window options (default: { wrap = true, number = false, relativenumber = false })
+---@field keymaps? wiremux.config.ComposeKeymaps Custom keymaps
+
+---@class wiremux.config.ComposeKeymap
+---@field [1] string Key
+---@field mode? string|string[] Mode(s) (default: "n")
+---@field desc? string Description
+
+---@class wiremux.config.ComposeKeymaps
+---@field send? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
+---@field close? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
+---@field discard? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
+---@field files? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
+
 ---@class wiremux.config.UserOptions
 ---@field log_level? wiremux.config.LogLevel
 ---@field targets? { definitions?: table<string, wiremux.target.definition> }
 ---@field actions? { send?: wiremux.config.ActionConfig, focus?: wiremux.config.ActionConfig, close?: wiremux.config.ActionConfig }
 ---@field picker? wiremux.config.PickerConfig
 ---@field context? { resolvers?: table<string, fun(): string> }
+---@field ui? { compose?: wiremux.config.ComposeUIConfig }
 
 -- User-facing config (all fields optional)
 ---@class wiremux.config.ActionConfig
 ---@field behavior? wiremux.action.Behavior
 ---@field focus? boolean
 ---@field submit? boolean
+---@field compose? boolean Open compose buffer before sending
 ---@field filter? wiremux.config.FilterConfig
 ---@field target? string Target definition name. Sends directly to matching instance, auto-creates if none exist.
 ---@field pre_keys? string|string[] Keystrokes to send before action (e.g. {"C-c"}, {"i"})
@@ -59,12 +83,41 @@ local defaults = {
 	actions = {
 		close = { behavior = "pick" },
 		create = { behavior = "pick", focus = true },
-		send = { behavior = "pick", focus = true },
+		send = { behavior = "pick", focus = true, compose = false },
 		focus = { behavior = "last", focus = true },
 		toggle = { behavior = "last", focus = false },
 	},
 	context = {
 		resolvers = {},
+	},
+	ui = {
+		compose = {
+			width = 0.6,
+			height = 0.4,
+			title = " Compose Message ",
+			border = "rounded",
+			style = "minimal",
+			close_behavior = "ask",
+			on_new_payload = "ask",
+			wo = {
+				wrap = true,
+				number = false,
+				relativenumber = false,
+			},
+			keymaps = {
+				send = {
+					{ "<C-s>", mode = { "i" }, desc = "Send to target" },
+					{ "<CR>", mode = { "n" }, desc = "Send to target" },
+				},
+				close = {
+					{ "q", mode = "n", desc = "Close draft" },
+					{ "<Esc>", mode = "n", desc = "Close draft" },
+				},
+				files = {
+					{ "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
+				},
+			},
+		},
 	},
 	picker = {
 		adapter = nil,
