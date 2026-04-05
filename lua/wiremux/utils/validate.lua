@@ -5,6 +5,8 @@ local valid = {
 	kinds = { pane = true, window = true },
 	splits = { horizontal = true, vertical = true },
 	log_levels = { off = true, error = true, warn = true, info = true, debug = true },
+	compose_close_behaviors = { ask = true, hide = true, discard = true },
+	compose_new_payload = { ask = true, keep = true, replace = true },
 }
 
 ---@param value any
@@ -183,6 +185,18 @@ function M.validate(opts)
 			context = "for action '" .. action .. "'",
 		}))
 	end
+
+	collect_error(validate_field(vim.tbl_get(opts, "ui", "compose", "close_behavior"), {
+		valid_set = valid.compose_close_behaviors,
+		name = "close_behavior",
+		context = "for ui.compose",
+	}))
+
+	collect_error(validate_field(vim.tbl_get(opts, "ui", "compose", "on_new_payload"), {
+		valid_set = valid.compose_new_payload,
+		name = "on_new_payload",
+		context = "for ui.compose",
+	}))
 
 	collect_error(validate_picker(opts.picker))
 

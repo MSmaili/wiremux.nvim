@@ -11,7 +11,7 @@ end
 ---@overload fun(text: wiremux.action.SendItem, opts?: wiremux.config.ActionConfig)
 ---@overload fun(text: wiremux.action.SendItem[], opts?: wiremux.config.ActionConfig)
 ---@param text string|wiremux.action.SendItem|wiremux.action.SendItem[] Text to send, single item, or array of items
----@param opts? wiremux.config.ActionConfig
+---@param opts? wiremux.config.ActionConfig Options (behavior, focus, submit, compose, etc.)
 function M.send(text, opts)
 	return require("wiremux.action.send").send(text, opts)
 end

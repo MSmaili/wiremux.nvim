@@ -42,4 +42,23 @@ function M.select(items, opts, on_choice)
 	})
 end
 
+---@param opts wiremux.picker.Opts
+---@param on_choice fun(path: string?)
+function M.files(opts, on_choice)
+	local fzf = require("fzf-lua")
+
+	fzf.files({
+		prompt = (opts.prompt or "Select file") .. "> ",
+		actions = {
+			["default"] = function(selected)
+				if not selected or not selected[1] then
+					on_choice(nil)
+					return
+				end
+				on_choice(require("fzf-lua").path.entry_to_file(selected[1]).path)
+			end,
+		},
+	})
+end
+
 return M
