@@ -23,11 +23,15 @@ function M.new_window(name, command)
 end
 
 ---@param direction "horizontal"|"vertical"
+---@param split_mode? "before"|"after"
 ---@param target_pane? string pane id to split from
 ---@param command? string command to run
 ---@return string[]
-function M.split_pane(direction, target_pane, command)
+function M.split_pane(direction, split_mode, target_pane, command)
 	local cmd = { "split-window", direction == "horizontal" and "-h" or "-v" }
+	if split_mode == "before" then
+		table.insert(cmd, "-b")
+	end
 	if target_pane then
 		vim.list_extend(cmd, { "-t", target_pane })
 	end

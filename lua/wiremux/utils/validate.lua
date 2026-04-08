@@ -4,6 +4,7 @@ local valid = {
 	behaviors = { last = true, pick = true, all = true },
 	kinds = { pane = true, window = true },
 	splits = { horizontal = true, vertical = true },
+	split_modes = { before = true, after = true },
 	log_levels = { off = true, error = true, warn = true, info = true, debug = true },
 }
 
@@ -172,6 +173,12 @@ function M.validate(opts)
 		collect_error(validate_field(def.split, {
 			valid_set = valid.splits,
 			name = "split",
+			context = "for target '" .. name .. "'",
+		}))
+
+		collect_error(validate_field(def.split_mode, {
+			valid_set = valid.split_modes,
+			name = "split_mode",
 			context = "for target '" .. name .. "'",
 		}))
 	end
