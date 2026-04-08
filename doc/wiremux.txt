@@ -308,6 +308,10 @@ kind                (string|table, default: "pane")
 split               (string, default: "horizontal")
                     For panes: "horizontal" or "vertical"
 
+*wiremux-config-definition-split_mode*
+split_mode          (string, default: "after")
+                    For panes: "before" or "after"
+
 *wiremux-config-definition-label*
 label               (string|function|nil)
                     Custom display name for the target.

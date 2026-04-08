@@ -123,14 +123,15 @@ require("wiremux").setup({
 <details>
 <summary><strong>Target Definition Fields Reference</strong></summary>
 
-| Field   | Type                            | Default        | Description                                                          |
-| ------- | ------------------------------- | -------------- | -------------------------------------------------------------------- |
-| `cmd`   | `string?`                       | -              | Command to run when creating the pane/window                         |
-| `kind`  | `"pane"` \| `"window"` \| table | `"pane"`       | Target type. Use table like `{"pane","window"}` to prompt at runtime |
-| `split` | `"horizontal"` \| `"vertical"`  | `"horizontal"` | Split direction (panes only)                                         |
-| `shell` | `boolean`                       | `true`         | `true`: types `cmd` into a shell. `false`: runs `cmd` directly       |
-| `label` | `string` \| `function?`         | target name    | Display name in picker                                               |
-| `title` | `string?`                       | label or name  | Tmux window name (windows only)                                      |
+| Field        | Type                            | Default        | Description                                                          |
+| ------------ | ------------------------------- | -------------- | -------------------------------------------------------------------- |
+| `cmd`        | `string?`                       | -              | Command to run when creating the pane/window                         |
+| `kind`       | `"pane"` \| `"window"` \| table | `"pane"`       | Target type. Use table like `{"pane","window"}` to prompt at runtime |
+| `split`      | `"horizontal"` \| `"vertical"`  | `"horizontal"` | Split direction (panes only)                                         |
+| `split_mode` | `"before"` \| `"after"`         | `"after"`      | Split placement relative to source pane (panes only)                 |
+| `shell`      | `boolean`                       | `true`         | `true`: types `cmd` into a shell. `false`: runs `cmd` directly       |
+| `label`      | `string` \| `function?`         | target name    | Display name in picker                                               |
+| `title`      | `string?`                       | label or name  | Tmux window name (windows only)                                      |
 
 </details>
 
