@@ -11,6 +11,7 @@ local MODULES = {
 	"wiremux.picker",
 	"wiremux.utils.notify",
 	"wiremux.context",
+	"wiremux.ui.compose",
 }
 
 function M.setup()
@@ -30,14 +31,21 @@ function M.setup()
 				focus = false,
 				behavior = "pick",
 				submit = false,
+				compose = false,
 			},
 		}),
 		picker = helpers.mock_picker(),
 		notify = helpers.mock_notify(),
 		context = {
+			snapshot = function()
+				return {}
+			end,
 			expand = function(text)
 				return text
 			end,
+		},
+		compose = {
+			open = function() end,
 		},
 	}
 
@@ -53,6 +61,7 @@ function M.setup()
 		["wiremux.picker"] = mocks.picker,
 		["wiremux.utils.notify"] = mocks.notify,
 		["wiremux.context"] = mocks.context,
+		["wiremux.ui.compose"] = mocks.compose,
 	})
 
 	mocks.send = require("wiremux.action.send")

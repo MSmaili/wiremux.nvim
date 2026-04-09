@@ -123,6 +123,58 @@ describe("send single item", function()
 		assert.is_nil(send_opts.submit)
 		assert.are.same({ "Enter" }, send_opts.post_keys)
 	end)
+
+	it("opens compose buffer when item.compose is true", function()
+		local received_text
+		local compose_opened = false
+
+		mocks.compose.open = function(text, on_confirm)
+			compose_opened = true
+			assert.are.equal("draft", text)
+			on_confirm("edited draft")
+		end
+
+		mocks.backend.send = function(text)
+			received_text = text
+		end
+
+		mocks.action.run = function(opts, callbacks)
+			callbacks.on_targets({
+				{ id = "%1", kind = "pane", target = "test" },
+			}, {})
+		end
+
+		mocks.send.send({ value = "draft", compose = true })
+
+		assert.is_true(compose_opened)
+		assert.are.equal("edited draft", received_text)
+	end)
+
+	it("uses opts.compose when item has no compose field", function()
+		local received_text
+		local compose_opened = false
+
+		mocks.compose.open = function(text, on_confirm)
+			compose_opened = true
+			assert.are.equal("draft", text)
+			on_confirm("edited from opts")
+		end
+
+		mocks.backend.send = function(text)
+			received_text = text
+		end
+
+		mocks.action.run = function(opts, callbacks)
+			callbacks.on_targets({
+				{ id = "%1", kind = "pane", target = "test" },
+			}, {})
+		end
+
+		mocks.send.send({ value = "draft" }, { compose = true })
+
+		assert.is_true(compose_opened)
+		assert.are.equal("edited from opts", received_text)
+	end)
 end)
 
 describe("send list of items", function()
