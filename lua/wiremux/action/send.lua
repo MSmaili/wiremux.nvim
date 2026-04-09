@@ -130,13 +130,14 @@ local function resolve_send_backend_opts(item, opts, defaults)
 	local submit = first_non_nil(item.submit, opts.submit, defaults.submit)
 	local pre_keys = first_non_nil(item.pre_keys, opts.pre_keys, defaults.pre_keys)
 	local post_keys = first_non_nil(item.post_keys, opts.post_keys, defaults.post_keys)
+	local focus = first_non_nil(opts.focus, defaults.focus)
 
 	if submit then
 		post_keys = append_submit(post_keys)
 	end
 
 	return {
-		focus = first_non_nil(opts.focus, defaults.focus),
+		focus = focus,
 		pre_keys = pre_keys,
 		post_keys = post_keys,
 	}
@@ -166,17 +167,19 @@ local function resolve_and_send(item, opts, frozen_context)
 
 	local defaults = require("wiremux.config").opts.actions.send or {}
 	local backend_opts = resolve_send_backend_opts(item, opts, defaults)
+	local is_compose = first_non_nil(item.compose, opts.compose, defaults.compose)
+
 	local resolved = {
 		focus = backend_opts.focus,
 		pre_keys = backend_opts.pre_keys,
 		post_keys = backend_opts.post_keys,
-		behavior = opts.behavior or defaults.behavior or "pick",
-		mode = opts.mode or "auto",
+		behavior = first_non_nil(opts.behavior, defaults.behavior, "pick"),
+		mode = first_non_nil(opts.mode, "auto"),
 		filter = opts.filter,
 		target = opts.target,
 	}
 
-	if first_non_nil(item.compose, opts.compose, defaults.compose) then
+	if is_compose then
 		require("wiremux.ui.compose").open(item.value, function(edited_text)
 			local expanded = expand_with_context(edited_text, frozen_context)
 			if expanded then

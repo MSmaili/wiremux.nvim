@@ -7,6 +7,21 @@ local notify = require("wiremux.utils.notify")
 
 local BUFFER_NAME = "wiremux"
 
+---@param opts? { post_keys?: string|string[] }
+---@return boolean
+local function has_submit_key(opts)
+	if not opts or not opts.post_keys then
+		return false
+	end
+	local keys = type(opts.post_keys) == "table" and opts.post_keys or { opts.post_keys }
+	for _, k in ipairs(keys) do
+		if k == "C-m" or k == "Enter" then
+			return true
+		end
+	end
+	return false
+end
+
 ---@param target wiremux.Instance
 ---@return string[], string[]
 local function get_focus_cmds(target)
@@ -32,6 +47,9 @@ end
 function M.send(text, targets, opts, st)
 	opts = opts or {}
 	local clean_text = text:gsub("\t", "  "):gsub("\n$", "")
+	if has_submit_key(opts) then
+		clean_text = clean_text .. "\r"
+	end
 
 	local batch = { action.load_buffer(BUFFER_NAME) }
 
@@ -157,10 +175,7 @@ function M.create(target_name, def, st)
 	else
 		local split = def.split or "horizontal"
 		local split_mode = def.split_mode or "after"
-		table.insert(
-			cmds,
-			action.split_pane(split, split_mode, st.origin_pane_id, not use_shell and cmd or nil)
-		)
+		table.insert(cmds, action.split_pane(split, split_mode, st.origin_pane_id, not use_shell and cmd or nil))
 		local size = def.size
 		if size then
 			table.insert(cmds, action.resize_pane(split, def.size))
