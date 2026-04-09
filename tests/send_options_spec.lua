@@ -133,6 +133,25 @@ describe("send with options", function()
 		assert.are.equal("last", received_behavior)
 		assert.are.equal(my_filter, received_filter)
 	end)
+
+	it("respects focus=false even when send focus defaults to true", function()
+		local send_opts
+		mocks.config.opts.actions.send.focus = true
+
+		mocks.backend.send = function(text, targets, opts, state)
+			send_opts = opts
+		end
+
+		mocks.action.run = function(opts, callbacks)
+			if callbacks.on_targets then
+				callbacks.on_targets({ { id = "%1", kind = "pane", target = "test" } }, {})
+			end
+		end
+
+		mocks.send.send("test", { focus = false })
+
+		assert.is_false(send_opts.focus)
+	end)
 end)
 
 describe("send with pre_keys/post_keys", function()
