@@ -74,7 +74,10 @@ local function do_send(expanded, opts, send_opts)
 		return
 	end
 
-	local focus = opts.focus or config.opts.actions.send.focus
+	local focus = opts.focus
+	if focus == nil then
+		focus = config.opts.actions.send.focus
+	end
 	local backend_opts = vim.tbl_extend("force", send_opts, { focus = focus })
 
 	action.run({
