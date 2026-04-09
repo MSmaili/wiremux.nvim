@@ -18,6 +18,24 @@ describe("action.send_keys", function()
 	end)
 end)
 
+describe("action.split_pane", function()
+	local action = require("wiremux.backend.tmux.action")
+
+	it("adds -b when split_mode is before", function()
+		assert.are.same(
+			{ "split-window", "-h", "-b", "-t", "%1" },
+			action.split_pane("horizontal", "before", "%1")
+		)
+	end)
+
+	it("omits -b when split_mode is after", function()
+		assert.are.same(
+			{ "split-window", "-v", "-t", "%1" },
+			action.split_pane("vertical", "after", "%1")
+		)
+	end)
+end)
+
 describe("tmux operations", function()
 	local mocks
 
@@ -354,6 +372,21 @@ describe("tmux operations", function()
 	end)
 
 	describe("create", function()
+		it("passes split_mode to pane creation", function()
+			local captured_cmds
+			mocks.client.execute = function(cmds)
+				captured_cmds = cmds
+				return "%5"
+			end
+
+			local st = { instances = {}, origin_pane_id = "%0" }
+			local def = { kind = "pane", split = "vertical", split_mode = "before" }
+
+			mocks.operation.create("myapp", def, st)
+
+			assert.are.same({ "split-window", "-v", "-b", "-t", "%0" }, captured_cmds[1])
+		end)
+
 		it("uses def.title for window name when provided", function()
 			local captured_cmds
 			mocks.client.execute = function(cmds)

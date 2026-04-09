@@ -45,8 +45,11 @@ function M.setup()
 				end
 				return cmd
 			end,
-			split_pane = function(direction, target_pane, command)
+			split_pane = function(direction, split_mode, target_pane, command)
 				local cmd = { "split-window", direction == "horizontal" and "-h" or "-v" }
+				if split_mode == "before" then
+					table.insert(cmd, "-b")
+				end
 				if target_pane then
 					vim.list_extend(cmd, { "-t", target_pane })
 				end
