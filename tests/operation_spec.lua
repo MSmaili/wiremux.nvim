@@ -22,17 +22,11 @@ describe("action.split_pane", function()
 	local action = require("wiremux.backend.tmux.action")
 
 	it("adds -b when split_mode is before", function()
-		assert.are.same(
-			{ "split-window", "-h", "-b", "-t", "%1" },
-			action.split_pane("horizontal", "before", "%1")
-		)
+		assert.are.same({ "split-window", "-h", "-b", "-t", "%1" }, action.split_pane("horizontal", "before", "%1"))
 	end)
 
 	it("omits -b when split_mode is after", function()
-		assert.are.same(
-			{ "split-window", "-v", "-t", "%1" },
-			action.split_pane("vertical", "after", "%1")
-		)
+		assert.are.same({ "split-window", "-v", "-t", "%1" }, action.split_pane("vertical", "after", "%1"))
 	end)
 end)
 
@@ -277,6 +271,41 @@ describe("tmux operations", function()
 			deferred_fn()
 			assert.are.equal(2, #executed_batches)
 			assert.is_true(vim.tbl_contains(executed_batches[2][1], "Escape"))
+
+			vim.defer_fn = original_defer_fn
+		end)
+
+		it("appends \\r when post_keys contain Enter or C-m", function()
+			local captured_stdin
+			mocks.client.execute = function(_, opts)
+				if opts and opts.stdin then
+					captured_stdin = opts.stdin
+				end
+				return "ok"
+			end
+
+			local targets = { { id = "%1", kind = "pane", target = "test" } }
+			local st = { instances = {}, last_used_target_id = nil }
+
+			local original_defer_fn = vim.defer_fn
+			vim.defer_fn = function(fn, _)
+				fn()
+			end
+
+			mocks.operation.send("hello", targets, { post_keys = { "Enter" } }, st)
+			assert.are.equal("hello\r", captured_stdin)
+
+			mocks.operation.send("hello", targets, { post_keys = { "C-m" } }, st)
+			assert.are.equal("hello\r", captured_stdin)
+
+			mocks.operation.send("hello", targets, { post_keys = "Enter" }, st)
+			assert.are.equal("hello\r", captured_stdin)
+
+			mocks.operation.send("hello", targets, { post_keys = { "Escape" } }, st)
+			assert.are.equal("hello", captured_stdin)
+
+			mocks.operation.send("hello", targets, {}, st)
+			assert.are.equal("hello", captured_stdin)
 
 			vim.defer_fn = original_defer_fn
 		end)
