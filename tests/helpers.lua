@@ -14,6 +14,7 @@ end
 
 function M.mock_backend(extra)
 	local mock = {
+		name = "mock",
 		state = {
 			get = function()
 				return { instances = {}, last_used_target_id = nil }

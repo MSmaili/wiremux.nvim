@@ -95,11 +95,16 @@ end
 ---@param opts wiremux.action.RunOpts
 ---@param callbacks wiremux.action.Callbacks
 function M.run(opts, callbacks)
-	local backend = require("wiremux.backend.tmux")
+	local backend = require("wiremux.backend").get()
+	local notify = require("wiremux.utils.notify")
+	if backend == nil then
+		notify.warn("No active backend")
+		return
+	end
+
 	local resolver = require("wiremux.core.resolver")
 	local config = require("wiremux.config")
 	local picker = require("wiremux.picker")
-	local notify = require("wiremux.utils.notify")
 
 	local state = backend.state.get()
 

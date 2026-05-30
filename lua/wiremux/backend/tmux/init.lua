@@ -1,5 +1,7 @@
 local M = {}
 
+M.name = "tmux"
+
 M.state = {
 	get = function()
 		return require("wiremux.backend.tmux.state").get()

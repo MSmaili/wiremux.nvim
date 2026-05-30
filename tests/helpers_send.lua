@@ -5,7 +5,6 @@ local M = {}
 local MODULES = {
 	"wiremux.action.send",
 	"wiremux.backend",
-	"wiremux.backend.tmux",
 	"wiremux.core.action",
 	"wiremux.config",
 	"wiremux.picker",
@@ -55,7 +54,6 @@ function M.setup()
 				return mocks.backend
 			end,
 		},
-		["wiremux.backend.tmux"] = mocks.backend,
 		["wiremux.core.action"] = mocks.action,
 		["wiremux.config"] = mocks.config,
 		["wiremux.picker"] = mocks.picker,

@@ -101,9 +101,4 @@ function M.query_async(cmds, callback)
 	end)
 end
 
----@return boolean
-function M.is_available()
-	return vim.env.TMUX ~= nil
-end
-
 return M

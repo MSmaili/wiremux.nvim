@@ -4,7 +4,7 @@ local M = {}
 
 local MODULES = {
 	"wiremux.core.action",
-	"wiremux.backend.tmux",
+	"wiremux.backend",
 	"wiremux.core.resolver",
 	"wiremux.config",
 	"wiremux.picker",
@@ -23,7 +23,11 @@ function M.setup()
 	}
 
 	helpers.register({
-		["wiremux.backend.tmux"] = mocks.backend,
+		["wiremux.backend"] = {
+			get = function()
+				return mocks.backend
+			end,
+		},
 		["wiremux.core.resolver"] = mocks.resolver,
 		["wiremux.config"] = mocks.config,
 		["wiremux.picker"] = mocks.picker,
