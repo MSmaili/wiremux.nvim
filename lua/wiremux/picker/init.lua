@@ -10,7 +10,7 @@
 local M = {}
 
 ---@type string[]
-M.ADAPTERS = { "fzf-lua" }
+M.ADAPTERS = { "fzf-lua", "snacks" }
 
 ---@type fun(items: any[], opts: wiremux.picker.Opts, on_choice: fun(item: any?))?
 local cached_select = nil

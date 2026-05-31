@@ -190,14 +190,16 @@ local function check_optional_dependencies()
 	vim.health.start("Optional Dependencies")
 
 	local opts = get_config()
+	local picker_cfg = opts and opts.picker or {}
+	local configured_adapter = type(picker_cfg) == "table" and picker_cfg.adapter or nil
 	local picker = require("wiremux.picker")
 
 	-- Show configured picker
-	if opts and opts.picker then
-		if type(opts.picker) == "function" then
-			vim.health.ok("Custom picker function configured")
-		elseif type(opts.picker) == "string" then
-			vim.health.info("Configured picker: " .. opts.picker)
+	if configured_adapter ~= nil then
+		if type(configured_adapter) == "function" then
+			vim.health.ok("Custom picker function configured for item selection")
+		elseif type(configured_adapter) == "string" then
+			vim.health.info("Configured picker adapter: " .. configured_adapter)
 		end
 	end
 
@@ -215,14 +217,14 @@ local function check_optional_dependencies()
 
 		-- Determine which picker will actually be used
 		local active_picker = "vim.ui.select (built-in)"
-		if opts and opts.picker then
-			if type(opts.picker) == "function" then
+		if configured_adapter ~= nil then
+			if type(configured_adapter) == "function" then
 				active_picker = "custom function"
-			elseif type(opts.picker) == "string" then
+			elseif type(configured_adapter) == "string" then
 				-- Check if configured picker is available
-				local ok, adapter = pcall(require, "wiremux.picker." .. opts.picker)
+				local ok, adapter = pcall(require, "wiremux.picker." .. configured_adapter)
 				if ok and adapter.available and adapter.available() then
-					active_picker = opts.picker
+					active_picker = configured_adapter
 				else
 					-- Will auto-detect from available adapters
 					active_picker = available_adapters[1] .. " (auto-detected)"

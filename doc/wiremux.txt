@@ -243,7 +243,7 @@ Complete example:
 >lua
   require("wiremux").setup({
     picker = {
-      adapter = "fzf-lua", -- "fzf-lua" | "vim.ui.select" | custom function
+      adapter = "fzf-lua", -- "fzf-lua" | "snacks" | custom function
       instances = {
         filter = function(inst, state)  -- optional, default: filter by origin
           return inst.origin == state.origin_pane_id
@@ -278,6 +278,11 @@ Complete example:
     },
   })
 <
+
+`picker.adapter` accepts either a named adapter like `"fzf-lua"` or `"snacks"`, or a custom
+function for item selection. Compose file insertion uses the adapter's
+`files()` picker when available, otherwise wiremux falls back to its built-in
+file list picker using the active selection picker.
 
 Top-level options ~
 

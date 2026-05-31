@@ -19,7 +19,7 @@ local M = {}
 ---@field sort? fun(a: string, b: string): boolean
 
 ---@class wiremux.config.PickerConfig
----@field adapter? string|fun(items: any[], opts: wiremux.picker.Opts, on_choice: fun(item: any?))
+---@field adapter? string|fun(items: any[], opts: wiremux.picker.Opts, on_choice: fun(item: any?)) Adapter name or custom select function. File picking still uses adapter `files()` when available, otherwise falls back to built-in file selection.
 ---@field instances? wiremux.config.InstanceConfig
 ---@field targets? wiremux.config.TargetConfig
 

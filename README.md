@@ -28,7 +28,7 @@ It works by creating "targets" (tmux panes/windows) and sending them text with s
 
 ## Installation
 
-Add wiremux to your plugin manager. The optional `fzf-lua` dependency gives you a nicer picker interface.
+Add wiremux to your plugin manager. Optional picker dependencies like `fzf-lua` or `snacks.nvim` give you a nicer picker interface.
 
 ### lazy.nvim (recommended)
 
@@ -36,7 +36,8 @@ Add wiremux to your plugin manager. The optional `fzf-lua` dependency gives you 
 {
   "MSmaili/wiremux.nvim",
   dependencies = {
-    "ibhagwan/fzf-lua", -- optional, for better picker UI
+    "ibhagwan/fzf-lua", -- optional
+    "folke/snacks.nvim", -- optional
   },
   opts = {},
 }
@@ -84,7 +85,7 @@ These are the full defaults from `config.lua`. You only need to override what yo
   },
 
   picker = {
-    adapter = nil,  -- "fzf-lua" | "vim.ui.select" | custom function
+    adapter = nil,  -- "fzf-lua" | "snacks" | custom function
     instances = {
       filter = function(inst, state)        -- default: filter by origin pane
         return inst.origin == state.origin_pane_id
@@ -100,6 +101,11 @@ These are the full defaults from `config.lua`. You only need to override what yo
   },
 }
 ```
+
+`picker.adapter` accepts either a named adapter like `"fzf-lua"` or `"snacks"`, or a custom
+function for item selection. Compose file insertion uses the adapter's
+`files()` picker when available, otherwise wiremux falls back to its built-in
+file list picker using the active selection picker.
 
 </details>
 
