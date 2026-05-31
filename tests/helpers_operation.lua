@@ -79,6 +79,9 @@ function M.setup()
 		update_last_used = function(batch, new_id)
 			table.insert(batch, mocks.action.set_pane_option(new_id, "@wiremux_last_used_at", tostring(1234567890)))
 		end,
+		adopt = function()
+			return true
+		end,
 		set_instance_metadata = function() end,
 	}
 

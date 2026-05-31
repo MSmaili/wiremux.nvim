@@ -509,4 +509,43 @@ describe("tmux operations", function()
 			assert.are.equal("myapp", new_window_cmd[3])
 		end)
 	end)
+
+	describe("adopt", function()
+		it("delegates metadata rewrite to state", function()
+			local received_target
+			local received_state
+			local received_target_name
+			mocks.state.adopt = function(target, st, target_name)
+				received_target = target
+				received_state = st
+				received_target_name = target_name
+				return true
+			end
+
+			local target = { id = "%1", kind = "pane", target = "test" }
+			local st = { origin_pane_id = "%0", instances = { target } }
+
+			local ok = mocks.operation.adopt(target, st, { target = "terminal" })
+
+			assert.are.equal(target, received_target)
+			assert.are.equal(st, received_state)
+			assert.are.equal("terminal", received_target_name)
+			assert.is_true(ok)
+		end)
+
+		it("notifies when metadata rewrite fails", function()
+			local errored = false
+			mocks.state.adopt = function()
+				return nil
+			end
+			mocks.notify.error = function(msg)
+				errored = true
+				assert.matches("Failed to adopt", msg)
+			end
+
+			mocks.operation.adopt({ id = "%1", kind = "pane", target = "test" }, { origin_pane_id = "%0" })
+
+			assert.is_true(errored)
+		end)
+	end)
 end)

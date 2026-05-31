@@ -229,4 +229,185 @@ describe("action", function()
 			assert.is_true(warned)
 		end)
 	end)
+
+	describe("adopt", function()
+		it("shows current-session wiremux targets only", function()
+			local adopted
+
+			mocks.backend.state.get = function()
+				return {
+					origin_pane_id = "%0",
+					session_id = "$1",
+					instances = {
+						{ session_id = "$1", id = "%0", target = "current", kind = "pane" },
+						{ session_id = "$1", id = "%1", target = "server", kind = "pane", running_command = "zsh" },
+						{ session_id = "$2", id = "%2", target = "other", kind = "pane" },
+					},
+				}
+			end
+
+			mocks.backend.adopt = function(target)
+				adopted = target
+				return true
+			end
+
+			mocks.picker.select = function(items, opts, callback)
+				assert.are.equal("Adopt target", opts.prompt)
+				assert.are.equal(1, #items)
+				assert.are.equal("%1", items[1].id)
+				assert.are.equal("server 1 [zsh]", opts.format_item(items[1]))
+				callback(items[1])
+			end
+
+			require("wiremux.action.adopt").adopt()
+
+			assert.are.equal("%1", adopted.id)
+		end)
+
+		it("applies an optional local instance filter", function()
+			local adopted
+
+			mocks.backend.state.get = function()
+				return {
+					origin_pane_id = "%0",
+					session_id = "$1",
+					instances = {
+						{ session_id = "$1", id = "%1", target = "server", kind = "pane" },
+						{ session_id = "$1", id = "%2", target = "claude", kind = "pane" },
+					},
+				}
+			end
+
+			mocks.backend.adopt = function(target)
+				adopted = target
+				return true
+			end
+
+			mocks.picker.select = function(items, _, callback)
+				assert.are.equal(1, #items)
+				assert.are.equal("%2", items[1].id)
+				callback(items[1])
+			end
+
+			require("wiremux.action.adopt").adopt({
+				filter = {
+					instances = function(inst)
+						return inst.target == "claude"
+					end,
+				},
+			})
+
+			assert.are.equal("%2", adopted.id)
+		end)
+
+		it("lets a local filter choose cross-session and unmanaged panes", function()
+			local adopted
+			local adopt_opts
+
+			mocks.backend.state.get = function()
+				return {
+					origin_pane_id = "%0",
+					session_id = "$1",
+					instances = {
+						{ session_id = "$1", id = "%1", target = "server", kind = "pane" },
+					},
+					panes = {
+						{ session_id = "$1", id = "%0", target = "current", kind = "pane" },
+						{ session_id = "$1", id = "%1", target = "server", kind = "pane" },
+						{ session_id = "$2", id = "%2", target = "remote", kind = "pane" },
+						{ session_id = "$2", id = "%3", kind = "pane", running_command = "zsh" },
+					},
+				}
+			end
+
+			mocks.backend.adopt = function(target, _, opts)
+				adopted = target
+				adopt_opts = opts
+				return true
+			end
+
+			mocks.picker.select = function(items, opts, callback)
+				assert.are.equal(3, #items)
+				assert.are.equal("%1", items[1].id)
+				assert.are.equal("%2", items[2].id)
+				assert.are.equal("%3", items[3].id)
+				assert.are.equal("unmanaged 3 [zsh]", opts.format_item(items[3]))
+				callback(items[3])
+			end
+
+			require("wiremux.action.adopt").adopt({
+				target = "terminal",
+				filter = {
+					instances = function()
+						return true
+					end,
+				},
+			})
+
+			assert.are.equal("%3", adopted.id)
+			assert.are.equal("terminal", adopt_opts.target)
+		end)
+
+		it("requires a target when adopting unmanaged panes", function()
+			local warned = false
+
+			mocks.backend.state.get = function()
+				return {
+					origin_pane_id = "%0",
+					session_id = "$1",
+					instances = {},
+					panes = {
+						{ session_id = "$1", id = "%1", kind = "pane" },
+					},
+				}
+			end
+
+			mocks.backend.adopt = function()
+				error("should not adopt unmanaged pane without target")
+			end
+
+			mocks.notify.warn = function(msg)
+				warned = true
+				assert.matches("requires opts.target", msg)
+			end
+
+			mocks.picker.select = function(items, _, callback)
+				callback(items[1])
+			end
+
+			require("wiremux.action.adopt").adopt({
+				filter = {
+					instances = function()
+						return true
+					end,
+				},
+			})
+
+			assert.is_true(warned)
+		end)
+
+		it("warns when no current-session targets can be adopted", function()
+			local warned = false
+
+			mocks.backend.state.get = function()
+				return {
+					origin_pane_id = "%0",
+					session_id = "$1",
+					instances = {
+						{ session_id = "$1", id = "%0", target = "current", kind = "pane" },
+						{ session_id = "$2", id = "%2", target = "other", kind = "pane" },
+					},
+				}
+			end
+
+			mocks.notify.warn = function(msg)
+				warned = true
+				assert.matches("No adoptable", msg)
+			end
+
+			require("wiremux.action.adopt").adopt()
+
+			assert.is_true(warned)
+		end)
+	end)
 end)

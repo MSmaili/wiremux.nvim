@@ -44,6 +44,12 @@ local subcommand_tbl = {
 		end,
 		desc = "Close tmux target pane(s)/window(s)",
 	},
+	adopt = {
+		impl = function(_, _)
+			require("wiremux.action.adopt").adopt()
+		end,
+		desc = "Adopt an existing wiremux target in this tmux session",
+	},
 	toggle = {
 		impl = function(_, _)
 			require("wiremux.action.toggle").toggle()

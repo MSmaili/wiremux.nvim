@@ -407,6 +407,36 @@ These are the main ways to interact with wiremux targets. You can use them as **
 | `toggle()`      | `:Wiremux toggle`      | Shows/hides the last used target          | Quick hide/show your AI or terminal                        |
 | `focus()`       | `:Wiremux focus`       | Switches focus to a target                | Jump to your terminal or AI pane                           |
 | `close()`       | `:Wiremux close`       | Closes a target                           | Shut down an AI or terminal you're done with               |
+| `adopt()`       | `:Wiremux adopt`       | Re-owns an existing wiremux target        | Recover a target whose original Neovim pane was closed     |
+
+### Adopt Existing Panes
+
+Use `:Wiremux adopt` or `require("wiremux").adopt()` to re-own an existing wiremux target from the current Neovim pane. By default, the picker shows wiremux-managed panes in the current tmux session. The current pane is always excluded.
+
+For Lua calls, `filter.instances` replaces the default adopt filter for that call. This lets you include cross-session panes or unmanaged panes from the queried tmux pane list:
+
+```lua
+require("wiremux").adopt({
+  filter = {
+    instances = function()
+      return true -- all queried panes except the current pane
+    end,
+  },
+})
+```
+
+If your filter can select unmanaged panes, pass `target` so wiremux can assign target metadata when adopting:
+
+```lua
+require("wiremux").adopt({
+  target = "terminal",
+  filter = {
+    instances = function(inst)
+      return inst.running_command == "zsh"
+    end,
+  },
+})
+```
 
 **Tip:** Lua functions give you more power (placeholders, options, dynamic content), while commands are great for quick command-line use or when mapping from Vimscript.
 

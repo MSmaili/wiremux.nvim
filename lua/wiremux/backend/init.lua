@@ -13,6 +13,7 @@ local M = {}
 ---@field focus fun(target: wiremux.Instance)
 ---@field toggle_visibility fun(state: wiremux.State)
 ---@field close fun(targets: wiremux.Instance[], state: wiremux.State)
+---@field adopt fun(target: wiremux.Pane, state: wiremux.State, opts?: table): boolean?
 ---@field wait_for_ready fun(inst: wiremux.Instance, opts: table?, callback: fun())
 
 local backend_names = { "tmux" }
@@ -35,7 +36,9 @@ function M.get()
 		end
 	end
 
-	require("wiremux.utils.notify").error("wiremux requires a supported backend. Start tmux first: tmux new-session -s mysession")
+	require("wiremux.utils.notify").error(
+		"wiremux requires a supported backend. Start tmux first: tmux new-session -s mysession"
+	)
 	return nil
 end
 

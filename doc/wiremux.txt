@@ -587,7 +587,13 @@ Subcommands:
 :Wiremux close
         Close a target pane/window.
 
-                                                         *:Wiremux-toggle*
+                                                          *:Wiremux-adopt*
+:Wiremux adopt
+        Re-own an existing wiremux target from the current Neovim pane. Uses
+        the default adopt filter: wiremux-managed panes in the current tmux
+        session. The current pane is always excluded.
+
+                                                          *:Wiremux-toggle*
 :Wiremux toggle
         Toggle "visibility" for the last-used target.
         - pane targets: toggles zoom
@@ -616,11 +622,45 @@ wiremux.focus({opts})
 wiremux.create({opts})
         Create a target from definitions.
 
-                                                     *wiremux.close()*
+                                                      *wiremux.close()*
 wiremux.close({opts})
         Close a target.
 
-                                                    *wiremux.toggle()*
+                                                       *wiremux.adopt()*
+wiremux.adopt({opts})
+        Re-own an existing tmux pane from the current Neovim pane.
+
+        By default, shows wiremux-managed panes in the current tmux session.
+        The current pane is always excluded.
+
+        {opts.filter.instances} replaces the default adopt filter for this
+        call. It receives (inst, state) and can include cross-session panes or
+        unmanaged panes from the queried tmux pane list.
+
+        If the filter allows unmanaged panes, pass {opts.target} so wiremux can
+        assign @wiremux_target metadata when adopting.
+
+        Example: include all queried panes except the current pane >
+            require("wiremux").adopt({
+              filter = {
+                instances = function()
+                  return true
+                end,
+              },
+            })
+<
+        Example: adopt unmanaged zsh panes as "terminal" >
+            require("wiremux").adopt({
+              target = "terminal",
+              filter = {
+                instances = function(inst)
+                  return inst.running_command == "zsh"
+                end,
+              },
+            })
+<
+
+                                                     *wiremux.toggle()*
 wiremux.toggle({opts})
         Toggle visibility for the last-used target.
 

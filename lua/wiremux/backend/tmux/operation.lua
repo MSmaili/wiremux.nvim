@@ -198,6 +198,7 @@ function M.create(target_name, def, st)
 	notify.debug("create: %s %s target=%s", kind, id, target_name)
 
 	local instance = {
+		session_id = st.session_id,
 		id = id,
 		window_id = kind == "window" and id or "",
 		target = target_name,
@@ -215,6 +216,20 @@ end
 
 function M.toggle_zoom()
 	client.execute({ action.resize_pane_zoom() })
+end
+
+---@param target wiremux.Pane
+---@param st wiremux.State
+---@param opts? { target?: string }
+function M.adopt(target, st, opts)
+	local ok = state.adopt(target, st, opts and opts.target)
+	if not ok then
+		notify.error(string.format("Failed to adopt target %s. Pane may no longer exist.", target.id))
+		return
+	end
+
+	notify.debug("adopt: target=%s origin=%s", target.id, st.origin_pane_id or "nil")
+	return true
 end
 
 ---Toggle visibility based on instance kind

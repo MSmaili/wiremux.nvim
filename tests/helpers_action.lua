@@ -4,6 +4,7 @@ local M = {}
 
 local MODULES = {
 	"wiremux.core.action",
+	"wiremux.action.adopt",
 	"wiremux.backend",
 	"wiremux.core.resolver",
 	"wiremux.config",

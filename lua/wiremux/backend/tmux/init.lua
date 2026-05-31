@@ -46,6 +46,13 @@ function M.close(targets, s)
 	return require("wiremux.backend.tmux.operation").close(targets, s)
 end
 
+---@param target wiremux.Pane
+---@param s wiremux.State
+---@param opts? { target?: string }
+function M.adopt(target, s, opts)
+	return require("wiremux.backend.tmux.operation").adopt(target, s, opts)
+end
+
 ---Wait until a newly created pane has rendered its TUI and is ready for input.
 ---Polls pane content asynchronously; calls callback when stable or timed out.
 ---@param inst wiremux.Instance

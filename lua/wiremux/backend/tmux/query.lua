@@ -1,11 +1,11 @@
 local M = {}
 
 local PANE_FORMAT =
-	"#{pane_id}:#{window_id}:#{@wiremux_target}:#{@wiremux_origin}:#{@wiremux_origin_cwd}:#{@wiremux_kind}:#{@wiremux_last_used_at}:#{window_name}:#{window_index}:#{pane_index}:#{pane_current_command}"
+	"#{session_id}:#{pane_id}:#{window_id}:#{@wiremux_target}:#{@wiremux_origin}:#{@wiremux_origin_cwd}:#{@wiremux_kind}:#{@wiremux_last_used_at}:#{window_name}:#{window_index}:#{pane_index}:#{pane_current_command}"
 
 ---@return string[]
 function M.current_pane()
-	return { "display", "-p", "#{pane_id}" }
+	return { "display", "-p", "#{pane_id}:#{session_id}" }
 end
 
 ---@return string[]

@@ -40,6 +40,12 @@ function M.focus(opts)
 	return require("wiremux.action.focus").focus(opts)
 end
 
+--- Adopt an existing wiremux target in the current tmux session
+---@param opts? wiremux.action.AdoptOpts
+function M.adopt(opts)
+	return require("wiremux.action.adopt").adopt(opts)
+end
+
 --- Send text via motion/textobject
 ---@param opts? wiremux.config.ActionConfig
 ---@return string
