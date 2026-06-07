@@ -231,7 +231,7 @@ describe("action", function()
 	end)
 
 	describe("adopt", function()
-		it("shows current-session wiremux targets only", function()
+		it("shows all current-session panes", function()
 			local adopted
 
 			mocks.backend.state.get = function()
@@ -243,6 +243,27 @@ describe("action", function()
 						{ session_id = "$1", id = "%1", target = "server", kind = "pane", running_command = "zsh" },
 						{ session_id = "$2", id = "%2", target = "other", kind = "pane" },
 					},
+					panes = {
+						{ session_id = "$1", id = "%0", target = "current", kind = "pane", window_index = 1, pane_index = 0 },
+						{
+							session_id = "$1",
+							id = "%1",
+							target = "server",
+							kind = "pane",
+							window_index = 1,
+							pane_index = 1,
+							running_command = "zsh",
+						},
+						{
+							session_id = "$1",
+							id = "%3",
+							kind = "pane",
+							window_index = 2,
+							pane_index = 0,
+							running_command = "fish",
+						},
+						{ session_id = "$2", id = "%2", target = "other", kind = "pane", window_index = 1, pane_index = 0 },
+					},
 				}
 			end
 
@@ -253,9 +274,11 @@ describe("action", function()
 
 			mocks.picker.select = function(items, opts, callback)
 				assert.are.equal("Adopt target", opts.prompt)
-				assert.are.equal(1, #items)
+				assert.are.equal(2, #items)
 				assert.are.equal("%1", items[1].id)
-				assert.are.equal("server 1 [zsh]", opts.format_item(items[1]))
+				assert.are.equal("%3", items[2].id)
+				assert.matches("server%s+%%1%s+1:1%s+zsh", opts.format_item(items[1]))
+				assert.matches("%(unmanaged%)%s+%%3%s+2:0%s+fish", opts.format_item(items[2]))
 				callback(items[1])
 			end
 
@@ -331,7 +354,7 @@ describe("action", function()
 				assert.are.equal("%1", items[1].id)
 				assert.are.equal("%2", items[2].id)
 				assert.are.equal("%3", items[3].id)
-				assert.are.equal("unmanaged 3 [zsh]", opts.format_item(items[3]))
+				assert.matches("%(unmanaged%)%s+%%3%s+%-%s+zsh", opts.format_item(items[3]))
 				callback(items[3])
 			end
 
@@ -348,8 +371,37 @@ describe("action", function()
 			assert.are.equal("terminal", adopt_opts.target)
 		end)
 
-		it("requires a target when adopting unmanaged panes", function()
-			local warned = false
+		it("uses an optional local item formatter", function()
+			mocks.backend.state.get = function()
+				return {
+					origin_pane_id = "%0",
+					session_id = "$1",
+					panes = {
+						{ session_id = "$1", id = "%1", target = "server", kind = "pane", running_command = "zsh" },
+					},
+					instances = {},
+				}
+			end
+
+			mocks.backend.adopt = function()
+				return true
+			end
+
+			mocks.picker.select = function(items, opts, callback)
+				assert.are.equal("server:%1:$1", opts.format_item(items[1]))
+				callback(items[1])
+			end
+
+			require("wiremux.action.adopt").adopt({
+				format_item = function(inst, state)
+					return string.format("%s:%s:%s", inst.target, inst.id, state.session_id)
+				end,
+			})
+		end)
+
+		it("generates a target name when adopting unmanaged panes", function()
+			local adopted
+			local adopt_opts
 
 			mocks.backend.state.get = function()
 				return {
@@ -362,28 +414,20 @@ describe("action", function()
 				}
 			end
 
-			mocks.backend.adopt = function()
-				error("should not adopt unmanaged pane without target")
-			end
-
-			mocks.notify.warn = function(msg)
-				warned = true
-				assert.matches("requires opts.target", msg)
+			mocks.backend.adopt = function(target, _, opts)
+				adopted = target
+				adopt_opts = opts
+				return true
 			end
 
 			mocks.picker.select = function(items, _, callback)
 				callback(items[1])
 			end
 
-			require("wiremux.action.adopt").adopt({
-				filter = {
-					instances = function()
-						return true
-					end,
-				},
-			})
+			require("wiremux.action.adopt").adopt()
 
-			assert.is_true(warned)
+			assert.are.equal("%1", adopted.id)
+			assert.are.equal("pane-1", adopt_opts.target)
 		end)
 
 		it("warns when no current-session targets can be adopted", function()

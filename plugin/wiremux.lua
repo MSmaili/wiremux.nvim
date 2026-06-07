@@ -48,7 +48,7 @@ local subcommand_tbl = {
 		impl = function(_, _)
 			require("wiremux.action.adopt").adopt()
 		end,
-		desc = "Adopt an existing wiremux target in this tmux session",
+		desc = "Adopt an existing tmux pane in this tmux session",
 	},
 	toggle = {
 		impl = function(_, _)

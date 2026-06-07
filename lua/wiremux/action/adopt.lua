@@ -1,8 +1,11 @@
 local M = {}
 
+local DEFAULT_LABEL_FORMAT = "%-18s %-6s %-5s"
+
 ---@class wiremux.action.AdoptOpts
----@field target? string Target name to assign when adopting unmanaged panes.
+---@field target? string Target name to assign when adopting unmanaged panes. Defaults to pane-<id>.
 ---@field filter? { instances?: fun(inst: wiremux.Pane, state: wiremux.State): boolean }
+---@field format_item? fun(inst: wiremux.Pane, state: wiremux.State): string Format pane for picker display.
 
 ---@param state wiremux.State
 local function update_statusline(state)
@@ -12,14 +15,39 @@ local function update_statusline(state)
 	end
 end
 
+---@param id string?
+---@return string
+local function pane_id(id)
+	return (id and id:match("%d+")) or id or "?"
+end
+
 ---@param inst wiremux.Pane
 ---@return string
-local function format_instance(inst)
-	local name = inst.window_name and inst.window_name ~= "" and inst.window_name or inst.target or "unmanaged"
-	local id = inst.id:match("%d+") or inst.id
-	local label = string.format("%s %s", name, id)
+local function default_target_name(inst)
+	return "pane-" .. pane_id(inst.id)
+end
+
+---@param inst wiremux.Pane
+---@return string
+local function pane_location(inst)
+	if inst.window_index and inst.pane_index then
+		return string.format("%s:%s", inst.window_index, inst.pane_index)
+	end
+	if inst.window_index then
+		return tostring(inst.window_index)
+	end
+	if inst.window_name and inst.window_name ~= "" then
+		return inst.window_name
+	end
+	return "-"
+end
+
+---@param inst wiremux.Pane
+---@return string
+local function default_format_item(inst)
+	local label = string.format(DEFAULT_LABEL_FORMAT, inst.target or "(unmanaged)", inst.id or "?", pane_location(inst))
 	if inst.running_command and inst.running_command ~= "" then
-		label = label .. string.format(" [%s]", inst.running_command)
+		label = label .. " " .. inst.running_command
 	end
 	return label
 end
@@ -28,7 +56,10 @@ end
 ---@param st wiremux.State
 ---@return boolean
 local function default_filter(inst, st)
-	return inst.target ~= nil and inst.target ~= "" and inst.session_id == st.session_id
+	if st.session_id and inst.session_id then
+		return inst.session_id == st.session_id
+	end
+	return true
 end
 
 ---@param panes wiremux.Pane[]
@@ -65,19 +96,26 @@ function M.adopt(opts)
 		return
 	end
 
+	local format_item = default_format_item
+	if opts.format_item then
+		format_item = function(inst)
+			return opts.format_item(inst, st)
+		end
+	end
+
 	local picker = require("wiremux.picker")
 	picker.select(panes, {
 		prompt = "Adopt target",
-		format_item = format_instance,
+		format_item = format_item,
 	}, function(choice)
 		if not choice then
 			return
 		end
-		if not choice.target and (not opts.target or opts.target == "") then
-			notify.warn("Adopting unmanaged panes requires opts.target")
-			return
+		local target_name = opts.target
+		if not choice.target and (not target_name or target_name == "") then
+			target_name = default_target_name(choice)
 		end
-		if backend.adopt(choice, st, { target = opts.target }) then
+		if backend.adopt(choice, st, { target = target_name }) then
 			update_statusline(st)
 		end
 	end)
