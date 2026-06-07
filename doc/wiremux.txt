@@ -589,9 +589,9 @@ Subcommands:
 
                                                           *:Wiremux-adopt*
 :Wiremux adopt
-        Re-own an existing wiremux target from the current Neovim pane. Uses
-        the default adopt filter: wiremux-managed panes in the current tmux
-        session. The current pane is always excluded.
+        Re-own an existing tmux pane from the current Neovim pane. Uses the
+        default adopt filter: all panes in the current tmux session. The current
+        pane is always excluded. Unmanaged panes get generated target names.
 
                                                           *:Wiremux-toggle*
 :Wiremux toggle
@@ -630,15 +630,16 @@ wiremux.close({opts})
 wiremux.adopt({opts})
         Re-own an existing tmux pane from the current Neovim pane.
 
-        By default, shows wiremux-managed panes in the current tmux session.
-        The current pane is always excluded.
+        By default, shows all panes in the current tmux session. The current
+        pane is always excluded.
 
         {opts.filter.instances} replaces the default adopt filter for this
-        call. It receives (inst, state) and can include cross-session panes or
-        unmanaged panes from the queried tmux pane list.
+        call. It receives (inst, state) and can include cross-session panes from
+        the queried tmux pane list.
 
-        If the filter allows unmanaged panes, pass {opts.target} so wiremux can
-        assign @wiremux_target metadata when adopting.
+        Unmanaged panes are assigned a generated target name like "pane-3". Pass
+        {opts.target} when you want the adopted pane to use a specific wiremux
+        target name.
 
         Example: include all queried panes except the current pane >
             require("wiremux").adopt({
@@ -657,6 +658,18 @@ wiremux.adopt({opts})
                   return inst.running_command == "zsh"
                 end,
               },
+            })
+<
+        Example: customize picker rows >
+            require("wiremux").adopt({
+              format_item = function(pane)
+                return string.format(
+                  "%s %s %s",
+                  pane.target or "unmanaged",
+                  pane.id,
+                  pane.running_command or ""
+                )
+              end,
             })
 <
 

@@ -407,13 +407,19 @@ These are the main ways to interact with wiremux targets. You can use them as **
 | `toggle()`      | `:Wiremux toggle`      | Shows/hides the last used target          | Quick hide/show your AI or terminal                        |
 | `focus()`       | `:Wiremux focus`       | Switches focus to a target                | Jump to your terminal or AI pane                           |
 | `close()`       | `:Wiremux close`       | Closes a target                           | Shut down an AI or terminal you're done with               |
-| `adopt()`       | `:Wiremux adopt`       | Re-owns an existing wiremux target        | Recover a target whose original Neovim pane was closed     |
+| `adopt()`       | `:Wiremux adopt`       | Re-owns an existing tmux pane             | Bring any existing pane under wiremux control              |
 
 ### Adopt Existing Panes
 
-Use `:Wiremux adopt` or `require("wiremux").adopt()` to re-own an existing wiremux target from the current Neovim pane. By default, the picker shows wiremux-managed panes in the current tmux session. The current pane is always excluded.
+Use `:Wiremux adopt` or `require("wiremux").adopt()` to re-own an existing tmux pane from the current Neovim pane. By default, the picker shows all panes in the current tmux session, including unmanaged panes. The current pane is always excluded.
 
-For Lua calls, `filter.instances` replaces the default adopt filter for that call. This lets you include cross-session panes or unmanaged panes from the queried tmux pane list:
+Unmanaged panes are assigned a generated target name like `pane-3`. Pass `target` when you want the adopted pane to use a specific wiremux target name:
+
+```lua
+require("wiremux").adopt({ target = "terminal" })
+```
+
+For Lua calls, `filter.instances` replaces the default adopt filter for that call. This lets you include cross-session panes from the queried tmux pane list:
 
 ```lua
 require("wiremux").adopt({
@@ -425,7 +431,7 @@ require("wiremux").adopt({
 })
 ```
 
-If your filter can select unmanaged panes, pass `target` so wiremux can assign target metadata when adopting:
+You can combine `target` with a filter to adopt matching panes under a known target name:
 
 ```lua
 require("wiremux").adopt({
@@ -435,6 +441,16 @@ require("wiremux").adopt({
       return inst.running_command == "zsh"
     end,
   },
+})
+```
+
+Use `format_item` to customize the adopt picker rows:
+
+```lua
+require("wiremux").adopt({
+  format_item = function(pane)
+    return string.format("%s %s %s", pane.target or "unmanaged", pane.id, pane.running_command or "")
+  end,
 })
 ```
 
