@@ -78,7 +78,7 @@ end
 
 ---Refresh statusline on FocusGained
 local function refresh()
-	local client = require("wiremux.backend").get()
+	local client = require("wiremux.backend").get(true)
 	if not client then
 		return
 	end

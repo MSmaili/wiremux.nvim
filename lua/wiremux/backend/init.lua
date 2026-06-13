@@ -27,8 +27,9 @@ local backend_loaders = {
 	end,
 }
 
+---@param silent? boolean
 ---@return wiremux.backend.Adapter?
-function M.get()
+function M.get(silent)
 	for _, name in ipairs(backend_names) do
 		local backend = backend_loaders[name]()
 		if backend then
@@ -36,10 +37,12 @@ function M.get()
 		end
 	end
 
-	require("wiremux.utils.notify").error(
-		"wiremux requires a supported backend. Start tmux first: tmux new-session -s mysession"
-	)
-	return nil
+	if not silent then
+		require("wiremux.utils.notify").error(
+			"wiremux requires a supported backend. Start tmux first: tmux new-session -s mysession"
+		)
+		return nil
+	end
 end
 
 return M
