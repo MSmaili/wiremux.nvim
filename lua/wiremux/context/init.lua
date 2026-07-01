@@ -91,17 +91,22 @@ end
 ---Expand context variables in text
 ---@param text string Text with {variable} placeholders
 ---@param snapshot? table<string, string> Optional frozen values to prefer
+---@param opts? { resolve_missing?: boolean } Expansion options
 ---@return string
-function M.expand(text, snapshot)
+function M.expand(text, snapshot, opts)
 	if not text:find("{", 1, true) then
 		return text
 	end
 
+	local resolve_missing = not opts or opts.resolve_missing ~= false
 	local cache = {}
 	return (
 		text:gsub("{([%w_]+)}", function(var)
 			if cache[var] == nil then
-				local value = (snapshot and snapshot[var]) or M.get(var)
+				local value = snapshot and snapshot[var]
+				if value == nil and resolve_missing then
+					value = M.get(var)
+				end
 				cache[var] = value == nil and UNRESOLVED or value
 			end
 			if cache[var] == UNRESOLVED then

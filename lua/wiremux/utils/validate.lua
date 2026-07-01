@@ -7,7 +7,7 @@ local valid = {
 	split_modes = { before = true, after = true },
 	log_levels = { off = true, error = true, warn = true, info = true, debug = true },
 	compose_close_behaviors = { ask = true, hide = true, discard = true },
-	compose_new_payload = { ask = true, keep = true, replace = true },
+	compose_new_payload = { ask = true, keep = true, replace = true, append = true },
 }
 
 ---@param value any

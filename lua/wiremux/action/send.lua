@@ -6,7 +6,7 @@ local notify = require("wiremux.utils.notify")
 ---@field value string The text/command to send
 ---@field label? string Display name in picker (optional, defaults to value)
 ---@field submit? boolean Auto-submit after sending (default: false)
----@field compose? boolean Open compose buffer before sending (default: false)
+---@field compose? boolean|wiremux.config.ComposeOptions Open compose buffer before sending (default: false)
 ---@field visible? boolean|fun(): boolean Show this item in picker (default: true)
 ---@field title? string Custom tmux window / zellij tab name when creating
 ---@field pre_keys? string|string[] Keystrokes to send before pasting (e.g. {"C-c"}, {"i"})
@@ -60,22 +60,20 @@ end
 ---Build picker items from send library
 ---@param items wiremux.action.SendItem[]
 ---@return table[] picker_items
----@return table<string, string> frozen_context
 local function prepare_picker_items(items)
 	local picker_items = {}
-	local visible_texts = {}
 
 	for _, item in ipairs(items) do
 		if is_visible(item) then
-			table.insert(visible_texts, item.value)
 			table.insert(picker_items, {
 				label = item.label or item.value,
 				value = item,
+				snapshot = type(item.value) == "string" and context.snapshot(item.value) or {},
 			})
 		end
 	end
 
-	return picker_items, context.snapshot(visible_texts)
+	return picker_items
 end
 
 ---Execute the send action with fully resolved options
@@ -144,15 +142,32 @@ local function resolve_send_backend_opts(item, opts, defaults)
 end
 
 ---@param text string
----@param frozen_context table<string, string>
+---@param snapshot table<string, string>
+---@param expand_opts? { resolve_missing?: boolean }
 ---@return string?
-local function expand_with_context(text, frozen_context)
-	local ok, expanded = pcall(context.expand, text, frozen_context)
+local function expand_with_context(text, snapshot, expand_opts)
+	local ok, expanded = pcall(context.expand, text, snapshot, expand_opts)
 	if not ok then
 		notify.error(expanded)
 		return nil
 	end
 	return expanded
+end
+
+---@param pages wiremux.ui.ComposePage[]
+---@return string?
+local function prepare_compose_pages(pages)
+	local expanded_pages = {}
+	for index, page in ipairs(pages) do
+		local snapshot = type(page.meta) == "table" and page.meta.snapshot or nil
+		local ok, expanded = pcall(context.expand, page.text, snapshot or {}, { resolve_missing = false })
+		if not ok then
+			notify.error(string.format("Failed to prepare compose page %d: %s", index, tostring(expanded)))
+			return nil
+		end
+		expanded_pages[index] = expanded:gsub("%s+$", "")
+	end
+	return table.concat(expanded_pages, "\n\n")
 end
 
 ---Resolve all options against defaults, then send
@@ -167,7 +182,7 @@ local function resolve_and_send(item, opts, frozen_context)
 
 	local defaults = require("wiremux.config").opts.actions.send or {}
 	local backend_opts = resolve_send_backend_opts(item, opts, defaults)
-	local is_compose = first_non_nil(item.compose, opts.compose, defaults.compose)
+	local compose = first_non_nil(item.compose, opts.compose, defaults.compose)
 
 	local resolved = {
 		focus = backend_opts.focus,
@@ -179,13 +194,22 @@ local function resolve_and_send(item, opts, frozen_context)
 		target = opts.target,
 	}
 
-	if is_compose then
-		require("wiremux.ui.compose").open(item.value, function(edited_text)
-			local expanded = expand_with_context(edited_text, frozen_context)
-			if expanded then
-				do_send(expanded, resolved, item.title)
-			end
-		end)
+	if compose then
+		local compose_opts = type(compose) == "table" and compose or {}
+		require("wiremux.ui.compose").open(item.value, {
+			title = compose_opts.title,
+			page_meta = { snapshot = frozen_context },
+			on_confirm = function(pages)
+				local expanded = prepare_compose_pages(pages)
+				if expanded == nil then
+					return false
+				end
+				vim.schedule(function()
+					do_send(expanded, resolved, item.title)
+				end)
+				return true
+			end,
+		})
 		return
 	end
 
@@ -201,6 +225,11 @@ end
 ---@param item wiremux.action.SendItem
 ---@param opts wiremux.config.ActionConfig
 local function send_single_item(item, opts)
+	if type(item.value) ~= "string" then
+		notify.warn("wiremux.send item.value must be a string")
+		return
+	end
+
 	resolve_and_send(item, opts, context.snapshot(item.value))
 end
 
@@ -209,7 +238,7 @@ end
 ---@param opts wiremux.config.ActionConfig
 local function send_from_library(items, opts)
 	-- Capture before picker opens (visual selection is lost when picker opens)
-	local picker_items, frozen_context = prepare_picker_items(items)
+	local picker_items = prepare_picker_items(items)
 
 	if #picker_items == 0 then
 		notify.warn("No items available")
@@ -228,7 +257,7 @@ local function send_from_library(items, opts)
 
 		---@type wiremux.action.SendItem
 		local item = choice.value
-		resolve_and_send(item, opts, frozen_context)
+		resolve_and_send(item, opts, choice.snapshot)
 	end)
 end
 

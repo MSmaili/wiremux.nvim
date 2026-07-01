@@ -1,24 +1,35 @@
----@class wiremux.ui.ComposeState
----@field buf number
----@field win number?
----@field config wiremux.config.ComposeUIConfig
----@field on_confirm fun(text: string)
----@field on_cancel? fun()
----@field sent boolean
-
+local draft_model = require("wiremux.ui.compose.draft")
 local normalize_keymap = require("wiremux.ui.compose.keymaps").normalize
 local find_key_for_mode = require("wiremux.ui.compose.keymaps").find_key_for_mode
+local notify = require("wiremux.utils.notify")
 
 local M = {}
 
-local _win = nil
-local _buf = nil
-local _state = nil
+---@class wiremux.ui.ComposeOpenOptions
+---@field on_confirm fun(pages: wiremux.ui.ComposePage[]): boolean?
+---@field on_cancel? fun()
+---@field page_meta? any
+---@field title? string
+
+---@class wiremux.ui.ComposeSession
+---@field buf number
+---@field win number?
+---@field config wiremux.config.ComposeUIConfig
+---@field title string
+---@field draft wiremux.ui.ComposeDraft
+---@field on_confirm fun(pages: wiremux.ui.ComposePage[]): boolean?
+---@field on_cancel? fun()
+---@field confirming boolean
+---@field sent boolean
+---@field cancelled boolean
+
+---@type wiremux.ui.ComposeSession?
+local active_session
 
 ---@return number? buf The current compose draft buffer, if valid
 function M.get_buf()
-	if _buf and vim.api.nvim_buf_is_valid(_buf) then
-		return _buf
+	if active_session and vim.api.nvim_buf_is_valid(active_session.buf) then
+		return active_session.buf
 	end
 end
 
@@ -32,24 +43,27 @@ local function clamp(value, min_value, max_value)
 	return value
 end
 
-local function create_buffer(text)
-	local buf = vim.api.nvim_create_buf(false, true)
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(text, "\n"))
-	vim.bo[buf].buftype = "nofile"
-	vim.bo[buf].bufhidden = "hide"
-	vim.bo[buf].filetype = "markdown"
-	return buf
+---@param session wiremux.ui.ComposeSession
+---@return string
+local function window_title(session)
+	if #session.draft.pages == 1 then
+		return session.title
+	end
+	return string.format(
+		"%s [%d/%d] ",
+		session.title:gsub("%s+$", ""),
+		session.draft.current_page,
+		#session.draft.pages
+	)
 end
 
 ---@param buf number
 ---@param config wiremux.config.ComposeUIConfig
+---@param title string
 ---@return number
-local function create_window(buf, config)
-	local width_ratio = tonumber(config.width) or 0.6
-	local height_ratio = tonumber(config.height) or 0.4
-	width_ratio = clamp(width_ratio, 0.1, 1)
-	height_ratio = clamp(height_ratio, 0.1, 1)
-
+local function create_window(buf, config, title)
+	local width_ratio = clamp(tonumber(config.width) or 0.6, 0.1, 1)
+	local height_ratio = clamp(tonumber(config.height) or 0.4, 0.1, 1)
 	local min_width = math.min(20, vim.o.columns)
 	local min_height = math.min(3, vim.o.lines)
 	local width = clamp(math.floor(vim.o.columns * width_ratio), min_width, vim.o.columns)
@@ -63,46 +77,54 @@ local function create_window(buf, config)
 		row = math.floor((vim.o.lines - height) / 2),
 		style = config.style,
 		border = config.border,
-		title = config.title,
+		title = title,
 		title_pos = "center",
 	})
 
 	for opt, val in pairs(config.wo or {}) do
 		vim.wo[win][opt] = val
 	end
-
 	return win
 end
 
-local function setup_syntax(buf)
-	vim.api.nvim_buf_call(buf, function()
-		vim.cmd([[
-			syntax match WiremuxPlaceholder /{[^}]\+}/
-			highlight default link WiremuxPlaceholder Special
-		]])
-	end)
+---@param text string
+---@return number
+local function create_buffer(text)
+	local buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(text, "\n"))
+	vim.bo[buf].buftype = "nofile"
+	vim.bo[buf].bufhidden = "hide"
+	vim.bo[buf].filetype = "markdown"
+	return buf
 end
 
 ---@param buf number
 ---@return string
 local function get_buffer_text(buf)
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	return table.concat(lines, "\n")
-end
-
----@param state wiremux.ui.ComposeState
----@return boolean
-local function is_draft_empty(state)
-	if not vim.api.nvim_buf_is_valid(state.buf) then
-		return true
-	end
-	return get_buffer_text(state.buf):match("^%s*$") ~= nil
+	return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
 end
 
 ---@param buf number
 ---@param text string
-local function set_buffer_text(buf, text)
+local function load_buffer_text(buf, text)
+	local undolevels = vim.bo[buf].undolevels
+	vim.bo[buf].undolevels = -1
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(text, "\n"))
+	vim.bo[buf].undolevels = undolevels
+end
+
+---@param session wiremux.ui.ComposeSession
+local function save_current_page(session)
+	if vim.api.nvim_buf_is_valid(session.buf) then
+		draft_model.save(session.draft, get_buffer_text(session.buf))
+	end
+end
+
+---@param session wiremux.ui.ComposeSession
+local function update_title(session)
+	if session.win and vim.api.nvim_win_is_valid(session.win) then
+		vim.api.nvim_win_set_config(session.win, { title = window_title(session), title_pos = "center" })
+	end
 end
 
 ---@param win number
@@ -113,56 +135,66 @@ local function move_cursor_to_end(win, buf)
 	vim.api.nvim_win_set_cursor(win, { last_row, #last_line })
 end
 
----@param state wiremux.ui.ComposeState
-local function hide_window(state)
-	if state.win and vim.api.nvim_win_is_valid(state.win) then
-		vim.api.nvim_win_close(state.win, true)
+---@param session wiremux.ui.ComposeSession
+local function hide_window(session)
+	save_current_page(session)
+	if session.win and vim.api.nvim_win_is_valid(session.win) then
+		vim.api.nvim_win_close(session.win, true)
+	end
+	session.win = nil
+end
+
+---@param session wiremux.ui.ComposeSession
+local function discard_draft(session)
+	hide_window(session)
+	if vim.api.nvim_buf_is_valid(session.buf) then
+		vim.api.nvim_buf_delete(session.buf, { force = true })
+	elseif active_session == session then
+		active_session = nil
 	end
 end
 
----@param state wiremux.ui.ComposeState
-local function discard_draft(state)
-	hide_window(state)
-	if vim.api.nvim_buf_is_valid(state.buf) then
-		vim.api.nvim_buf_delete(state.buf, { force = true })
+---@param session wiremux.ui.ComposeSession
+local function request_discard(session)
+	if not session.sent and not session.confirming then
+		discard_draft(session)
 	end
 end
 
----@param state wiremux.ui.ComposeState
-local function request_discard(state)
-	if state.sent then
+---@param session wiremux.ui.ComposeSession
+local function confirm_draft(session)
+	if session.sent or session.confirming then
 		return
 	end
 
-	discard_draft(state)
-end
-
----@param state wiremux.ui.ComposeState
-local function send(state)
-	if state.sent then
+	save_current_page(session)
+	session.confirming = true
+	local ok, confirmed = pcall(session.on_confirm, session.draft.pages)
+	if not ok then
+		session.confirming = false
+		notify.error(tostring(confirmed))
 		return
 	end
-	state.sent = true
-	local lines = vim.api.nvim_buf_get_lines(state.buf, 0, -1, false)
-	hide_window(state)
-	if vim.api.nvim_buf_is_valid(state.buf) then
-		vim.api.nvim_buf_delete(state.buf, { force = true })
-	end
-	vim.schedule(function()
-		state.on_confirm(table.concat(lines, "\n"))
-	end)
-end
-
----@param state wiremux.ui.ComposeState
-local function update_footer(state)
-	if not state.win or not vim.api.nvim_win_is_valid(state.win) then
+	if confirmed == false then
+		session.confirming = false
 		return
 	end
 
-	local is_insert = vim.fn.mode() == "i"
-	local current_mode = is_insert and "i" or "n"
-	local km = state.config.keymaps or {}
+	session.sent = true
+	hide_window(session)
+	if vim.api.nvim_buf_is_valid(session.buf) then
+		vim.api.nvim_buf_delete(session.buf, { force = true })
+	end
+end
 
+---@param session wiremux.ui.ComposeSession
+local function update_footer(session)
+	if not session.win or not vim.api.nvim_win_is_valid(session.win) then
+		return
+	end
+
+	local current_mode = vim.fn.mode() == "i" and "i" or "n"
+	local km = session.config.keymaps or {}
 	local parts = {}
 	local keys = {
 		{ entry = km.send, label = "Send" },
@@ -170,40 +202,35 @@ local function update_footer(state)
 		{ entry = km.discard, label = "Discard" },
 		{ entry = km.files, label = "Files" },
 	}
-	for _, k in ipairs(keys) do
-		local key = find_key_for_mode(k.entry, current_mode)
+	for _, keymap in ipairs(keys) do
+		local key = find_key_for_mode(keymap.entry, current_mode)
 		if key then
-			table.insert(parts, key .. " " .. k.label)
+			table.insert(parts, key .. " " .. keymap.label)
 		end
 	end
 
-	if #parts == 0 then
-		vim.api.nvim_win_set_config(state.win, { footer = nil })
-		return
-	end
-
-	vim.api.nvim_win_set_config(state.win, {
-		footer = " " .. table.concat(parts, "  |  ") .. " ",
+	vim.api.nvim_win_set_config(session.win, {
+		footer = #parts > 0 and (" " .. table.concat(parts, "  |  ") .. " ") or nil,
 		footer_pos = "center",
 	})
 end
 
----@param state wiremux.ui.ComposeState
-local function insert_file(state)
+---@param session wiremux.ui.ComposeSession
+local function insert_file(session)
 	local picker = require("wiremux.picker")
 	local was_insert = vim.fn.mode() == "i"
 	picker.files({ prompt = "Insert file" }, function(path)
-		if not path or not vim.api.nvim_buf_is_valid(state.buf) then
+		if not path or not vim.api.nvim_buf_is_valid(session.buf) then
 			return
 		end
 		vim.schedule(function()
-			if not state.win or not vim.api.nvim_win_is_valid(state.win) then
+			if not session.win or not vim.api.nvim_win_is_valid(session.win) then
 				return
 			end
-			local cursor = vim.api.nvim_win_get_cursor(state.win)
+			local cursor = vim.api.nvim_win_get_cursor(session.win)
 			local row, col = cursor[1] - 1, cursor[2]
-			vim.api.nvim_buf_set_text(state.buf, row, col, row, col, { path })
-			vim.api.nvim_win_set_cursor(state.win, { row + 1, col + #path })
+			vim.api.nvim_buf_set_text(session.buf, row, col, row, col, { path })
+			vim.api.nvim_win_set_cursor(session.win, { row + 1, col + #path })
 			if was_insert then
 				vim.cmd("startinsert")
 			end
@@ -211,96 +238,122 @@ local function insert_file(state)
 	end)
 end
 
----@param state wiremux.ui.ComposeState
-local function request_close(state)
-	if state.sent then
+---@param session wiremux.ui.ComposeSession
+---@param direction "previous"|"next"
+local function navigate(session, direction)
+	if #session.draft.pages == 1 then
 		return
 	end
-
-	if is_draft_empty(state) then
-		discard_draft(state)
-		return
-	end
-
-	local behavior = state.config.close_behavior or "ask"
-	if behavior == "hide" then
-		hide_window(state)
-		return
-	end
-
-	if behavior == "discard" then
-		request_discard(state)
-		return
-	end
-
-	local choice = vim.fn.confirm("Unsent draft: what do you want to do?", "&Hide\n&Discard\n&Keep Editing", 3)
-
-	if choice == 1 then
-		hide_window(state)
-		return
-	end
-
-	if choice == 2 then
-		request_discard(state)
+	save_current_page(session)
+	draft_model[direction](session.draft)
+	load_buffer_text(session.buf, draft_model.current(session.draft).text)
+	update_title(session)
+	if session.win and vim.api.nvim_win_is_valid(session.win) then
+		move_cursor_to_end(session.win, session.buf)
 	end
 end
 
----@param state wiremux.ui.ComposeState
-local function setup_keymaps(state)
-	local keymaps = state.config.keymaps or {}
+---@param session wiremux.ui.ComposeSession
+local function request_close(session)
+	if session.sent or session.confirming then
+		return
+	end
+
+	save_current_page(session)
+	if draft_model.is_empty(session.draft) then
+		discard_draft(session)
+		return
+	end
+
+	local behavior = session.config.close_behavior or "ask"
+	if behavior == "hide" then
+		hide_window(session)
+	elseif behavior == "discard" then
+		request_discard(session)
+	else
+		local choice = vim.fn.confirm("Unsent draft: what do you want to do?", "&Hide\n&Discard\n&Keep Editing", 3)
+		if choice == 1 then
+			hide_window(session)
+		elseif choice == 2 then
+			request_discard(session)
+		end
+	end
+end
+
+---@param session wiremux.ui.ComposeSession
+local function setup_keymaps(session)
 	local actions = {
 		send = function()
-			send(state)
+			confirm_draft(session)
 		end,
 		close = function()
-			request_close(state)
+			request_close(session)
 		end,
 		discard = function()
-			request_discard(state)
+			request_discard(session)
 		end,
 		files = function()
-			insert_file(state)
+			insert_file(session)
+		end,
+		previous = function()
+			navigate(session, "previous")
+		end,
+		next = function()
+			navigate(session, "next")
 		end,
 	}
 
 	for action, handler in pairs(actions) do
-		for _, km in ipairs(normalize_keymap(keymaps[action])) do
-			for _, mode in ipairs(km.modes) do
-				vim.keymap.set(mode, km.key, handler, {
-					buffer = state.buf,
+		for _, keymap in ipairs(normalize_keymap((session.config.keymaps or {})[action])) do
+			for _, mode in ipairs(keymap.modes) do
+				vim.keymap.set(mode, keymap.key, handler, {
+					buffer = session.buf,
 					nowait = mode == "n",
-					desc = km.desc or action,
+					desc = keymap.desc or action,
 				})
 			end
 		end
 	end
 
-	vim.keymap.set("n", "<C-o>", "<Nop>", { buffer = state.buf, nowait = true })
-	vim.keymap.set("n", "<C-i>", "<Nop>", { buffer = state.buf, nowait = true })
+	vim.keymap.set("n", "<C-o>", "<Nop>", { buffer = session.buf, nowait = true })
+	vim.keymap.set("n", "<C-i>", "<Nop>", { buffer = session.buf, nowait = true })
 end
 
----@param state wiremux.ui.ComposeState
-local function setup_autocmds(state)
-	local group = vim.api.nvim_create_augroup("wiremux_compose_" .. state.buf, { clear = true })
+---@param session wiremux.ui.ComposeSession
+local function setup_syntax(session)
+	vim.api.nvim_buf_call(session.buf, function()
+		vim.cmd([[
+			syntax match WiremuxPlaceholder /{[^}]\+}/
+			highlight default link WiremuxPlaceholder Special
+		]])
+	end)
+end
+
+---@param session wiremux.ui.ComposeSession
+local function setup_autocmds(session)
+	local group = vim.api.nvim_create_augroup("wiremux_compose_" .. session.buf, { clear = true })
 
 	vim.api.nvim_create_autocmd("ModeChanged", {
 		group = group,
-		buffer = state.buf,
+		buffer = session.buf,
 		callback = function()
-			update_footer(state)
+			update_footer(session)
 		end,
 	})
 
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		group = group,
-		buffer = state.buf,
+		buffer = session.buf,
 		callback = function()
-			vim.api.nvim_del_augroup_by_id(group)
-			_win = nil
-			_buf = nil
-			_state = nil
-			if not state.sent and state.on_cancel then
-				state.on_cancel()
+			pcall(vim.api.nvim_del_augroup_by_id, group)
+			if active_session == session then
+				active_session = nil
+			end
+			session.win = nil
+			session.draft.pages = {}
+			if not session.sent and not session.cancelled and session.on_cancel then
+				session.cancelled = true
+				session.on_cancel()
 			end
 		end,
 	})
@@ -309,96 +362,97 @@ local function setup_autocmds(state)
 		group = group,
 		pattern = "*",
 		callback = function(args)
-			local closed_win = tonumber(args.match)
-			if state.win == closed_win then
-				state.win = nil
-				if _win == closed_win then
-					_win = nil
-				end
+			if session.win == tonumber(args.match) then
+				session.win = nil
 			end
 		end,
 	})
 end
 
----@param state wiremux.ui.ComposeState
+---@param session wiremux.ui.ComposeSession
+local function show_session(session)
+	if not session.win or not vim.api.nvim_win_is_valid(session.win) then
+		session.win = create_window(session.buf, session.config, window_title(session))
+	else
+		vim.api.nvim_set_current_win(session.win)
+	end
+	update_title(session)
+	update_footer(session)
+	move_cursor_to_end(session.win, session.buf)
+end
+
+---@param session wiremux.ui.ComposeSession
 ---@param text string
-local function apply_new_payload_policy(state, text)
-	local current_text = get_buffer_text(state.buf)
-	if text == current_text then
+---@param meta? any
+local function apply_new_payload_policy(session, text, meta)
+	save_current_page(session)
+	if draft_model.is_empty(session.draft) then
+		draft_model.replace(session.draft, text, meta)
+		load_buffer_text(session.buf, text)
 		return
 	end
 
-	local policy = state.config.on_new_payload or "ask"
-	if policy == "keep" then
-		return
+	local policy = session.config.on_new_payload or "ask"
+	if policy == "ask" then
+		local choice = vim.fn.confirm(
+			"An unsent draft already exists. What should happen to the new payload?",
+			"&Keep Draft\n&Replace With New\n&Append",
+			1
+		)
+		policy = choice == 2 and "replace" or choice == 3 and "append" or "keep"
 	end
 
 	if policy == "replace" then
-		set_buffer_text(state.buf, text)
-		return
-	end
-
-	local choice =
-		vim.fn.confirm("An unsent draft already exists. Which one should be used?", "&Keep Draft\n&Replace With New", 1)
-	if choice == 2 then
-		set_buffer_text(state.buf, text)
+		draft_model.replace(session.draft, text, meta)
+		load_buffer_text(session.buf, text)
+	elseif policy == "append" then
+		draft_model.append(session.draft, text, meta)
+		load_buffer_text(session.buf, text)
 	end
 end
 
----Open compose buffer for text modification
----@param text string Initial text (with unresolved placeholders)
----@param on_confirm fun(edited_text: string) Callback when user confirms
----@param on_cancel? fun() Optional callback when user cancels
-function M.open(text, on_confirm, on_cancel)
-	if _state and (not _state.buf or not vim.api.nvim_buf_is_valid(_state.buf)) then
-		_state = nil
-		_win = nil
-		_buf = nil
+---Open a compose draft with unresolved text.
+---@param text string
+---@param opts wiremux.ui.ComposeOpenOptions
+function M.open(text, opts)
+	opts = opts or {}
+	assert(type(opts.on_confirm) == "function", "wiremux compose requires on_confirm")
+
+	if active_session and not vim.api.nvim_buf_is_valid(active_session.buf) then
+		active_session = nil
 	end
 
 	local config = require("wiremux.config").opts.ui.compose
-
-	if _state and not _state.sent and vim.api.nvim_buf_is_valid(_state.buf) then
-		local state = _state
-		state.config = config
-		state.on_confirm = on_confirm
-		state.on_cancel = on_cancel
-
-		apply_new_payload_policy(state, text)
-
-		if not state.win or not vim.api.nvim_win_is_valid(state.win) then
-			state.win = create_window(state.buf, state.config)
-			_win = state.win
-		else
-			vim.api.nvim_set_current_win(state.win)
+	if active_session and not active_session.sent then
+		local session = active_session
+		if text ~= "" then
+			session.config = config
+			session.title = opts.title or config.title or " Compose Message "
+			session.on_confirm = opts.on_confirm
+			session.on_cancel = opts.on_cancel
+			apply_new_payload_policy(session, text, opts.page_meta)
 		end
-
-		update_footer(state)
-		move_cursor_to_end(state.win, state.buf)
+		show_session(session)
 		return
 	end
 
-	---@type wiremux.ui.ComposeState
-	local state = {
+	---@type wiremux.ui.ComposeSession
+	local session = {
 		buf = create_buffer(text),
 		config = config,
-		on_confirm = on_confirm,
-		on_cancel = on_cancel,
+		title = opts.title or config.title or " Compose Message ",
+		draft = draft_model.new(text, opts.page_meta),
+		on_confirm = opts.on_confirm,
+		on_cancel = opts.on_cancel,
+		confirming = false,
 		sent = false,
+		cancelled = false,
 	}
-
-	state.win = create_window(state.buf, config)
-
-	setup_syntax(state.buf)
-	setup_keymaps(state)
-	update_footer(state)
-	setup_autocmds(state)
-
-	_win = state.win
-	_buf = state.buf
-	_state = state
-
-	move_cursor_to_end(state.win, state.buf)
+	active_session = session
+	setup_syntax(session)
+	setup_keymaps(session)
+	setup_autocmds(session)
+	show_session(session)
 end
 
 return M

@@ -30,7 +30,7 @@ local M = {}
 ---@field border? string|string[] Border style (default: "rounded")
 ---@field style? string Window style (default: "minimal")
 ---@field close_behavior? "ask"|"hide"|"discard" Behavior when close action is triggered (default: "ask")
----@field on_new_payload? "ask"|"keep"|"replace" Behavior when compose opens with a new payload while an unsent draft exists (default: "ask")
+---@field on_new_payload? "ask"|"keep"|"replace"|"append" Behavior when compose opens with a new payload while an unsent draft exists (default: "ask")
 ---@field wo? table<string, any> Window options (default: { wrap = true, number = false, relativenumber = false })
 ---@field keymaps? wiremux.config.ComposeKeymaps Custom keymaps
 
@@ -44,6 +44,11 @@ local M = {}
 ---@field close? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field discard? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field files? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
+---@field previous? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
+---@field next? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
+
+---@class wiremux.config.ComposeOptions
+---@field title? string Compose window title
 
 ---@class wiremux.config.UserOptions
 ---@field log_level? wiremux.config.LogLevel
@@ -58,7 +63,7 @@ local M = {}
 ---@field behavior? wiremux.action.Behavior
 ---@field focus? boolean
 ---@field submit? boolean
----@field compose? boolean Open compose buffer before sending
+---@field compose? boolean|wiremux.config.ComposeOptions Open compose buffer before sending
 ---@field filter? wiremux.config.FilterConfig
 ---@field target? string Target definition name. Sends directly to matching instance, auto-creates if none exist.
 ---@field pre_keys? string|string[] Keystrokes to send before action (e.g. {"C-c"}, {"i"})
@@ -116,6 +121,8 @@ local defaults = {
 				files = {
 					{ "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
 				},
+				previous = { "<C-p>", mode = "n", desc = "Previous compose page" },
+				next = { "<C-n>", mode = "n", desc = "Next compose page" },
 			},
 		},
 	},
