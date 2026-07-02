@@ -24,6 +24,18 @@ describe("send single item", function()
 		assert.is_true(run_called)
 	end)
 
+	it("warns instead of snapshotting an invalid item value", function()
+		local warning
+		mocks.notify.warn = function(message)
+			warning = message
+		end
+
+		local ok = pcall(mocks.send.send, { label = "Missing value" })
+
+		assert.is_true(ok)
+		assert.matches("item.value must be a string", warning)
+	end)
+
 	it("uses visible field to filter items", function()
 		local picker_items = {}
 
@@ -128,10 +140,10 @@ describe("send single item", function()
 		local received_text
 		local compose_opened = false
 
-		mocks.compose.open = function(text, on_confirm)
+		mocks.compose.open = function(text, compose_opts)
 			compose_opened = true
 			assert.are.equal("draft", text)
-			on_confirm("edited draft")
+			compose_opts.on_confirm({ { text = "edited draft", meta = compose_opts.page_meta } })
 		end
 
 		mocks.backend.send = function(text)
@@ -145,6 +157,9 @@ describe("send single item", function()
 		end
 
 		mocks.send.send({ value = "draft", compose = true })
+		vim.wait(100, function()
+			return received_text ~= nil
+		end)
 
 		assert.is_true(compose_opened)
 		assert.are.equal("edited draft", received_text)
@@ -154,10 +169,10 @@ describe("send single item", function()
 		local received_text
 		local compose_opened = false
 
-		mocks.compose.open = function(text, on_confirm)
+		mocks.compose.open = function(text, compose_opts)
 			compose_opened = true
 			assert.are.equal("draft", text)
-			on_confirm("edited from opts")
+			compose_opts.on_confirm({ { text = "edited from opts", meta = compose_opts.page_meta } })
 		end
 
 		mocks.backend.send = function(text)
@@ -171,9 +186,104 @@ describe("send single item", function()
 		end
 
 		mocks.send.send({ value = "draft" }, { compose = true })
+		vim.wait(100, function()
+			return received_text ~= nil
+		end)
 
 		assert.is_true(compose_opened)
 		assert.are.equal("edited from opts", received_text)
+	end)
+
+	it("uses a compose table and keeps its title separate from the target title", function()
+		local compose_title
+		local target_title
+
+		mocks.compose.open = function(text, compose_opts)
+			compose_title = compose_opts.title
+			compose_opts.on_confirm({ { text = text, meta = compose_opts.page_meta } })
+		end
+		mocks.action.run = function(_, callbacks)
+			callbacks.on_definition("test", {}, {})
+		end
+		mocks.backend.create = function(_, def)
+			target_title = def.title
+		end
+
+		mocks.send.send({ value = "draft", compose = { title = " Review " }, title = "target" })
+		vim.wait(100, function()
+			return target_title ~= nil
+		end)
+
+		assert.are.equal(" Review ", compose_title)
+		assert.are.equal("target", target_title)
+	end)
+
+	it("uses whole-value compose precedence", function()
+		local compose_opened = false
+		local action_called = false
+		mocks.compose.open = function()
+			compose_opened = true
+		end
+		mocks.action.run = function()
+			action_called = true
+		end
+
+		mocks.send.send({ value = "draft", compose = false }, { compose = { title = "Ignored" } })
+
+		assert.is_false(compose_opened)
+		assert.is_true(action_called)
+	end)
+
+	it("prepares all compose pages with strict snapshots and preserves empty pages", function()
+		local received_text
+		local expand_calls = {}
+		mocks.context.expand = function(text, snapshot, opts)
+			table.insert(expand_calls, { snapshot = snapshot, opts = opts })
+			return text:gsub("{value}", snapshot.value or "{value}")
+		end
+		mocks.compose.open = function(_, compose_opts)
+			local confirmed = compose_opts.on_confirm({
+				{ text = " {value}  ", meta = { snapshot = { value = "first" } } },
+				{ text = "", meta = nil },
+				{ text = "{value}", meta = { snapshot = { value = "third" } } },
+			})
+			assert.is_true(confirmed)
+		end
+		mocks.backend.send = function(text)
+			received_text = text
+		end
+		mocks.action.run = function(_, callbacks)
+			callbacks.on_targets({}, {})
+		end
+
+		mocks.send.send({ value = "draft", compose = true })
+		vim.wait(100, function()
+			return received_text ~= nil
+		end)
+
+		assert.are.equal(" first\n\n\n\nthird", received_text)
+		assert.are.equal(3, #expand_calls)
+		assert.is_false(expand_calls[1].opts.resolve_missing)
+		assert.are.same({}, expand_calls[2].snapshot)
+	end)
+
+	it("keeps compose open when a page cannot be prepared", function()
+		local confirmation_result
+		local action_called = false
+		mocks.context.expand = function()
+			error("broken snapshot")
+		end
+		mocks.compose.open = function(_, compose_opts)
+			confirmation_result = compose_opts.on_confirm({ { text = "draft" } })
+		end
+		mocks.action.run = function()
+			action_called = true
+		end
+
+		mocks.send.send({ value = "draft", compose = true })
+
+		assert.is_false(confirmation_result)
+		assert.is_false(action_called)
 	end)
 end)
 
@@ -237,6 +347,30 @@ describe("send list of items", function()
 
 		assert.is_true(send_called)
 		assert.are.equal("selected", received_text)
+	end)
+
+	it("captures an independent context snapshot for each picker item", function()
+		local captured = {}
+		local selected_snapshot
+		mocks.context.snapshot = function(text)
+			captured[text] = { source = text }
+			return captured[text]
+		end
+		mocks.context.expand = function(_, snapshot)
+			selected_snapshot = snapshot
+			return "expanded"
+		end
+		mocks.picker.select = function(items, _, callback)
+			callback(items[2])
+		end
+
+		mocks.send.send({
+			{ value = "first {one}" },
+			{ value = "second {two}" },
+		})
+
+		assert.are.equal(captured["second {two}"], selected_snapshot)
+		assert.are_not.equal(captured["first {one}"], selected_snapshot)
 	end)
 
 	it("handles picker cancellation", function()

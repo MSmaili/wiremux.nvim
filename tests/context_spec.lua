@@ -83,5 +83,16 @@ describe("context", function()
 		it("handles mixed known and unknown placeholders", function()
 			assert.are.equal("value1 {unknown} value2", context.expand("{var1} {unknown} {var2}"))
 		end)
+
+		it("does not resolve values missing from a strict snapshot", function()
+			assert.are.equal(
+				"captured {var2} {unknown}",
+				context.expand("{var1} {var2} {unknown}", { var1 = "captured" }, { resolve_missing = false })
+			)
+		end)
+
+		it("accepts a missing strict snapshot", function()
+			assert.are.equal("{var1}", context.expand("{var1}", nil, { resolve_missing = false }))
+		end)
 	end)
 end)
