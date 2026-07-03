@@ -75,7 +75,7 @@ These are the full defaults from `config.lua`. You only need to override what yo
   actions = {
     close  = { behavior = "pick" },
     create = { behavior = "pick",  focus = true },
-    send   = { behavior = "pick",  focus = true },
+    send   = { behavior = "pick",  focus = true, compose = false },
     focus  = { behavior = "last",  focus = true },
     toggle = { behavior = "last",  focus = false },
   },
@@ -97,6 +97,34 @@ These are the full defaults from `config.lua`. You only need to override what yo
     targets = {
       filter = nil,
       sort = nil,
+    },
+  },
+
+  ui = {
+    compose = {
+      width = 0.6,
+      height = 0.4,
+      title = " Compose Message ",
+      border = "rounded",
+      style = "minimal",
+      close_behavior = "ask",  -- "ask" | "hide" | "discard"
+      on_new_payload = "ask",  -- "ask" | "keep" | "replace" | "append"
+      wo = { wrap = true, number = false, relativenumber = false },
+      keymaps = {
+        send = {
+          { "<C-s>", mode = "i", desc = "Send to target" },
+          { "<CR>", mode = "n", desc = "Send to target" },
+        },
+        close = {
+          { "q", mode = "n", desc = "Close draft" },
+          { "<Esc>", mode = "n", desc = "Close draft" },
+        },
+        files = {
+          { "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
+        },
+        previous = { "<C-p>", mode = "n", desc = "Previous compose page" },
+        next = { "<C-n>", mode = "n", desc = "Next compose page" },
+      },
     },
   },
 }
@@ -217,8 +245,48 @@ Each item in the picker can have:
 | `label`     | Display name in the picker            | `"Explain file"`                                 |
 | `submit`    | Auto-press Enter after sending        | `true` (useful for commands)                     |
 | `visible`   | Show/hide this item dynamically       | `function() return vim.bo.filetype == "lua" end` |
+| `compose`   | Review before sending (`true` or options table) | `{ title = " Review " }`                 |
 | `pre_keys`  | Keystrokes to send before pasting     | `"C-c"`, `{"C-c", "i"}`                         |
 | `post_keys` | Keystrokes to send after pasting      | `"Escape"`, `{"Escape", "Enter"}`                |
+
+### Compose Drafts
+
+Use compose mode to edit unresolved text before choosing a target:
+
+```lua
+require("wiremux").send("Review {this}", { compose = true })
+
+require("wiremux").send("Review {selection}", {
+  compose = { title = " Review Selection " },
+})
+```
+
+Set `ui.compose.on_new_payload = "append"` to collect multiple editor locations into one paged draft. Each invocation becomes a page, normal-mode `<C-p>` and `<C-n>` navigate pages, and confirmation sends all pages once with a blank line between them:
+
+```lua
+require("wiremux").setup({
+  ui = {
+    compose = {
+      close_behavior = "hide",
+      on_new_payload = "append",
+    },
+  },
+})
+
+-- Map this in normal or visual mode, then invoke it from each location.
+vim.keymap.set({ "n", "x" }, "<leader>ar", function()
+  require("wiremux").send("Review this context:\n{this}", {
+    compose = { title = " Review Context " },
+    target = "claude",
+  })
+end)
+```
+
+Compose keeps placeholders raw while editing. Every page captures placeholder values when it is added, so `{this}` from different files or selections expands against the correct original location at confirmation time. Placeholders typed later remain literal unless that placeholder was present in the page's captured snapshot.
+
+When a draft already exists, `on_new_payload` supports `"ask"`, `"keep"`, `"replace"`, and `"append"`. The ask dialog defaults to **Keep Draft**. Calling `send()` without text reopens an existing hidden draft without adding a page or changing its delivery options.
+
+Compose option precedence is whole-value precedence: item-level `compose`, then call-level `opts.compose`, then `actions.send.compose`. Tables imply compose is enabled and are not merged across levels.
 
 ### Sending Keystrokes Before/After
 

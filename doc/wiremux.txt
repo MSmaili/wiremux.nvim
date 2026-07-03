@@ -99,6 +99,7 @@ SendItem fields ~
 | label     | string (optional)       | Display name in picker                   |
 | title     | string (optional)       | Custom tmux window / zellij tab name     |
 | submit    | boolean (optional)      | Auto-submit after sending                |
+| compose   | boolean or table        | Review in a compose draft before sending |
 | visible   | boolean or function     | Show/hide item based on condition        |
 | pre_keys  | string or string[]      | Keystrokes to send before pasting        |
 | post_keys | string or string[]      | Keystrokes to send after pasting         |
@@ -158,6 +159,31 @@ Some TUI apps need keystrokes sent before/after the pasted text. For example,
 <
 Item-level `pre_keys`/`post_keys` override opts-level when both are set.
 
+Compose drafts ~
+                                               *wiremux-howto-compose*
+
+Use `compose = true` to edit unresolved text before selecting a target. A table
+also enables compose and can set the compose window title:
+>lua
+  require("wiremux").send("Review {this}", { compose = true })
+  require("wiremux").send("Review {selection}", {
+    compose = { title = " Review Selection " },
+  })
+<
+
+Set `ui.compose.on_new_payload = "append"` to collect multiple invocations in
+one paged draft. Use normal-mode `<C-p>` and `<C-n>` to navigate pages.
+Confirmation expands each
+page against the context captured when that page was added, joins pages with a
+blank line, and sends one payload.
+
+Supported new-payload policies are "ask", "keep", "replace", and "append".
+The ask dialog defaults to Keep Draft. Calling `send()` without text reopens a
+hidden draft without adding a page or changing its delivery options.
+
+Compose precedence is whole-value precedence: item `compose`, call options
+`compose`, then `actions.send.compose`. Compose tables are not merged.
+
 Dynamic labels for targets ~
 
 You can use a function for `label` to create dynamic display names:
@@ -174,6 +200,16 @@ You can use a function for `label` to create dynamic display names:
             local cmd = inst.running_command or "idle"
             return string.format("Dev #%d [%s]", index, cmd)
           end,
+        },
+      },
+    },
+    ui = {
+      compose = {
+        close_behavior = "hide", -- "ask" | "hide" | "discard"
+        on_new_payload = "append", -- "ask" | "keep" | "replace" | "append"
+        keymaps = {
+          previous = { "<C-p>", mode = "n" },
+          next = { "<C-n>", mode = "n" },
         },
       },
     },
