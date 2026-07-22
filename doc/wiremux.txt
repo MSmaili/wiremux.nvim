@@ -184,6 +184,36 @@ hidden draft without adding a page or changing its delivery options.
 Compose precedence is whole-value precedence: item `compose`, call options
 `compose`, then `actions.send.compose`. Compose tables are not merged.
 
+Customize compose on open ~
+                                         *wiremux-compose-open-event*
+
+Wiremux emits the `User` event `WiremuxComposeOpen` after a compose window is
+fully configured and focused. Use it for editor preferences such as insert
+mode, spell checking, or extra buffer-local mappings:
+>lua
+  vim.api.nvim_create_autocmd("User", {
+    pattern = "WiremuxComposeOpen",
+    callback = function(event)
+      local buf = event.data.buf
+      local win = event.data.win
+
+      vim.wo[win].spell = true
+      vim.keymap.set("n", "<leader>cc", function()
+        vim.api.nvim_buf_set_lines(buf, 0, 0, false, {
+          "Please review the following:",
+          "",
+        })
+      end, { buffer = buf, desc = "Insert review prompt" })
+      vim.cmd("startinsert!")
+    end,
+  })
+<
+
+Event data contains `buf`, `win`, and `reopened`. Initial window creation uses
+`reopened = false`; recreating a hidden draft window uses `reopened = true`.
+The event does not fire when an already-visible compose window is only focused.
+Register the autocmd before opening compose.
+
 Dynamic labels for targets ~
 
 You can use a function for `label` to create dynamic display names:

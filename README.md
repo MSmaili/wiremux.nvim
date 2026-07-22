@@ -288,6 +288,32 @@ When a draft already exists, `on_new_payload` supports `"ask"`, `"keep"`, `"repl
 
 Compose option precedence is whole-value precedence: item-level `compose`, then call-level `opts.compose`, then `actions.send.compose`. Tables imply compose is enabled and are not merged across levels.
 
+#### Customize Compose On Open
+
+Wiremux emits the `User` event `WiremuxComposeOpen` after a compose window is fully configured and focused. Use it for editor preferences such as starting insert mode, enabling spell checking, or adding buffer-local mappings:
+
+```lua
+vim.api.nvim_create_autocmd("User", {
+  pattern = "WiremuxComposeOpen",
+  callback = function(event)
+    local buf = event.data.buf
+    local win = event.data.win
+
+    vim.wo[win].spell = true
+    vim.keymap.set("n", "<leader>cc", function()
+      vim.api.nvim_buf_set_lines(buf, 0, 0, false, {
+        "Please review the following:",
+        "",
+      })
+    end, { buffer = buf, desc = "Insert review prompt" })
+
+    vim.cmd("startinsert!")
+  end,
+})
+```
+
+The event data contains `buf`, `win`, and `reopened`. It fires on initial window creation with `reopened = false` and when a hidden draft window is recreated with `reopened = true`. It does not fire again when an already-visible compose window is merely focused. Register the autocmd before opening compose.
+
 ### Sending Keystrokes Before/After
 
 Some TUI apps need keystrokes sent before/after the pasted text — for example, `C-c` to cancel any in-progress input, or `Escape` to return to a neutral state after pasting:
