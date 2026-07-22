@@ -3,6 +3,7 @@
 describe("compose UI", function()
 	local compose
 	local config
+	local event_group
 
 	local function mapping(key)
 		return vim.fn.maparg(key, "n", false, true).callback
@@ -25,6 +26,7 @@ describe("compose UI", function()
 				},
 			},
 		})
+		event_group = vim.api.nvim_create_augroup("wiremux_compose_test_user", { clear = true })
 		compose = require("wiremux.ui.compose")
 	end)
 
@@ -33,6 +35,7 @@ describe("compose UI", function()
 		if buf then
 			vim.api.nvim_buf_delete(buf, { force = true })
 		end
+		pcall(vim.api.nvim_del_augroup_by_id, event_group)
 	end)
 
 	it("appends pages, saves edits, navigates, and confirms in order", function()
@@ -175,5 +178,52 @@ describe("compose UI", function()
 
 		assert.are.equal(1, cancelled)
 		assert.is_nil(compose.get_buf())
+	end)
+
+	it("emits WiremuxComposeOpen when opening and reopening the window", function()
+		local events = {}
+		vim.api.nvim_create_autocmd("User", {
+			group = event_group,
+			pattern = "WiremuxComposeOpen",
+			callback = function(event)
+				table.insert(events, vim.deepcopy(event.data))
+				assert.is_true(vim.api.nvim_buf_is_valid(event.data.buf))
+				assert.is_true(vim.api.nvim_win_is_valid(event.data.win))
+				assert.are.equal(event.data.win, vim.api.nvim_get_current_win())
+				vim.wo[event.data.win].spell = true
+			end,
+		})
+
+		compose.open("first", { on_confirm = function() end })
+		local buf = compose.get_buf()
+		assert.are.equal(1, #events)
+		assert.is_false(events[1].reopened)
+		assert.are.equal(buf, events[1].buf)
+		assert.is_true(vim.wo[events[1].win].spell)
+
+		compose.open("second", { on_confirm = function() end })
+		assert.are.equal(1, #events)
+		mapping("q")()
+		compose.open("", { on_confirm = function() end })
+
+		assert.are.equal(2, #events)
+		assert.is_true(events[2].reopened)
+		assert.are.equal(buf, events[2].buf)
+	end)
+
+	it("keeps compose usable when WiremuxComposeOpen fails", function()
+		local exec_autocmds = vim.api.nvim_exec_autocmds
+		local notify = require("wiremux.utils.notify")
+		local notify_error = notify.error
+		vim.api.nvim_exec_autocmds = function()
+			error("custom setup failed")
+		end
+		notify.error = function() end
+		local ok = pcall(compose.open, "draft", { on_confirm = function() end })
+		vim.api.nvim_exec_autocmds = exec_autocmds
+		notify.error = notify_error
+
+		assert.is_true(ok)
+		assert.is_true(vim.api.nvim_buf_is_valid(compose.get_buf()))
 	end)
 end)
