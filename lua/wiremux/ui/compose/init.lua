@@ -370,8 +370,10 @@ local function setup_autocmds(session)
 end
 
 ---@param session wiremux.ui.ComposeSession
-local function show_session(session)
-	if not session.win or not vim.api.nvim_win_is_valid(session.win) then
+---@param reopened boolean
+local function show_session(session, reopened)
+	local opened = not session.win or not vim.api.nvim_win_is_valid(session.win)
+	if opened then
 		session.win = create_window(session.buf, session.config, window_title(session))
 	else
 		vim.api.nvim_set_current_win(session.win)
@@ -379,6 +381,21 @@ local function show_session(session)
 	update_title(session)
 	update_footer(session)
 	move_cursor_to_end(session.win, session.buf)
+
+	if opened then
+		local ok, err = pcall(vim.api.nvim_exec_autocmds, "User", {
+			pattern = "WiremuxComposeOpen",
+			modeline = false,
+			data = {
+				buf = session.buf,
+				win = session.win,
+				reopened = reopened,
+			},
+		})
+		if not ok then
+			notify.error("WiremuxComposeOpen failed: " .. tostring(err))
+		end
+	end
 end
 
 ---@param session wiremux.ui.ComposeSession
@@ -432,7 +449,7 @@ function M.open(text, opts)
 			session.on_cancel = opts.on_cancel
 			apply_new_payload_policy(session, text, opts.page_meta)
 		end
-		show_session(session)
+		show_session(session, true)
 		return
 	end
 
@@ -452,7 +469,7 @@ function M.open(text, opts)
 	setup_syntax(session)
 	setup_keymaps(session)
 	setup_autocmds(session)
-	show_session(session)
+	show_session(session, false)
 end
 
 return M
