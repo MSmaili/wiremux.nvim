@@ -197,7 +197,7 @@ local function resolve_and_send(item, opts, frozen_context)
 	if compose then
 		local compose_opts = type(compose) == "table" and compose or {}
 		require("wiremux.ui.compose").open(item.value, {
-			title = compose_opts.title,
+			compose = compose_opts,
 			page_meta = { snapshot = frozen_context },
 			on_confirm = function(pages)
 				local expanded = prepare_compose_pages(pages)

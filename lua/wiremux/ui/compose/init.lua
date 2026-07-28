@@ -9,7 +9,7 @@ local M = {}
 ---@field on_confirm fun(pages: wiremux.ui.ComposePage[]): boolean?
 ---@field on_cancel? fun()
 ---@field page_meta? any
----@field title? string
+---@field compose? wiremux.config.ComposeOptions Per-session overrides for ui.compose
 
 ---@class wiremux.ui.ComposeSession
 ---@field buf number
@@ -439,12 +439,17 @@ function M.open(text, opts)
 		active_session = nil
 	end
 
-	local config = require("wiremux.config").opts.ui.compose
+	local config = vim.tbl_deep_extend(
+		"force",
+		{},
+		require("wiremux.config").opts.ui.compose,
+		opts.compose or {}
+	)
 	if active_session and not active_session.sent then
 		local session = active_session
 		if text ~= "" then
 			session.config = config
-			session.title = opts.title or config.title or " Compose Message "
+			session.title = config.title or " Compose Message "
 			session.on_confirm = opts.on_confirm
 			session.on_cancel = opts.on_cancel
 			apply_new_payload_policy(session, text, opts.page_meta)
@@ -457,7 +462,7 @@ function M.open(text, opts)
 	local session = {
 		buf = create_buffer(text),
 		config = config,
-		title = opts.title or config.title or " Compose Message ",
+		title = config.title or " Compose Message ",
 		draft = draft_model.new(text, opts.page_meta),
 		on_confirm = opts.on_confirm,
 		on_cancel = opts.on_cancel,

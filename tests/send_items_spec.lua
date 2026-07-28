@@ -195,11 +195,11 @@ describe("send single item", function()
 	end)
 
 	it("uses a compose table and keeps its title separate from the target title", function()
-		local compose_title
+		local compose_config
 		local target_title
 
 		mocks.compose.open = function(text, compose_opts)
-			compose_title = compose_opts.title
+			compose_config = compose_opts.compose
 			compose_opts.on_confirm({ { text = text, meta = compose_opts.page_meta } })
 		end
 		mocks.action.run = function(_, callbacks)
@@ -209,12 +209,24 @@ describe("send single item", function()
 			target_title = def.title
 		end
 
-		mocks.send.send({ value = "draft", compose = { title = " Review " }, title = "target" })
+		mocks.send.send({
+			value = "draft",
+			compose = {
+				title = " Review ",
+				close_behavior = "hide",
+				on_new_payload = "append",
+			},
+			title = "target",
+		})
 		vim.wait(100, function()
 			return target_title ~= nil
 		end)
 
-		assert.are.equal(" Review ", compose_title)
+		assert.are.same({
+			title = " Review ",
+			close_behavior = "hide",
+			on_new_payload = "append",
+		}, compose_config)
 		assert.are.equal("target", target_title)
 	end)
 

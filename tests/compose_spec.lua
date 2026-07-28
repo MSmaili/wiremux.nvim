@@ -51,7 +51,7 @@ describe("compose UI", function()
 		vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "edited first" })
 
 		compose.open("second", {
-			title = " Review ",
+			compose = { title = " Review " },
 			page_meta = "two",
 			on_confirm = function(pages)
 				confirmed_pages = vim.deepcopy(pages)
@@ -105,7 +105,7 @@ describe("compose UI", function()
 		local first_called = false
 		local empty_called = false
 		compose.open("draft", {
-			title = " Original ",
+			compose = { title = " Original " },
 			on_confirm = function(pages)
 				first_called = pages[1].text == "draft"
 				return true
@@ -114,7 +114,7 @@ describe("compose UI", function()
 		mapping("q")()
 
 		compose.open("", {
-			title = " Ignored ",
+			compose = { title = " Ignored " },
 			on_confirm = function()
 				empty_called = true
 				return true
@@ -148,13 +148,13 @@ describe("compose UI", function()
 		config.opts.ui.compose.on_new_payload = "keep"
 		local latest_called = false
 		compose.open("first", {
-			title = " First Title ",
+			compose = { title = " First Title " },
 			on_confirm = function()
 				error("old callback should be replaced")
 			end,
 		})
 		compose.open("ignored", {
-			title = " Latest Title ",
+			compose = { title = " Latest Title " },
 			on_confirm = function(pages)
 				latest_called = pages[1].text == "first" and #pages == 1
 				return true
@@ -164,6 +164,36 @@ describe("compose UI", function()
 		assert.matches("Latest Title", title())
 		mapping("<CR>")()
 		assert.is_true(latest_called)
+	end)
+
+	it("merges per-session compose options over global defaults", function()
+		config.opts.ui.compose.on_new_payload = "keep"
+		config.opts.ui.compose.close_behavior = "ask"
+		local pages
+		local compose_config = {
+			on_new_payload = "append",
+			close_behavior = "hide",
+		}
+
+		compose.open("first", {
+			compose = compose_config,
+			on_confirm = function() end,
+		})
+		compose.open("second", {
+			compose = compose_config,
+			on_confirm = function(value)
+				pages = value
+				return false
+			end,
+		})
+
+		mapping("<CR>")()
+
+		assert.are.equal(2, #pages)
+		assert.are.equal("first", pages[1].text)
+		assert.are.equal("second", pages[2].text)
+		assert.are.equal("keep", config.opts.ui.compose.on_new_payload)
+		assert.are.equal("ask", config.opts.ui.compose.close_behavior)
 	end)
 
 	it("invokes cancellation once when the draft buffer is wiped", function()

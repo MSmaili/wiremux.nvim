@@ -47,8 +47,7 @@ local M = {}
 ---@field previous? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field next? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 
----@class wiremux.config.ComposeOptions
----@field title? string Compose window title
+---@class wiremux.config.ComposeOptions: wiremux.config.ComposeUIConfig
 
 ---@class wiremux.config.UserOptions
 ---@field log_level? wiremux.config.LogLevel

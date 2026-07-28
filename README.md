@@ -245,7 +245,7 @@ Each item in the picker can have:
 | `label`     | Display name in the picker            | `"Explain file"`                                 |
 | `submit`    | Auto-press Enter after sending        | `true` (useful for commands)                     |
 | `visible`   | Show/hide this item dynamically       | `function() return vim.bo.filetype == "lua" end` |
-| `compose`   | Review before sending (`true` or options table) | `{ title = " Review " }`                 |
+| `compose`   | Review before sending (`true` or `ui.compose` overrides) | `{ on_new_payload = "append" }` |
 | `pre_keys`  | Keystrokes to send before pasting     | `"C-c"`, `{"C-c", "i"}`                         |
 | `post_keys` | Keystrokes to send after pasting      | `"Escape"`, `{"Escape", "Enter"}`                |
 
@@ -257,26 +257,25 @@ Use compose mode to edit unresolved text before choosing a target:
 require("wiremux").send("Review {this}", { compose = true })
 
 require("wiremux").send("Review {selection}", {
-  compose = { title = " Review Selection " },
+  compose = {
+    title = " Review Selection ",
+    close_behavior = "hide",
+    on_new_payload = "append",
+  },
 })
 ```
 
-Set `ui.compose.on_new_payload = "append"` to collect multiple editor locations into one paged draft. Each invocation becomes a page, normal-mode `<C-p>` and `<C-n>` navigate pages, and confirmation sends all pages once with a blank line between them:
+Set `on_new_payload = "append"` for one compose configuration to collect multiple editor locations into one paged draft. Each invocation becomes a page, normal-mode `<C-p>` and `<C-n>` navigate pages, and confirmation sends all pages once with a blank line between them:
 
 ```lua
-require("wiremux").setup({
-  ui = {
-    compose = {
-      close_behavior = "hide",
-      on_new_payload = "append",
-    },
-  },
-})
-
 -- Map this in normal or visual mode, then invoke it from each location.
 vim.keymap.set({ "n", "x" }, "<leader>ar", function()
   require("wiremux").send("Review this context:\n{this}", {
-    compose = { title = " Review Context " },
+    compose = {
+      title = " Review Context ",
+      close_behavior = "hide",
+      on_new_payload = "append",
+    },
     target = "claude",
   })
 end)
@@ -286,7 +285,7 @@ Compose keeps placeholders raw while editing. Every page captures placeholder va
 
 When a draft already exists, `on_new_payload` supports `"ask"`, `"keep"`, `"replace"`, and `"append"`. The ask dialog defaults to **Keep Draft**. Calling `send()` without text reopens an existing hidden draft without adding a page or changing its delivery options.
 
-Compose option precedence is whole-value precedence: item-level `compose`, then call-level `opts.compose`, then `actions.send.compose`. Tables imply compose is enabled and are not merged across levels.
+Compose option precedence is whole-value precedence: item-level `compose`, then call-level `opts.compose`, then `actions.send.compose`. Tables imply compose is enabled and are not merged across those levels. The selected table uses the same fields as `ui.compose` and is deep-merged over those global defaults for the compose session.
 
 #### Customize Compose On Open
 
