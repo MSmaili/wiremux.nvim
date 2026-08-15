@@ -1,3 +1,5 @@
+local placeholder = require("wiremux.placeholder")
+
 local M = {}
 
 local valid = {
@@ -96,7 +98,12 @@ local function validate_resolvers(resolvers)
 	end
 
 	for name, resolver in pairs(resolvers) do
-		if type(resolver) ~= "function" then
+		if not placeholder.is_valid_name(name) then
+			table.insert(
+				errors,
+				string.format("context resolver name '%s' must match %s", tostring(name), placeholder.validation_pattern)
+			)
+		elseif type(resolver) ~= "function" then
 			table.insert(
 				errors,
 				string.format("context resolver '%s' is not a function (got %s)", name, type(resolver))

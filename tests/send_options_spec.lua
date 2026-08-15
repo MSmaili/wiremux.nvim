@@ -251,19 +251,19 @@ describe("send with pre_keys/post_keys", function()
 	end)
 end)
 
-describe("context expansion", function()
+describe("placeholder materialization", function()
 	local mocks
 
 	before_each(function()
 		mocks = helpers.setup()
 	end)
 
-	it("expands placeholders in text", function()
-		local expanded = "expanded text"
+	it("materializes placeholders in text", function()
+		local materialized = "expanded text"
 
-		mocks.context.expand = function(text)
+		mocks.context.materialize = function(text)
 			assert.are.equal("{file}", text)
-			return expanded
+			return materialized
 		end
 
 		local received_text
@@ -280,14 +280,14 @@ describe("context expansion", function()
 
 		mocks.send.send("{file}")
 
-		assert.are.equal(expanded, received_text)
+		assert.are.equal(materialized, received_text)
 	end)
 
-	it("expands placeholders in SendItem value", function()
-		local expanded = "expanded"
+	it("materializes placeholders in SendItem value", function()
+		local materialized = "expanded"
 
-		mocks.context.expand = function(text)
-			return expanded
+		mocks.context.materialize = function()
+			return materialized
 		end
 
 		local received_text
@@ -304,13 +304,13 @@ describe("context expansion", function()
 
 		mocks.send.send({ value = "{placeholder}" })
 
-		assert.are.equal(expanded, received_text)
+		assert.are.equal(materialized, received_text)
 	end)
 
-	it("handles expansion error gracefully", function()
+	it("handles materialization errors gracefully", function()
 		local error_shown = false
 
-		mocks.context.expand = function()
+		mocks.context.materialize = function()
 			error("invalid placeholder")
 		end
 

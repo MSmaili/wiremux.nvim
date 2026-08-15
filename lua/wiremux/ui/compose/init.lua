@@ -2,6 +2,7 @@ local draft_model = require("wiremux.ui.compose.draft")
 local normalize_keymap = require("wiremux.ui.compose.keymaps").normalize
 local find_key_for_mode = require("wiremux.ui.compose.keymaps").find_key_for_mode
 local notify = require("wiremux.utils.notify")
+local placeholder = require("wiremux.placeholder")
 
 local M = {}
 
@@ -322,10 +323,8 @@ end
 ---@param session wiremux.ui.ComposeSession
 local function setup_syntax(session)
 	vim.api.nvim_buf_call(session.buf, function()
-		vim.cmd([[
-			syntax match WiremuxPlaceholder /{[^}]\+}/
-			highlight default link WiremuxPlaceholder Special
-		]])
+		vim.cmd("syntax match WiremuxPlaceholder /" .. placeholder.vim_highlight_pattern .. "/")
+		vim.cmd("highlight default link WiremuxPlaceholder Special")
 	end)
 end
 

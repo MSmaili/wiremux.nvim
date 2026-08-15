@@ -36,10 +36,13 @@ function M.setup()
 		picker = helpers.mock_picker(),
 		notify = helpers.mock_notify(),
 		context = {
-			snapshot = function()
-				return {}
+			capture = function()
+				return { enabled = true, capture_set = {}, values = {} }
 			end,
-			expand = function(text)
+			extend = function(capture)
+				return capture
+			end,
+			materialize = function(text)
 				return text
 			end,
 		},

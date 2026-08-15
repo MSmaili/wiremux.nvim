@@ -68,7 +68,7 @@ local function prepare_picker_items(items)
 			table.insert(picker_items, {
 				label = item.label or item.value,
 				value = item,
-				snapshot = type(item.value) == "string" and context.snapshot(item.value) or {},
+				placeholder_capture = type(item.value) == "string" and context.capture(item.value) or nil,
 			})
 		end
 	end
@@ -142,39 +142,44 @@ local function resolve_send_backend_opts(item, opts, defaults)
 end
 
 ---@param text string
----@param snapshot table<string, string>
----@param expand_opts? { resolve_missing?: boolean }
+---@param capture wiremux.context.PlaceholderCapture
 ---@return string?
-local function expand_with_context(text, snapshot, expand_opts)
-	local ok, expanded = pcall(context.expand, text, snapshot, expand_opts)
+local function materialize_with_context(text, capture)
+	local ok, materialized = pcall(function()
+		local extended = context.extend(capture, text)
+		return context.materialize(text, extended)
+	end)
 	if not ok then
-		notify.error(expanded)
+		notify.error(materialized)
 		return nil
 	end
-	return expanded
+	return materialized
 end
 
 ---@param pages wiremux.ui.ComposePage[]
 ---@return string?
 local function prepare_compose_pages(pages)
-	local expanded_pages = {}
+	local materialized_pages = {}
 	for index, page in ipairs(pages) do
-		local snapshot = type(page.meta) == "table" and page.meta.snapshot or nil
-		local ok, expanded = pcall(context.expand, page.text, snapshot or {}, { resolve_missing = false })
+		local capture = type(page.meta) == "table" and page.meta.placeholder_capture or nil
+		local ok, materialized = pcall(function()
+			local extended = context.extend(capture, page.text)
+			return context.materialize(page.text, extended)
+		end)
 		if not ok then
-			notify.error(string.format("Failed to prepare compose page %d: %s", index, tostring(expanded)))
+			notify.error(string.format("Failed to prepare compose page %d: %s", index, tostring(materialized)))
 			return nil
 		end
-		expanded_pages[index] = expanded:gsub("%s+$", "")
+		materialized_pages[index] = materialized:gsub("%s+$", "")
 	end
-	return table.concat(expanded_pages, "\n\n")
+	return table.concat(materialized_pages, "\n\n")
 end
 
 ---Resolve all options against defaults, then send
 ---@param item wiremux.action.SendItem
 ---@param opts wiremux.config.ActionConfig
----@param frozen_context table<string, string>
-local function resolve_and_send(item, opts, frozen_context)
+---@param placeholder_capture wiremux.context.PlaceholderCapture
+local function resolve_and_send(item, opts, placeholder_capture)
 	if type(item.value) ~= "string" then
 		notify.warn("wiremux.send item.value must be a string")
 		return
@@ -198,14 +203,14 @@ local function resolve_and_send(item, opts, frozen_context)
 		local compose_opts = type(compose) == "table" and compose or {}
 		require("wiremux.ui.compose").open(item.value, {
 			compose = compose_opts,
-			page_meta = { snapshot = frozen_context },
+			page_meta = { placeholder_capture = placeholder_capture },
 			on_confirm = function(pages)
-				local expanded = prepare_compose_pages(pages)
-				if expanded == nil then
+				local materialized = prepare_compose_pages(pages)
+				if materialized == nil then
 					return false
 				end
 				vim.schedule(function()
-					do_send(expanded, resolved, item.title)
+					do_send(materialized, resolved, item.title)
 				end)
 				return true
 			end,
@@ -213,12 +218,12 @@ local function resolve_and_send(item, opts, frozen_context)
 		return
 	end
 
-	local expanded = expand_with_context(item.value, frozen_context)
-	if not expanded then
+	local materialized = materialize_with_context(item.value, placeholder_capture)
+	if not materialized then
 		return
 	end
 
-	do_send(expanded, resolved, item.title)
+	do_send(materialized, resolved, item.title)
 end
 
 ---Send a single send item
@@ -230,7 +235,7 @@ local function send_single_item(item, opts)
 		return
 	end
 
-	resolve_and_send(item, opts, context.snapshot(item.value))
+	resolve_and_send(item, opts, context.capture(item.value))
 end
 
 ---Send from send library (picker)
@@ -257,7 +262,7 @@ local function send_from_library(items, opts)
 
 		---@type wiremux.action.SendItem
 		local item = choice.value
-		resolve_and_send(item, opts, choice.snapshot)
+		resolve_and_send(item, opts, choice.placeholder_capture)
 	end)
 end
 

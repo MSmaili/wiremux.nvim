@@ -1,65 +1,102 @@
 local builtins = require("wiremux.context.builtins")
 local notify = require("wiremux.utils.notify")
+local placeholder = require("wiremux.placeholder")
 
 local M = {}
 
+---@alias wiremux.context.Resolver fun(): string?
+
+---@class wiremux.context.PlaceholderCapture
+---@field enabled boolean
+---@field capture_set table<string, true>
+---@field values table<string, string>
+
 ---@type table<string, wiremux.context.Resolver>
 local resolvers = {}
-local UNRESOLVED = {}
 
----@param texts string|string[]
----@return table<string, true>
-local function collect_placeholders(texts)
-	if type(texts) == "string" then
-		texts = { texts }
+---@param names table<string, true>
+---@return string[]
+local function sorted_names(names)
+	local result = {}
+	for name in pairs(names) do
+		table.insert(result, name)
+	end
+	table.sort(result)
+	return result
+end
+
+---@generic T
+---@param source table<string, T>
+---@return table<string, T>
+local function clone_map(source)
+	local result = {}
+	for key, value in pairs(source) do
+		result[key] = value
+	end
+	return result
+end
+
+---@param capture any
+local function assert_capture(capture)
+	assert(type(capture) == "table", "wiremux placeholder capture must be a table")
+	assert(type(capture.enabled) == "boolean", "wiremux placeholder capture.enabled must be a boolean")
+	assert(type(capture.capture_set) == "table", "wiremux placeholder capture.capture_set must be a table")
+	assert(type(capture.values) == "table", "wiremux placeholder capture.values must be a table")
+
+	for name, attempted in pairs(capture.capture_set) do
+		assert(placeholder.is_valid_name(name), "wiremux placeholder capture contains an invalid name")
+		assert(attempted == true, "wiremux placeholder capture.capture_set values must be true")
+	end
+	for name, value in pairs(capture.values) do
+		assert(placeholder.is_valid_name(name), "wiremux placeholder capture contains an invalid value name")
+		assert(capture.capture_set[name] == true, "wiremux placeholder capture value was not captured")
+		assert(type(value) == "string", "wiremux placeholder capture values must be strings")
+	end
+end
+
+---@param capture wiremux.context.PlaceholderCapture
+---@return wiremux.context.PlaceholderCapture
+local function clone_capture(capture)
+	assert_capture(capture)
+	return {
+		enabled = capture.enabled,
+		capture_set = clone_map(capture.capture_set),
+		values = clone_map(capture.values),
+	}
+end
+
+---Replace all custom context resolvers while preserving builtins.
+---@param custom_resolvers? table<string, wiremux.context.Resolver>
+function M.configure(custom_resolvers)
+	local configured = {}
+	for name, resolver in pairs(builtins) do
+		configured[name] = resolver
 	end
 
-	local names = {}
-	for _, text in ipairs(texts) do
-		if type(text) == "string" and text:find("{", 1, true) then
-			for name in text:gmatch("{([%w_]+)}") do
-				names[name] = true
+	if type(custom_resolvers) == "table" then
+		for name, resolver in pairs(custom_resolvers) do
+			if placeholder.is_valid_name(name) and type(resolver) == "function" then
+				configured[name] = resolver
 			end
 		end
 	end
+
+	resolvers = configured
+end
+
+---List registered placeholder names in deterministic order.
+---@return string[]
+function M.list()
+	local names = {}
+	for name in pairs(resolvers) do
+		table.insert(names, name)
+	end
+	table.sort(names)
 	return names
 end
 
--- Register builtins
-for name, fn in pairs(builtins) do
-	resolvers[name] = fn
-end
-
----Register a custom context resolver
----@param name string
----@param resolver fun():string?
-function M.register(name, resolver)
-	resolvers[name] = resolver
-end
-
----List all registered placeholder names
----@return string[]
-function M.list()
-	return vim.tbl_keys(resolvers)
-end
-
----Capture resolved values for placeholders found in text(s)
----@param texts string|string[]
----@return table<string, string>
-function M.snapshot(texts)
-	local names = collect_placeholders(texts)
-	local snapshot = {}
-	for name in pairs(names) do
-		local value = M.get(name)
-		if value ~= nil then
-			snapshot[name] = value
-		end
-	end
-	return snapshot
-end
-
----Get a context value by name
----Returns nil if unavailable
+---Get a context value by name.
+---Returns nil when the resolver is unknown, fails, or returns a non-string value.
 ---@param name string
 ---@return string?
 function M.get(name)
@@ -73,48 +110,97 @@ function M.get(name)
 		notify.debug("context resolver '%s' failed: %s", name, tostring(result))
 		return nil
 	end
-
-	if result == nil or result == "" then
+	if result ~= nil and type(result) ~= "string" then
+		notify.debug("context resolver '%s' returned %s, expected string", name, type(result))
 		return nil
 	end
-
 	return result
 end
 
----Check if a placeholder resolves to a non-empty value
+---Check if a placeholder resolves to a non-empty value.
 ---@param name string Placeholder name (without braces)
 ---@return boolean
 function M.is_available(name)
-	return M.get(name) ~= nil
+	local value = M.get(name)
+	return value ~= nil and value ~= ""
 end
 
----Expand context variables in text
----@param text string Text with {variable} placeholders
----@param snapshot? table<string, string> Optional frozen values to prefer
----@param opts? { resolve_missing?: boolean } Expansion options
+---Create an enabled capture for placeholders found in text and explicit capture names.
+---@param texts string|string[]
+---@param capture_names? string[]
+---@return wiremux.context.PlaceholderCapture
+function M.capture(texts, capture_names)
+	local names = placeholder.discover(texts)
+	if type(capture_names) == "table" then
+		for _, name in ipairs(capture_names) do
+			if placeholder.is_valid_name(name) then
+				names[name] = true
+			end
+		end
+	end
+
+	local capture = {
+		enabled = true,
+		capture_set = {},
+		values = {},
+	}
+	for _, name in ipairs(sorted_names(names)) do
+		capture.capture_set[name] = true
+		local value = M.get(name)
+		if value ~= nil then
+			capture.values[name] = value
+		end
+	end
+	return capture
+end
+
+---Clone a capture and resolve names in text that were not previously attempted.
+---@param capture wiremux.context.PlaceholderCapture
+---@param text string
+---@return wiremux.context.PlaceholderCapture
+function M.extend(capture, text)
+	local extended = clone_capture(capture)
+	assert(type(text) == "string", "wiremux placeholder text must be a string")
+	if not extended.enabled or not text:find("{", 1, true) then
+		return extended
+	end
+
+	local names = placeholder.discover(text)
+	for name in pairs(extended.capture_set) do
+		names[name] = nil
+	end
+	for _, name in ipairs(sorted_names(names)) do
+		extended.capture_set[name] = true
+		local value = M.get(name)
+		if value ~= nil then
+			extended.values[name] = value
+		end
+	end
+	return extended
+end
+
+---Materialize text using capture values without invoking a resolver.
+---@param text string
+---@param capture wiremux.context.PlaceholderCapture
 ---@return string
-function M.expand(text, snapshot, opts)
-	if not text:find("{", 1, true) then
+function M.materialize(text, capture)
+	assert(type(text) == "string", "wiremux placeholder text must be a string")
+	assert_capture(capture)
+	if not capture.enabled or not text:find("{", 1, true) then
 		return text
 	end
 
-	local resolve_missing = not opts or opts.resolve_missing ~= false
-	local cache = {}
 	return (
-		text:gsub("{([%w_]+)}", function(var)
-			if cache[var] == nil then
-				local value = snapshot and snapshot[var]
-				if value == nil and resolve_missing then
-					value = M.get(var)
-				end
-				cache[var] = value == nil and UNRESOLVED or value
-			end
-			if cache[var] == UNRESOLVED then
+		text:gsub(placeholder.materialization_pattern, function(name)
+			local value = capture.values[name]
+			if value == nil then
 				return nil
 			end
-			return cache[var]
+			return value
 		end)
 	)
 end
+
+M.configure()
 
 return M

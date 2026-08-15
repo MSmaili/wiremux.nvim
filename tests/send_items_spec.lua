@@ -24,7 +24,7 @@ describe("send single item", function()
 		assert.is_true(run_called)
 	end)
 
-	it("warns instead of snapshotting an invalid item value", function()
+	it("warns instead of capturing an invalid item value", function()
 		local warning
 		mocks.notify.warn = function(message)
 			warning = message
@@ -246,18 +246,44 @@ describe("send single item", function()
 		assert.is_true(action_called)
 	end)
 
-	it("prepares all compose pages with strict snapshots and preserves empty pages", function()
+	it("materializes all compose page captures and preserves empty pages", function()
 		local received_text
-		local expand_calls = {}
-		mocks.context.expand = function(text, snapshot, opts)
-			table.insert(expand_calls, { snapshot = snapshot, opts = opts })
-			return text:gsub("{value}", snapshot.value or "{value}")
+		local extend_calls = {}
+		mocks.context.extend = function(capture, text)
+			table.insert(extend_calls, { capture = capture, text = text })
+			return capture
+		end
+		mocks.context.materialize = function(text, capture)
+			return text:gsub("{value}", capture.values.value or "{value}")
 		end
 		mocks.compose.open = function(_, compose_opts)
 			local confirmed = compose_opts.on_confirm({
-				{ text = " {value}  ", meta = { snapshot = { value = "first" } } },
-				{ text = "", meta = nil },
-				{ text = "{value}", meta = { snapshot = { value = "third" } } },
+				{
+					text = " {value}  ",
+					meta = {
+						placeholder_capture = {
+							enabled = true,
+							capture_set = { value = true },
+							values = { value = "first" },
+						},
+					},
+				},
+				{
+					text = "",
+					meta = {
+						placeholder_capture = { enabled = true, capture_set = {}, values = {} },
+					},
+				},
+				{
+					text = "{value}",
+					meta = {
+						placeholder_capture = {
+							enabled = true,
+							capture_set = { value = true },
+							values = { value = "third" },
+						},
+					},
+				},
 			})
 			assert.is_true(confirmed)
 		end
@@ -274,19 +300,41 @@ describe("send single item", function()
 		end)
 
 		assert.are.equal(" first\n\n\n\nthird", received_text)
-		assert.are.equal(3, #expand_calls)
-		assert.is_false(expand_calls[1].opts.resolve_missing)
-		assert.are.same({}, expand_calls[2].snapshot)
+		assert.are.equal(3, #extend_calls)
+		assert.are.same({}, extend_calls[2].capture.values)
 	end)
 
-	it("keeps compose open when a page cannot be prepared", function()
+	it("keeps compose open when a page capture is missing", function()
 		local confirmation_result
 		local action_called = false
-		mocks.context.expand = function()
-			error("broken snapshot")
+		mocks.context.extend = function(capture)
+			assert(type(capture) == "table", "missing placeholder capture")
+			return capture
 		end
 		mocks.compose.open = function(_, compose_opts)
 			confirmation_result = compose_opts.on_confirm({ { text = "draft" } })
+		end
+		mocks.action.run = function()
+			action_called = true
+		end
+
+		mocks.send.send({ value = "draft", compose = true })
+
+		assert.is_false(confirmation_result)
+		assert.is_false(action_called)
+	end)
+
+	it("keeps compose open when a page capture is malformed", function()
+		local confirmation_result
+		local action_called = false
+		mocks.context.extend = function(capture)
+			assert(type(capture.capture_set) == "table", "malformed placeholder capture")
+			return capture
+		end
+		mocks.compose.open = function(_, compose_opts)
+			confirmation_result = compose_opts.on_confirm({
+				{ text = "draft", meta = { placeholder_capture = { enabled = true } } },
+			})
 		end
 		mocks.action.run = function()
 			action_called = true
@@ -361,15 +409,18 @@ describe("send list of items", function()
 		assert.are.equal("selected", received_text)
 	end)
 
-	it("captures an independent context snapshot for each picker item", function()
+	it("captures independent placeholder state for each picker item", function()
 		local captured = {}
-		local selected_snapshot
-		mocks.context.snapshot = function(text)
-			captured[text] = { source = text }
+		local selected_capture
+		mocks.context.capture = function(text)
+			captured[text] = { enabled = true, capture_set = {}, values = { source = text } }
 			return captured[text]
 		end
-		mocks.context.expand = function(_, snapshot)
-			selected_snapshot = snapshot
+		mocks.context.extend = function(capture)
+			selected_capture = capture
+			return capture
+		end
+		mocks.context.materialize = function()
 			return "expanded"
 		end
 		mocks.picker.select = function(items, _, callback)
@@ -381,8 +432,8 @@ describe("send list of items", function()
 			{ value = "second {two}" },
 		})
 
-		assert.are.equal(captured["second {two}"], selected_snapshot)
-		assert.are_not.equal(captured["first {one}"], selected_snapshot)
+		assert.are.equal(captured["second {two}"], selected_capture)
+		assert.are_not.equal(captured["first {one}"], selected_capture)
 	end)
 
 	it("handles picker cancellation", function()

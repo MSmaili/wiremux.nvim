@@ -177,12 +177,8 @@ function M.setup(user_opts)
 		end
 	end
 
-	if M.opts.context and M.opts.context.resolvers then
-		local context = require("wiremux.context")
-		for name, resolver in pairs(M.opts.context.resolvers) do
-			context.register(name, resolver)
-		end
-	end
+	local custom_resolvers = type(M.opts.context) == "table" and M.opts.context.resolvers or nil
+	require("wiremux.context").configure(type(custom_resolvers) == "table" and custom_resolvers or {})
 end
 
 function M.get()
