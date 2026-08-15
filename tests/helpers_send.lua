@@ -47,6 +47,9 @@ function M.setup()
 			end,
 		},
 		compose = {
+			get_buf = function()
+				return nil
+			end,
 			open = function() end,
 		},
 	}

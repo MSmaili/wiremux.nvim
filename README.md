@@ -110,6 +110,9 @@ These are the full defaults from `config.lua`. You only need to override what yo
       close_behavior = "ask",  -- "ask" | "hide" | "discard"
       on_new_payload = "ask",  -- "ask" | "keep" | "replace" | "append"
       wo = { wrap = true, number = false, relativenumber = false },
+      capture_placeholders = {
+        "file", "filename", "position", "line", "selection", "this",
+      },
       keymaps = {
         send = {
           { "<C-s>", mode = "i", desc = "Send to target" },
@@ -281,7 +284,7 @@ vim.keymap.set({ "n", "x" }, "<leader>ar", function()
 end)
 ```
 
-Compose keeps placeholders raw while editing. Every page captures placeholder values when it is added, so `{this}` from different files or selections expands against the correct original location at confirmation time. Placeholders typed later remain literal unless that placeholder was present in the page's captured snapshot.
+Compose keeps placeholders raw while editing. Every page captures names already present plus the global `ui.compose.capture_placeholders` policy when it is added, so `{this}` from different files or selections uses the correct original location at confirmation time. The lightweight default policy contains `file`, `filename`, `position`, `line`, `selection`, and `this`. More expensive or potentially large placeholders such as `{changes}`, `{diagnostics}`, and `{diagnostics_all}` are captured only when present initially or explicitly added to the policy. Other placeholders typed later resolve at confirmation, while failed eager captures remain literal. A configured list replaces the default policy; set it to `{}` to disable extra pre-capture. Capture policy is not accepted in action, call-level, or item-level compose tables.
 
 When a draft already exists, `on_new_payload` supports `"ask"`, `"keep"`, `"replace"`, and `"append"`. The ask dialog defaults to **Keep Draft**. Calling `send()` without text reopens an existing hidden draft without adding a page or changing its delivery options.
 
@@ -359,7 +362,7 @@ wiremux expands `{placeholders}` before sending.
 | `{buffers}`         | list of listed, loaded buffers                 |
 | `{changes}`         | `git diff HEAD -- {file}` (or "No changes")    |
 
-You can add custom placeholders:
+You can add custom placeholders. Resolver names must begin with a letter or underscore and continue with letters, digits, or underscores:
 
 ```lua
 require("wiremux").setup({
@@ -372,6 +375,19 @@ require("wiremux").setup({
     },
   },
 })
+```
+
+Custom resolvers should be fast and side-effect-free. If a custom resolver depends on the current editor page and users may type it after opening compose, add its name to the global capture policy:
+
+```lua
+ui = {
+  compose = {
+    capture_placeholders = {
+      "file", "filename", "position", "line", "selection", "this",
+      "git_branch",
+    },
+  },
+}
 ```
 
 ## Advanced Configuration

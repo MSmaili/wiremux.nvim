@@ -10,12 +10,12 @@ local M = {}
 ---@field on_confirm fun(pages: wiremux.ui.ComposePage[]): boolean?
 ---@field on_cancel? fun()
 ---@field page_meta? any
----@field compose? wiremux.config.ComposeOptions Per-session overrides for ui.compose
+---@field config wiremux.config.ComposeSessionConfig Resolved session configuration
 
 ---@class wiremux.ui.ComposeSession
 ---@field buf number
 ---@field win number?
----@field config wiremux.config.ComposeUIConfig
+---@field config wiremux.config.ComposeSessionConfig
 ---@field title string
 ---@field draft wiremux.ui.ComposeDraft
 ---@field on_confirm fun(pages: wiremux.ui.ComposePage[]): boolean?
@@ -59,7 +59,7 @@ local function window_title(session)
 end
 
 ---@param buf number
----@param config wiremux.config.ComposeUIConfig
+---@param config wiremux.config.ComposeSessionConfig
 ---@param title string
 ---@return number
 local function create_window(buf, config, title)
@@ -438,12 +438,8 @@ function M.open(text, opts)
 		active_session = nil
 	end
 
-	local config = vim.tbl_deep_extend(
-		"force",
-		{},
-		require("wiremux.config").opts.ui.compose,
-		opts.compose or {}
-	)
+	assert(type(opts.config) == "table", "wiremux compose requires resolved config")
+	local config = vim.deepcopy(opts.config)
 	if active_session and not active_session.sent then
 		local session = active_session
 		if text ~= "" then

@@ -14,6 +14,25 @@ describe("compose UI", function()
 		return type(value) == "table" and value[1][1] or value
 	end
 
+	local function open(text, opts)
+		opts = opts or {}
+		local selected = opts.compose == nil and true or opts.compose
+		local resolved, errors = require("wiremux.utils.validate").resolve_compose(
+			config.opts.ui.compose,
+			selected,
+			"test.compose"
+		)
+		assert.are.same({}, errors)
+
+		local open_opts = { config = resolved }
+		for key, value in pairs(opts) do
+			if key ~= "compose" then
+				open_opts[key] = value
+			end
+		end
+		return compose.open(text, open_opts)
+	end
+
 	before_each(function()
 		package.loaded["wiremux.ui.compose"] = nil
 		package.loaded["wiremux.config"] = nil
@@ -41,7 +60,7 @@ describe("compose UI", function()
 	it("appends pages, saves edits, navigates, and confirms in order", function()
 		local confirmed_pages
 		local cancelled = false
-		compose.open("first", {
+		open("first", {
 			page_meta = "one",
 			on_confirm = function()
 				error("old callback should be replaced")
@@ -50,7 +69,7 @@ describe("compose UI", function()
 		local buf = compose.get_buf()
 		vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "edited first" })
 
-		compose.open("second", {
+		open("second", {
 			compose = { title = " Review " },
 			page_meta = "two",
 			on_confirm = function(pages)
@@ -81,13 +100,13 @@ describe("compose UI", function()
 
 	it("preserves the complete draft when confirmation fails", function()
 		local calls = 0
-		compose.open("first", {
+		open("first", {
 			on_confirm = function()
 				calls = calls + 1
 				return false
 			end,
 		})
-		compose.open("second", {
+		open("second", {
 			on_confirm = function()
 				calls = calls + 1
 				return false
@@ -104,7 +123,7 @@ describe("compose UI", function()
 	it("treats an empty invocation as reopen only", function()
 		local first_called = false
 		local empty_called = false
-		compose.open("draft", {
+		open("draft", {
 			compose = { title = " Original " },
 			on_confirm = function(pages)
 				first_called = pages[1].text == "draft"
@@ -113,7 +132,7 @@ describe("compose UI", function()
 		})
 		mapping("q")()
 
-		compose.open("", {
+		open("", {
 			compose = { title = " Ignored " },
 			on_confirm = function()
 				empty_called = true
@@ -129,8 +148,8 @@ describe("compose UI", function()
 
 	it("reuses an entirely empty draft instead of appending", function()
 		local pages
-		compose.open("   ", { on_confirm = function() end })
-		compose.open("replacement", {
+		open("   ", { on_confirm = function() end })
+		open("replacement", {
 			on_confirm = function(value)
 				pages = value
 				return false
@@ -147,13 +166,13 @@ describe("compose UI", function()
 	it("updates callbacks and title while keeping existing content", function()
 		config.opts.ui.compose.on_new_payload = "keep"
 		local latest_called = false
-		compose.open("first", {
+		open("first", {
 			compose = { title = " First Title " },
 			on_confirm = function()
 				error("old callback should be replaced")
 			end,
 		})
-		compose.open("ignored", {
+		open("ignored", {
 			compose = { title = " Latest Title " },
 			on_confirm = function(pages)
 				latest_called = pages[1].text == "first" and #pages == 1
@@ -175,11 +194,11 @@ describe("compose UI", function()
 			close_behavior = "hide",
 		}
 
-		compose.open("first", {
+		open("first", {
 			compose = compose_config,
 			on_confirm = function() end,
 		})
-		compose.open("second", {
+		open("second", {
 			compose = compose_config,
 			on_confirm = function(value)
 				pages = value
@@ -198,7 +217,7 @@ describe("compose UI", function()
 
 	it("invokes cancellation once when the draft buffer is wiped", function()
 		local cancelled = 0
-		compose.open("draft", {
+		open("draft", {
 			on_confirm = function() end,
 			on_cancel = function()
 				cancelled = cancelled + 1
@@ -224,17 +243,17 @@ describe("compose UI", function()
 			end,
 		})
 
-		compose.open("first", { on_confirm = function() end })
+		open("first", { on_confirm = function() end })
 		local buf = compose.get_buf()
 		assert.are.equal(1, #events)
 		assert.is_false(events[1].reopened)
 		assert.are.equal(buf, events[1].buf)
 		assert.is_true(vim.wo[events[1].win].spell)
 
-		compose.open("second", { on_confirm = function() end })
+		open("second", { on_confirm = function() end })
 		assert.are.equal(1, #events)
 		mapping("q")()
-		compose.open("", { on_confirm = function() end })
+		open("", { on_confirm = function() end })
 
 		assert.are.equal(2, #events)
 		assert.is_true(events[2].reopened)
@@ -249,7 +268,7 @@ describe("compose UI", function()
 			error("custom setup failed")
 		end
 		notify.error = function() end
-		local ok = pcall(compose.open, "draft", { on_confirm = function() end })
+		local ok = pcall(open, "draft", { on_confirm = function() end })
 		vim.api.nvim_exec_autocmds = exec_autocmds
 		notify.error = notify_error
 

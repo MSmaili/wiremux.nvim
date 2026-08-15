@@ -194,12 +194,37 @@ describe("send single item", function()
 		assert.are.equal("edited from opts", received_text)
 	end)
 
+	it("falls back to the action-default compose value", function()
+		mocks.config.opts.actions.send.compose = { title = " Action Default " }
+		local received_config
+		mocks.compose.open = function(_, compose_opts)
+			received_config = compose_opts.config
+		end
+
+		mocks.send.send("draft")
+
+		assert.are.equal(" Action Default ", received_config.title)
+	end)
+
+	it("treats true and an empty table as compose enabled with global defaults", function()
+		mocks.config.opts.ui.compose.title = " Global Default "
+		local titles = {}
+		mocks.compose.open = function(_, compose_opts)
+			table.insert(titles, compose_opts.config.title)
+		end
+
+		mocks.send.send({ value = "true", compose = true })
+		mocks.send.send({ value = "table", compose = {} })
+
+		assert.are.same({ " Global Default ", " Global Default " }, titles)
+	end)
+
 	it("uses a compose table and keeps its title separate from the target title", function()
 		local compose_config
 		local target_title
 
 		mocks.compose.open = function(text, compose_opts)
-			compose_config = compose_opts.compose
+			compose_config = compose_opts.config
 			compose_opts.on_confirm({ { text = text, meta = compose_opts.page_meta } })
 		end
 		mocks.action.run = function(_, callbacks)
@@ -244,6 +269,143 @@ describe("send single item", function()
 
 		assert.is_false(compose_opened)
 		assert.is_true(action_called)
+	end)
+
+	it("captures the global policy only for compose candidates", function()
+		mocks.config.opts.ui.compose.capture_placeholders = { "selection", "custom_context" }
+		local calls = {}
+		mocks.context.capture = function(text, capture_names)
+			table.insert(calls, { text = text, capture_names = capture_names })
+			return { enabled = true, capture_set = {}, values = {} }
+		end
+
+		mocks.send.send("direct {file}")
+		mocks.send.send({ value = "compose {file}", compose = true })
+
+		assert.are.equal(2, #calls)
+		assert.is_nil(calls[1].capture_names)
+		assert.are.same({ "selection", "custom_context" }, calls[2].capture_names)
+	end)
+
+	it("passes a complete session config without the global capture policy", function()
+		mocks.config.opts.ui.compose = {
+			width = 0.6,
+			height = 0.4,
+			title = " Global ",
+			wo = { wrap = true, number = false },
+			capture_placeholders = { "file" },
+		}
+		local received_config
+		mocks.compose.open = function(_, compose_opts)
+			received_config = compose_opts.config
+		end
+
+		mocks.send.send({
+			value = "draft",
+			compose = { title = " Runtime ", wo = { number = true } },
+		})
+
+		assert.are.equal(0.6, received_config.width)
+		assert.are.equal(0.4, received_config.height)
+		assert.are.equal(" Runtime ", received_config.title)
+		assert.are.same({ wrap = true, number = true }, received_config.wo)
+		assert.is_nil(received_config.capture_placeholders)
+	end)
+
+	it("rejects invalid item compose options before capture or UI", function()
+		local capture_calls = 0
+		local compose_opened = false
+		local action_called = false
+		local warning
+		mocks.context.capture = function()
+			capture_calls = capture_calls + 1
+		end
+		mocks.compose.open = function()
+			compose_opened = true
+		end
+		mocks.action.run = function()
+			action_called = true
+		end
+		mocks.notify.warn = function(message)
+			warning = message
+		end
+
+		mocks.send.send({ value = "draft", compose = { on_new_payload = "merge" } })
+
+		assert.are.equal(0, capture_calls)
+		assert.is_false(compose_opened)
+		assert.is_false(action_called)
+		assert.matches("invalid on_new_payload", warning)
+	end)
+
+	it("rejects capture policy outside global compose config", function()
+		local capture_calls = 0
+		local compose_opened = false
+		local warning
+		mocks.context.capture = function()
+			capture_calls = capture_calls + 1
+		end
+		mocks.compose.open = function()
+			compose_opened = true
+		end
+		mocks.notify.warn = function(message)
+			warning = message
+		end
+
+		mocks.send.send({ value = "draft" }, {
+			compose = { capture_placeholders = { "file" } },
+		})
+
+		assert.are.equal(0, capture_calls)
+		assert.is_false(compose_opened)
+		assert.matches("only allowed at ui.compose", warning)
+	end)
+
+	it("does not evaluate ignored lower-precedence compose options", function()
+		local action_called = false
+		mocks.action.run = function()
+			action_called = true
+		end
+
+		mocks.send.send({ value = "draft", compose = false }, {
+			compose = { on_new_payload = "invalid but ignored" },
+		})
+
+		assert.is_true(action_called)
+	end)
+
+	it("reopens an existing empty compose invocation without recapturing", function()
+		mocks.config.opts.ui.compose.capture_placeholders = { "file" }
+		mocks.compose.get_buf = function()
+			return 10
+		end
+		mocks.context.capture = function()
+			error("capture should not run for an empty reopen")
+		end
+		local opened = false
+		mocks.compose.open = function(text)
+			opened = text == ""
+		end
+
+		mocks.send.send()
+
+		assert.is_true(opened)
+	end)
+
+	it("captures the global policy for a brand-new empty compose draft", function()
+		mocks.config.opts.ui.compose.capture_placeholders = { "file", "selection" }
+		local captured_text
+		local captured_names
+		mocks.context.capture = function(text, names)
+			captured_text = text
+			captured_names = names
+			return { enabled = true, capture_set = {}, values = {} }
+		end
+
+		mocks.send.send()
+
+		assert.are.equal("", captured_text)
+		assert.are.same({ "file", "selection" }, captured_names)
 	end)
 
 	it("materializes all compose page captures and preserves empty pages", function()
@@ -369,6 +531,33 @@ describe("send list of items", function()
 		})
 
 		assert.is_true(picker_shown)
+	end)
+
+	it("warns and omits invalid runtime candidates before the picker", function()
+		local picker_items
+		local capture_calls = 0
+		local warnings = {}
+		mocks.context.capture = function()
+			capture_calls = capture_calls + 1
+			return { enabled = true, capture_set = {}, values = {} }
+		end
+		mocks.notify.warn = function(message)
+			table.insert(warnings, message)
+		end
+		mocks.picker.select = function(items)
+			picker_items = items
+		end
+
+		mocks.send.send({
+			{ value = "invalid", compose = { close_behavior = "explode" } },
+			{ value = "valid", compose = true },
+			{ label = "missing value" },
+		})
+
+		assert.are.equal(1, #picker_items)
+		assert.are.equal("valid", picker_items[1].value.value)
+		assert.are.equal(1, capture_calls)
+		assert.are.equal(2, #warnings)
 	end)
 
 	it("uses label or value for display", function()

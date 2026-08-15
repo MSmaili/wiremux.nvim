@@ -43,6 +43,7 @@ function M.mock_config(actions)
 		opts = {
 			targets = { definitions = {} },
 			actions = actions or {},
+			ui = { compose = { capture_placeholders = {} } },
 		},
 	}
 end

@@ -1,6 +1,7 @@
 local M = {}
 local context = require("wiremux.context")
 local notify = require("wiremux.utils.notify")
+local validate = require("wiremux.utils.validate")
 
 ---@class wiremux.action.SendItem
 ---@field value string The text/command to send
@@ -57,19 +58,89 @@ local function is_visible(item)
 	return result == true
 end
 
----Build picker items from send library
+---@param item wiremux.action.SendItem
+---@param opts wiremux.config.ActionConfig
+---@return wiremux.config.ComposeSessionConfig? config
+---@return wiremux.validate.Error[] errors
+local function resolve_compose(item, opts)
+	local config = require("wiremux.config").opts
+	local defaults = config.actions.send or {}
+	local selected
+	local path
+	if item.compose ~= nil then
+		selected = item.compose
+		path = "item.compose"
+	elseif opts.compose ~= nil then
+		selected = opts.compose
+		path = "opts.compose"
+	else
+		selected = defaults.compose
+		path = "actions.send.compose"
+	end
+	return validate.resolve_compose(config.ui.compose, selected, path)
+end
+
+---@param errors wiremux.validate.Error[]
+local function warn_validation_errors(errors)
+	for _, err in ipairs(errors) do
+		notify.warn(err.message)
+	end
+end
+
+---@class wiremux.action.PreparedCandidate
+---@field item wiremux.action.SendItem
+---@field placeholder_capture? wiremux.context.PlaceholderCapture
+---@field compose_config? wiremux.config.ComposeSessionConfig
+
+---@param item wiremux.action.SendItem
+---@param opts wiremux.config.ActionConfig
+---@return wiremux.action.PreparedCandidate?
+local function prepare_candidate(item, opts)
+	if type(item.value) ~= "string" then
+		notify.warn("wiremux.send item.value must be a string")
+		return nil
+	end
+
+	local compose_config, errors = resolve_compose(item, opts)
+	if #errors > 0 then
+		warn_validation_errors(errors)
+		return nil
+	end
+
+	local capture_names
+	if compose_config then
+		capture_names = require("wiremux.config").opts.ui.compose.capture_placeholders
+	end
+	local reopening = item.value == ""
+		and compose_config ~= nil
+		and require("wiremux.ui.compose").get_buf() ~= nil
+	local capture = not reopening and context.capture(item.value, capture_names) or nil
+
+	return {
+		item = item,
+		placeholder_capture = capture,
+		compose_config = compose_config,
+	}
+end
+
+---Build picker items from send library.
 ---@param items wiremux.action.SendItem[]
+---@param opts wiremux.config.ActionConfig
 ---@return table[] picker_items
-local function prepare_picker_items(items)
+local function prepare_picker_items(items, opts)
 	local picker_items = {}
 
 	for _, item in ipairs(items) do
 		if is_visible(item) then
-			table.insert(picker_items, {
-				label = item.label or item.value,
-				value = item,
-				placeholder_capture = type(item.value) == "string" and context.capture(item.value) or nil,
-			})
+			local prepared = prepare_candidate(item, opts)
+			if prepared then
+				table.insert(picker_items, {
+					label = item.label or item.value,
+					value = item,
+					placeholder_capture = prepared.placeholder_capture,
+					compose_config = prepared.compose_config,
+				})
+			end
 		end
 	end
 
@@ -178,16 +249,11 @@ end
 ---Resolve all options against defaults, then send
 ---@param item wiremux.action.SendItem
 ---@param opts wiremux.config.ActionConfig
----@param placeholder_capture wiremux.context.PlaceholderCapture
-local function resolve_and_send(item, opts, placeholder_capture)
-	if type(item.value) ~= "string" then
-		notify.warn("wiremux.send item.value must be a string")
-		return
-	end
-
+---@param placeholder_capture? wiremux.context.PlaceholderCapture
+---@param compose_config? wiremux.config.ComposeSessionConfig
+local function resolve_and_send(item, opts, placeholder_capture, compose_config)
 	local defaults = require("wiremux.config").opts.actions.send or {}
 	local backend_opts = resolve_send_backend_opts(item, opts, defaults)
-	local compose = first_non_nil(item.compose, opts.compose, defaults.compose)
 
 	local resolved = {
 		focus = backend_opts.focus,
@@ -199,10 +265,9 @@ local function resolve_and_send(item, opts, placeholder_capture)
 		target = opts.target,
 	}
 
-	if compose then
-		local compose_opts = type(compose) == "table" and compose or {}
+	if compose_config then
 		require("wiremux.ui.compose").open(item.value, {
-			compose = compose_opts,
+			config = compose_config,
 			page_meta = { placeholder_capture = placeholder_capture },
 			on_confirm = function(pages)
 				local materialized = prepare_compose_pages(pages)
@@ -218,6 +283,7 @@ local function resolve_and_send(item, opts, placeholder_capture)
 		return
 	end
 
+	assert(placeholder_capture, "wiremux direct send requires a placeholder capture")
 	local materialized = materialize_with_context(item.value, placeholder_capture)
 	if not materialized then
 		return
@@ -230,12 +296,17 @@ end
 ---@param item wiremux.action.SendItem
 ---@param opts wiremux.config.ActionConfig
 local function send_single_item(item, opts)
-	if type(item.value) ~= "string" then
-		notify.warn("wiremux.send item.value must be a string")
+	local prepared = prepare_candidate(item, opts)
+	if not prepared then
 		return
 	end
 
-	resolve_and_send(item, opts, context.capture(item.value))
+	resolve_and_send(
+		prepared.item,
+		opts,
+		prepared.placeholder_capture,
+		prepared.compose_config
+	)
 end
 
 ---Send from send library (picker)
@@ -243,7 +314,7 @@ end
 ---@param opts wiremux.config.ActionConfig
 local function send_from_library(items, opts)
 	-- Capture before picker opens (visual selection is lost when picker opens)
-	local picker_items = prepare_picker_items(items)
+	local picker_items = prepare_picker_items(items, opts)
 
 	if #picker_items == 0 then
 		notify.warn("No items available")
@@ -262,7 +333,7 @@ local function send_from_library(items, opts)
 
 		---@type wiremux.action.SendItem
 		local item = choice.value
-		resolve_and_send(item, opts, choice.placeholder_capture)
+		resolve_and_send(item, opts, choice.placeholder_capture, choice.compose_config)
 	end)
 end
 

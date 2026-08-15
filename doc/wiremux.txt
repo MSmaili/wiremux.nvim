@@ -173,9 +173,16 @@ also enables compose and can set the compose window title:
 
 Set `ui.compose.on_new_payload = "append"` to collect multiple invocations in
 one paged draft. Use normal-mode `<C-p>` and `<C-n>` to navigate pages.
-Confirmation expands each
-page against the context captured when that page was added, joins pages with a
-blank line, and sends one payload.
+Confirmation materializes each page against values captured when that page was
+added, joins pages with a blank line, and sends one payload. Each page captures
+names already in its initial text plus `ui.compose.capture_placeholders`. The
+lightweight default policy contains file, filename, position, line, selection,
+and this. More expensive or potentially large placeholders such as changes,
+diagnostics, and diagnostics_all are captured only when present initially or
+explicitly added to the policy. Other uncaptured names resolve at confirmation;
+failed eager captures remain literal. Set the global capture policy to `{}` to
+disable extra pre-capture. It is not accepted in action, call-level, or
+item-level compose tables.
 
 Supported new-payload policies are "ask", "keep", "replace", and "append".
 The ask dialog defaults to Keep Draft. Calling `send()` without text reopens a
@@ -419,6 +426,18 @@ actions.send.submit (boolean)
 actions.*.focus     (boolean)
                     Focus target after action.
 
+Compose configuration ~
+
+*wiremux-config-compose-capture-placeholders*
+ui.compose.capture_placeholders (string[])
+                    Placeholder names captured when each compose page is
+                    created, even when absent from its initial text. Defaults
+                    to file, filename, position, line, selection, and this.
+                    The configured list replaces the default list; use `{}` to
+                    disable extra pre-capture. Add changes, diagnostics, or
+                    diagnostics_all explicitly when late typing should use
+                    page-creation values. This option is global only.
+
 Picker configuration ~
 
 *wiremux-config-picker*
@@ -582,6 +601,12 @@ Built-ins:
   {quickfix}        formatted quickfix list
   {buffers}         list of listed, loaded buffers
   {changes}         git diff HEAD -- {file} (or "No changes")
+
+Custom resolver names begin with a letter or underscore and continue with
+letters, digits, or underscores. Resolvers should be fast and side-effect-free.
+If a custom resolver depends on the current editor page and may be typed after
+compose opens, add its name to `ui.compose.capture_placeholders` while retaining
+any default names you still want captured.
 
 Custom resolvers:
 >lua

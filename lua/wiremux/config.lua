@@ -23,7 +23,7 @@ local M = {}
 ---@field instances? wiremux.config.InstanceConfig
 ---@field targets? wiremux.config.TargetConfig
 
----@class wiremux.config.ComposeUIConfig
+---@class wiremux.config.ComposeSessionConfig
 ---@field width? number Width as fraction of screen (default: 0.6)
 ---@field height? number Height as fraction of screen (default: 0.4)
 ---@field title? string Window title (default: " Compose Message ")
@@ -33,6 +33,9 @@ local M = {}
 ---@field on_new_payload? "ask"|"keep"|"replace"|"append" Behavior when compose opens with a new payload while an unsent draft exists (default: "ask")
 ---@field wo? table<string, any> Window options (default: { wrap = true, number = false, relativenumber = false })
 ---@field keymaps? wiremux.config.ComposeKeymaps Custom keymaps
+
+---@class wiremux.config.ComposeUIConfig: wiremux.config.ComposeSessionConfig
+---@field capture_placeholders? string[] Placeholder names captured when each compose page is created
 
 ---@class wiremux.config.ComposeKeymap
 ---@field [1] string Key
@@ -47,7 +50,7 @@ local M = {}
 ---@field previous? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field next? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 
----@class wiremux.config.ComposeOptions: wiremux.config.ComposeUIConfig
+---@class wiremux.config.ComposeOptions: wiremux.config.ComposeSessionConfig
 
 ---@class wiremux.config.UserOptions
 ---@field log_level? wiremux.config.LogLevel
@@ -108,6 +111,14 @@ local defaults = {
 				number = false,
 				relativenumber = false,
 			},
+			capture_placeholders = {
+				"file",
+				"filename",
+				"position",
+				"line",
+				"selection",
+				"this",
+			},
 			keymaps = {
 				send = {
 					{ "<C-s>", mode = { "i" }, desc = "Send to target" },
@@ -150,35 +161,104 @@ local function validate_fn(value, name)
 	end
 end
 
-function M.setup(user_opts)
-	M.opts = vim.tbl_deep_extend("force", defaults, user_opts or {})
-
-	if M.opts.picker then
-		local inst = M.opts.picker.instances
-		if inst then
-			validate_fn(inst.filter, "picker.instances.filter")
-			validate_fn(inst.sort, "picker.instances.sort")
-		end
-
-		local tgt = M.opts.picker.targets
-		if tgt then
-			validate_fn(tgt.filter, "picker.targets.filter")
-			validate_fn(tgt.sort, "picker.targets.sort")
-		end
+---@param picker? wiremux.config.PickerConfig
+local function validate_picker_callbacks(picker)
+	if not picker then
+		return
 	end
+	if picker.instances then
+		validate_fn(picker.instances.filter, "picker.instances.filter")
+		validate_fn(picker.instances.sort, "picker.instances.sort")
+	end
+	if picker.targets then
+		validate_fn(picker.targets.filter, "picker.targets.filter")
+		validate_fn(picker.targets.sort, "picker.targets.sort")
+	end
+end
 
-	if M.opts.log_level ~= "off" then
-		local errors = require("wiremux.utils.validate").validate(M.opts)
-		if #errors > 0 then
-			local notify = require("wiremux.utils.notify")
-			for _, err in ipairs(errors) do
-				notify.warn(err)
+---@param opts wiremux.config.UserOptions
+---@return table<string, true> known_placeholders
+local function configure_resolvers(opts)
+	local custom_resolvers = type(opts.context) == "table" and opts.context.resolvers or nil
+	local configured_resolvers = {}
+	if type(custom_resolvers) == "table" then
+		local is_valid_name = require("wiremux.placeholder").is_valid_name
+		for name, resolver in pairs(custom_resolvers) do
+			if is_valid_name(name) and type(resolver) == "function" then
+				configured_resolvers[name] = resolver
 			end
 		end
 	end
 
-	local custom_resolvers = type(M.opts.context) == "table" and M.opts.context.resolvers or nil
-	require("wiremux.context").configure(type(custom_resolvers) == "table" and custom_resolvers or {})
+	opts.context = type(opts.context) == "table" and opts.context or {}
+	opts.context.resolvers = configured_resolvers
+
+	local context = require("wiremux.context")
+	context.configure(configured_resolvers)
+	local known_placeholders = {}
+	for _, name in ipairs(context.list()) do
+		known_placeholders[name] = true
+	end
+	return known_placeholders
+end
+
+---@param opts wiremux.config.UserOptions
+---@param user_opts wiremux.config.UserOptions
+---@param known_placeholders table<string, true>
+---@return wiremux.validate.Error[] errors
+local function normalize_global_compose(opts, user_opts, known_placeholders)
+	local raw_ui = type(user_opts.ui) == "table" and user_opts.ui or nil
+	local raw_compose = raw_ui and raw_ui.compose or nil
+	local compose, errors = require("wiremux.utils.validate").normalize_global_compose(
+		raw_compose,
+		defaults.ui.compose,
+		known_placeholders
+	)
+	opts.ui = type(opts.ui) == "table" and opts.ui or {}
+	opts.ui.compose = compose
+	return errors
+end
+
+---@param opts wiremux.config.UserOptions
+---@return wiremux.validate.Error[] errors
+local function normalize_action_compose(opts)
+	local compose = vim.tbl_get(opts, "actions", "send", "compose")
+	local normalized, errors = require("wiremux.utils.validate").normalize_action_compose(
+		compose,
+		defaults.actions.send.compose
+	)
+	opts.actions.send.compose = normalized
+	return errors
+end
+
+---@param messages string[]
+local function warn_once(messages)
+	local notify = require("wiremux.utils.notify")
+	local warned = {}
+	for _, message in ipairs(messages) do
+		if not warned[message] then
+			warned[message] = true
+			notify.warn(message)
+		end
+	end
+end
+
+function M.setup(user_opts)
+	user_opts = user_opts or {}
+	M.opts = vim.tbl_deep_extend("force", defaults, user_opts)
+	validate_picker_callbacks(M.opts.picker)
+
+	local validate = require("wiremux.utils.validate")
+	local warning_messages = validate.validate(M.opts)
+	local known_placeholders = configure_resolvers(M.opts)
+
+	local global_errors = normalize_global_compose(M.opts, user_opts, known_placeholders)
+	vim.list_extend(warning_messages, validate.error_messages(global_errors))
+
+	local action_errors = normalize_action_compose(M.opts)
+	vim.list_extend(warning_messages, validate.error_messages(action_errors))
+
+	warn_once(warning_messages)
 end
 
 function M.get()
