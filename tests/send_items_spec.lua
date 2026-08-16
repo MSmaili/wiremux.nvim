@@ -91,7 +91,7 @@ describe("send single item", function()
 
 		assert.is_true(fn_called)
 		assert.are.equal(1, #picker_items)
-		assert.are.equal("shown", picker_items[1].value.value)
+		assert.are.equal("shown", picker_items[1].value.raw_text)
 	end)
 
 	it("uses submit option from item", function()
@@ -578,7 +578,7 @@ describe("send list of items", function()
 		})
 
 		assert.are.equal(1, #picker_items)
-		assert.are.equal("valid", picker_items[1].value.value)
+		assert.are.equal("valid", picker_items[1].value.raw_text)
 		assert.are.equal(1, capture_calls)
 		assert.are.equal(2, #warnings)
 	end)
@@ -625,7 +625,7 @@ describe("send list of items", function()
 		local captured = {}
 		local selected_capture
 		mocks.context.capture = function(text)
-			captured[text] = { enabled = true, capture_set = {}, values = { source = text } }
+			captured[text] = { enabled = true, capture_set = { source = true }, values = { source = text } }
 			return captured[text]
 		end
 		mocks.context.extend = function(capture)

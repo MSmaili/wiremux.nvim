@@ -124,9 +124,7 @@ describe("compose UI", function()
 
 	it("treats an empty invocation as reopen only without replacing its capture", function()
 		local first_called = false
-		local empty_called = false
 		local original_capture = { source = "original" }
-		local ignored_capture = { source = "ignored" }
 		open("draft", {
 			compose = { title = " Original " },
 			capture = original_capture,
@@ -137,19 +135,11 @@ describe("compose UI", function()
 		})
 		mapping("q")()
 
-		open("", {
-			compose = { title = " Ignored " },
-			capture = ignored_capture,
-			on_confirm = function()
-				empty_called = true
-				return true
-			end,
-		})
+		compose.open("")
 		assert.matches("Original", title())
 		mapping("<CR>")()
 
 		assert.is_true(first_called)
-		assert.is_false(empty_called)
 	end)
 
 	it("reuses an entirely empty draft instead of appending", function()

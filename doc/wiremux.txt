@@ -100,6 +100,7 @@ SendItem fields ~
 | title     | string (optional)       | Custom tmux window / zellij tab name     |
 | submit    | boolean (optional)      | Auto-submit after sending                |
 | compose   | boolean or table        | Review in a compose draft before sending |
+| placeholders | boolean (optional)   | Set false to preserve placeholder-shaped source text literally |
 | visible   | boolean or function     | Show/hide item based on condition        |
 | pre_keys  | string or string[]      | Keystrokes to send before pasting        |
 | post_keys | string or string[]      | Keystrokes to send after pasting         |

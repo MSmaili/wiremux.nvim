@@ -1,0 +1,518 @@
+---@module 'luassert'
+
+local helpers = require("tests.helpers_send")
+
+describe("prepared send request", function()
+	local mocks
+	local request_builder
+
+	before_each(function()
+		mocks = helpers.setup()
+		request_builder = require("wiremux.action.send.request")
+	end)
+
+	after_each(function()
+		helpers.teardown()
+	end)
+
+	local function snapshot(opts)
+		local preparation, errors = request_builder.snapshot(opts, mocks.config.get())
+		assert.are.same({}, errors)
+		assert.is_not_nil(preparation)
+		return preparation
+	end
+
+	it("resolves delivery and item option precedence into explicit fields", function()
+		local default_filter = { instances = function() return false end }
+		local call_filter_fn = function() return true end
+		mocks.config.opts.actions.send = {
+			focus = false,
+			behavior = "pick",
+			mode = "instances",
+			target = "default-target",
+			filter = default_filter,
+			submit = false,
+			pre_keys = { "default-pre" },
+			post_keys = { "default-post" },
+			compose = { title = " Default Compose " },
+		}
+		mocks.config.opts.ui.compose.width = 0.6
+
+		local preparation = snapshot({
+			focus = true,
+			behavior = "last",
+			mode = "definitions",
+			target = "call-target",
+			filter = { instances = call_filter_fn },
+			submit = false,
+			pre_keys = { "call-pre" },
+			post_keys = { "call-post" },
+			compose = { title = " Call Compose " },
+		})
+		local request, errors = request_builder.prepare({
+			value = "payload",
+			label = "Label",
+			title = "Target Title",
+			submit = true,
+			pre_keys = { "item-pre" },
+			post_keys = { "item-post" },
+			compose = { title = " Item Compose " },
+		}, preparation)
+
+		assert.are.same({}, errors)
+		assert.are.equal("payload", request.raw_text)
+		assert.are.equal("Label", request.label)
+		assert.are.equal("Target Title", request.target_title)
+		assert.is_true(request.delivery.focus)
+		assert.are.equal("last", request.delivery.behavior)
+		assert.are.equal("definitions", request.delivery.mode)
+		assert.are.equal("call-target", request.delivery.target)
+		assert.are.equal(call_filter_fn, request.delivery.filter.instances)
+		assert.are.same({ "item-pre" }, request.delivery.pre_keys)
+		assert.are.same({ "item-post", "Enter" }, request.delivery.post_keys)
+		assert.are.equal(" Item Compose ", request.compose.config.title)
+		assert.are.equal(0.6, request.compose.config.width)
+	end)
+
+	it("uses call then action defaults when item-specific fields are absent", function()
+		mocks.config.opts.actions.send = {
+			focus = true,
+			behavior = "all",
+			mode = "instances",
+			target = "default-target",
+			submit = true,
+			pre_keys = { "default-pre" },
+			post_keys = { "default-post" },
+			compose = { title = " Default Compose " },
+		}
+		local preparation = snapshot({
+			submit = false,
+			pre_keys = { "call-pre" },
+			compose = { title = " Call Compose " },
+		})
+
+		local request = assert(request_builder.prepare({ value = "payload" }, preparation))
+
+		assert.is_true(request.delivery.focus)
+		assert.are.equal("all", request.delivery.behavior)
+		assert.are.equal("instances", request.delivery.mode)
+		assert.are.equal("default-target", request.delivery.target)
+		assert.are.same({ "call-pre" }, request.delivery.pre_keys)
+		assert.are.same({ "default-post" }, request.delivery.post_keys)
+		assert.are.equal(" Call Compose ", request.compose.config.title)
+	end)
+
+	it("applies compose whole-value precedence exactly once", function()
+		mocks.config.opts.actions.send.compose = { title = " Default " }
+		local resolve_compose = require("wiremux.utils.validate").resolve_compose
+		local calls = 0
+		require("wiremux.utils.validate").resolve_compose = function(...)
+			calls = calls + 1
+			return resolve_compose(...)
+		end
+
+		local preparation = snapshot({ compose = { title = " Call " } })
+		local request = assert(request_builder.prepare({
+			value = "payload",
+			compose = { title = " Item " },
+		}, preparation))
+		require("wiremux.utils.validate").resolve_compose = resolve_compose
+
+		assert.are.equal(1, calls)
+		assert.are.equal(" Item ", request.compose.config.title)
+	end)
+
+	it("folds submit into a copied post-keys list", function()
+		local post_keys = { "Escape" }
+		local preparation = snapshot({ post_keys = post_keys, submit = true })
+		local request = assert(request_builder.prepare({ value = "payload" }, preparation))
+
+		assert.are.same({ "Escape" }, post_keys)
+		assert.are.same({ "Escape", "Enter" }, request.delivery.post_keys)
+		assert.are_not.equal(post_keys, request.delivery.post_keys)
+	end)
+
+	it("uses only the global capture policy for compose", function()
+		mocks.config.opts.ui.compose.capture_placeholders = { "file", "selection" }
+		local captured_names
+		mocks.context.capture = function(_, names)
+			captured_names = names
+			return { enabled = true, capture_set = {}, values = {} }
+		end
+		local preparation = snapshot({ compose = true })
+
+		local request = assert(request_builder.prepare({ value = "draft" }, preparation))
+
+		assert.are.same({ "file", "selection" }, captured_names)
+		assert.is_nil(request.compose.config.capture_placeholders)
+	end)
+
+	it("returns structured errors before capture for invalid inputs", function()
+		local captures = 0
+		mocks.context.capture = function()
+			captures = captures + 1
+		end
+		local request, errors = request_builder.prepare({
+			value = "draft",
+			placeholders = "no",
+		}, snapshot())
+
+		assert.is_nil(request)
+		assert.are.equal(0, captures)
+		assert.are.equal("invalid_item", errors[1].code)
+		assert.are.equal("item.placeholders", errors[1].path)
+	end)
+
+	it("validates the global capture policy before invoking a resolver", function()
+		mocks.config.opts.ui.compose.capture_placeholders = "file"
+		mocks.context.capture = function()
+			error("capture must not run")
+		end
+
+		local preparation, errors = request_builder.snapshot({}, mocks.config.get())
+
+		assert.is_nil(preparation)
+		assert.are.equal("invalid_config", errors[1].code)
+		assert.are.equal("ui.compose.capture_placeholders", errors[1].path)
+	end)
+
+	it("does not retain mutable item, options, or config tables", function()
+		local item_pre = { "item-pre" }
+		mocks.config.opts.ui.compose.wo = { wrap = true }
+		local item = {
+			value = "original",
+			title = "Original Title",
+			pre_keys = item_pre,
+			compose = true,
+		}
+		local option_post = { "option-post" }
+		local option_filter = { instances = function() return true end }
+		local opts = {
+			behavior = "last",
+			filter = option_filter,
+			post_keys = option_post,
+		}
+		local preparation = snapshot(opts)
+		local request = assert(request_builder.prepare(item, preparation))
+
+		item.value = "mutated"
+		item.title = "Mutated Title"
+		item_pre[1] = "mutated-pre"
+		opts.behavior = "all"
+		option_post[1] = "mutated-post"
+		option_filter.instances = function() return false end
+		mocks.config.opts.actions.send.focus = true
+		mocks.config.opts.ui.compose.wo.wrap = false
+
+		assert.are.equal("original", request.raw_text)
+		assert.are.equal("Original Title", request.target_title)
+		assert.are.same({ "item-pre" }, request.delivery.pre_keys)
+		assert.are.same({ "option-post" }, request.delivery.post_keys)
+		assert.are.equal("last", request.delivery.behavior)
+		assert.is_true(request.delivery.filter.instances())
+		assert.is_false(request.delivery.focus)
+		assert.is_true(request.compose.config.wo.wrap)
+		assert.are_not.equal(mocks.config.opts.ui.compose.wo, request.compose.config.wo)
+	end)
+end)
+
+describe("prepared request orchestration", function()
+	local mocks
+
+	before_each(function()
+		mocks = helpers.setup()
+	end)
+
+	after_each(function()
+		helpers.teardown()
+	end)
+
+	it("bypasses capture and preserves literal placeholder-shaped text", function()
+		mocks.context.capture = function()
+			error("literal payload must bypass capture")
+		end
+		local received
+		mocks.backend.send = function(text)
+			received = text
+		end
+		mocks.action.run = function(_, callbacks)
+			callbacks.on_targets({}, {})
+		end
+
+		mocks.send.send({ value = "local value = '{file}'", placeholders = false })
+
+		assert.are.equal("local value = '{file}'", received)
+	end)
+
+	it("prepares independent picker requests before selection", function()
+		local captures = {}
+		local picker_items
+		local choose
+		mocks.context.capture = function(text)
+			local capture = {
+				enabled = true,
+				capture_set = { source = true },
+				values = { source = text },
+			}
+			table.insert(captures, capture)
+			return capture
+		end
+		mocks.picker.select = function(items, _, callback)
+			picker_items = items
+			choose = callback
+		end
+
+		mocks.send.send({ { value = "first" }, { value = "second" } })
+
+		assert.are.equal(2, #captures)
+		assert.are.equal(captures[1], picker_items[1].value.placeholder_capture)
+		assert.are.equal(captures[2], picker_items[2].value.placeholder_capture)
+		assert.are_not.equal(captures[1], captures[2])
+		assert.is_not_nil(choose)
+	end)
+
+	it("executes a selected stored request without reading config or capturing again", function()
+		local picker_items
+		local choose
+		local capture_calls = 0
+		mocks.context.capture = function(text)
+			capture_calls = capture_calls + 1
+			return { enabled = true, capture_set = {}, values = {} }
+		end
+		mocks.picker.select = function(items, _, callback)
+			picker_items = items
+			choose = callback
+		end
+		local received
+		mocks.backend.send = function(text)
+			received = text
+		end
+		mocks.action.run = function(_, callbacks)
+			callbacks.on_targets({}, {})
+		end
+
+		mocks.send.send({ { value = "first" }, { value = "selected" } })
+		mocks.config.get = function()
+			error("config must not be read after preparation")
+		end
+		mocks.context.capture = function()
+			error("capture must not run after preparation")
+		end
+		choose(picker_items[2])
+
+		assert.are.equal(2, capture_calls)
+		assert.are.equal("selected", received)
+	end)
+
+	it("does not retry a failed direct placeholder after preparation", function()
+		local captures = 0
+		local failed_capture = {
+			enabled = true,
+			capture_set = { failed = true },
+			values = {},
+		}
+		mocks.context.capture = function()
+			captures = captures + 1
+			return failed_capture
+		end
+		mocks.context.extend = function(capture)
+			assert.are.equal(failed_capture, capture)
+			return capture
+		end
+		local received
+		mocks.backend.send = function(text)
+			received = text
+		end
+		mocks.action.run = function(_, callbacks)
+			callbacks.on_targets({}, {})
+		end
+
+		mocks.send.send("{failed}")
+
+		assert.are.equal(1, captures)
+		assert.are.equal("{failed}", received)
+	end)
+
+	it("rejects invalid runtime compose before capture or UI", function()
+		local captures = 0
+		local opened = false
+		local warning
+		mocks.context.capture = function()
+			captures = captures + 1
+		end
+		mocks.compose.open = function()
+			opened = true
+		end
+		mocks.notify.warn = function(message)
+			warning = message
+		end
+
+		mocks.send.send({ value = "draft", compose = { close_behavior = "explode" } })
+
+		assert.are.equal(0, captures)
+		assert.is_false(opened)
+		assert.matches("invalid close_behavior", warning)
+	end)
+
+	it("reopens a live empty invocation without reading config or refreshing capture", function()
+		mocks.compose.get_buf = function()
+			return 10
+		end
+		mocks.config.get = function()
+			error("empty reopen must not read new config")
+		end
+		mocks.context.capture = function()
+			error("empty reopen must not capture")
+		end
+		local open_text
+		mocks.compose.open = function(text)
+			open_text = text
+		end
+
+		mocks.send.send("")
+
+		assert.are.equal("", open_text)
+	end)
+end)
+
+describe("real context request capture", function()
+	local context
+	local request_builder
+
+	before_each(function()
+		package.loaded["wiremux.action.send.request"] = nil
+		package.loaded["wiremux.context"] = nil
+		context = require("wiremux.context")
+		request_builder = require("wiremux.action.send.request")
+	end)
+
+	after_each(function()
+		context.configure()
+		package.loaded["wiremux.action.send.request"] = nil
+		package.loaded["wiremux.context"] = nil
+	end)
+
+	local function snapshot(capture_placeholders)
+		local preparation, errors = request_builder.snapshot({}, {
+			actions = { send = { behavior = "pick", compose = false } },
+			ui = { compose = { capture_placeholders = capture_placeholders or {} } },
+		})
+		assert.are.same({}, errors)
+		return preparation
+	end
+
+	it("resolves each repeated name once per independent candidate", function()
+		local calls = { alpha = 0, beta = 0 }
+		context.configure({
+			alpha = function()
+				calls.alpha = calls.alpha + 1
+				return "A"
+			end,
+			beta = function()
+				calls.beta = calls.beta + 1
+				return "B"
+			end,
+		})
+		local preparation = snapshot({ "beta" })
+
+		local first = assert(request_builder.prepare({
+			value = "{alpha} {alpha}",
+			compose = true,
+		}, preparation))
+		local second = assert(request_builder.prepare({
+			value = "{alpha} {alpha}",
+			compose = true,
+		}, preparation))
+
+		assert.are.same({ alpha = 2, beta = 2 }, calls)
+		assert.are_not.equal(first.placeholder_capture, second.placeholder_capture)
+		assert.are.same({ alpha = "A", beta = "B" }, first.placeholder_capture.values)
+		assert.are.same({ alpha = true, beta = true }, first.placeholder_capture.capture_set)
+	end)
+
+	it("does not retry nil or failed direct resolvers during extension", function()
+		local calls = { missing = 0, failed = 0 }
+		context.configure({
+			missing = function()
+				calls.missing = calls.missing + 1
+				return nil
+			end,
+			failed = function()
+				calls.failed = calls.failed + 1
+				error("unavailable")
+			end,
+		})
+		local request = assert(request_builder.prepare({
+			value = "{missing} {missing} {failed}",
+		}, snapshot()))
+
+		local extended = context.extend(request.placeholder_capture, request.raw_text)
+		local materialized = context.materialize(request.raw_text, extended)
+
+		assert.are.same({ missing = 1, failed = 1 }, calls)
+		assert.are.equal("{missing} {missing} {failed}", materialized)
+		assert.is_true(request.placeholder_capture.capture_set.missing)
+		assert.is_true(request.placeholder_capture.capture_set.failed)
+		assert.is_nil(request.placeholder_capture.values.missing)
+		assert.is_nil(request.placeholder_capture.values.failed)
+	end)
+
+	it("extends compose only for names added after page creation", function()
+		local calls = { eager = 0, policy = 0, late = 0 }
+		context.configure({
+			eager = function()
+				calls.eager = calls.eager + 1
+				return "E"
+			end,
+			policy = function()
+				calls.policy = calls.policy + 1
+				return "P"
+			end,
+			late = function()
+				calls.late = calls.late + 1
+				return "L"
+			end,
+		})
+		local preparation = snapshot({ "policy" })
+		local request = assert(request_builder.prepare({ value = "{eager}", compose = true }, preparation))
+
+		local extended = context.extend(request.placeholder_capture, "{eager} {policy} {late} {late}")
+		local materialized = context.materialize("{eager} {policy} {late} {late}", extended)
+
+		assert.are.same({ eager = 1, policy = 1, late = 1 }, calls)
+		assert.are.equal("E P L L", materialized)
+	end)
+end)
+
+describe("send motion request", function()
+	it("always sends selected source in literal-payload mode", function()
+		local original_wiremux = package.loaded["wiremux"]
+		local original_buf = vim.api.nvim_get_current_buf()
+		local buf = vim.api.nvim_create_buf(false, true)
+		local received_item
+		local received_opts
+		package.loaded["wiremux"] = {
+			send = function(item, opts)
+				received_item = item
+				received_opts = opts
+			end,
+		}
+		package.loaded["wiremux.action.send_motion"] = nil
+		local send_motion = require("wiremux.action.send_motion")
+		vim.api.nvim_set_current_buf(buf)
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "local value = '{file}'" })
+		vim.api.nvim_buf_set_mark(buf, "[", 1, 0, {})
+		vim.api.nvim_buf_set_mark(buf, "]", 1, 21, {})
+		local opts = { target = "terminal" }
+
+		send_motion.send_motion(opts)
+		send_motion.operator("char")
+
+		vim.api.nvim_set_current_buf(original_buf)
+		vim.api.nvim_buf_delete(buf, { force = true })
+		package.loaded["wiremux"] = original_wiremux
+		package.loaded["wiremux.action.send_motion"] = nil
+		assert.are.same({ value = "local value = '{file}'", placeholders = false }, received_item)
+		assert.are.equal(opts, received_opts)
+	end)
+end)

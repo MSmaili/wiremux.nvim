@@ -249,6 +249,7 @@ Each item in the picker can have:
 | `submit`    | Auto-press Enter after sending        | `true` (useful for commands)                     |
 | `visible`   | Show/hide this item dynamically       | `function() return vim.bo.filetype == "lua" end` |
 | `compose`   | Review before sending (`true` or `ui.compose` overrides) | `{ on_new_payload = "append" }` |
+| `placeholders` | Expand placeholders; set `false` for literal source text | `false` |
 | `pre_keys`  | Keystrokes to send before pasting     | `"C-c"`, `{"C-c", "i"}`                         |
 | `post_keys` | Keystrokes to send after pasting      | `"Escape"`, `{"Escape", "Enter"}`                |
 

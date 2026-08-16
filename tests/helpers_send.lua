@@ -4,6 +4,7 @@ local M = {}
 
 local MODULES = {
 	"wiremux.action.send",
+	"wiremux.action.send.request",
 	"wiremux.backend",
 	"wiremux.core.action",
 	"wiremux.config",
@@ -36,6 +37,9 @@ function M.setup()
 		picker = helpers.mock_picker(),
 		notify = helpers.mock_notify(),
 		context = {
+			list = function()
+				return { "custom_context", "file", "selection" }
+			end,
 			capture = function()
 				return { enabled = true, capture_set = {}, values = {} }
 			end,

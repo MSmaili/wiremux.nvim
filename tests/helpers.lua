@@ -39,13 +39,17 @@ function M.mock_backend(extra)
 end
 
 function M.mock_config(actions)
-	return {
+	local config = {
 		opts = {
 			targets = { definitions = {} },
 			actions = actions or {},
 			ui = { compose = { capture_placeholders = {} } },
 		},
 	}
+	function config.get()
+		return config.opts
+	end
+	return config
 end
 
 function M.mock_picker()

@@ -63,6 +63,7 @@ local M = {}
 -- User-facing config (all fields optional)
 ---@class wiremux.config.ActionConfig
 ---@field behavior? wiremux.action.Behavior
+---@field mode? wiremux.action.SendMode Target source mode (default: "auto")
 ---@field focus? boolean
 ---@field submit? boolean
 ---@field compose? boolean|wiremux.config.ComposeOptions Open compose buffer before sending

@@ -31,7 +31,7 @@ local function send_operator(type)
 
 	local text = table.concat(lines, "\n")
 	if text ~= "" then
-		require("wiremux").send(text, motion_opts)
+		require("wiremux").send({ value = text, placeholders = false }, motion_opts)
 	end
 	motion_opts = nil
 end

@@ -131,7 +131,8 @@ describe("send with options", function()
 
 		assert.is_true(send_opts.focus)
 		assert.are.equal("last", received_behavior)
-		assert.are.equal(my_filter, received_filter)
+		assert.are.same(my_filter, received_filter)
+		assert.are_not.equal(my_filter, received_filter)
 	end)
 
 	it("respects focus=false even when send focus defaults to true", function()

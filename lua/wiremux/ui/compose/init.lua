@@ -429,26 +429,28 @@ end
 
 ---Open a compose draft with unresolved text.
 ---@param text string
----@param opts wiremux.ui.ComposeOpenOptions
+---@param opts? wiremux.ui.ComposeOpenOptions
 function M.open(text, opts)
 	opts = opts or {}
-	assert(type(opts.on_confirm) == "function", "wiremux compose requires on_confirm")
-
 	if active_session and not vim.api.nvim_buf_is_valid(active_session.buf) then
 		active_session = nil
 	end
 
+	if active_session and not active_session.sent and text == "" then
+		show_session(active_session, true)
+		return
+	end
+
+	assert(type(opts.on_confirm) == "function", "wiremux compose requires on_confirm")
 	assert(type(opts.config) == "table", "wiremux compose requires resolved config")
 	local config = vim.deepcopy(opts.config)
 	if active_session and not active_session.sent then
 		local session = active_session
-		if text ~= "" then
-			session.config = config
-			session.title = config.title or " Compose Message "
-			session.on_confirm = opts.on_confirm
-			session.on_cancel = opts.on_cancel
-			apply_new_payload_policy(session, text, opts.capture)
-		end
+		session.config = config
+		session.title = config.title or " Compose Message "
+		session.on_confirm = opts.on_confirm
+		session.on_cancel = opts.on_cancel
+		apply_new_payload_policy(session, text, opts.capture)
 		show_session(session, true)
 		return
 	end

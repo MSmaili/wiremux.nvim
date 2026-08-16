@@ -320,6 +320,16 @@ local function validate_capture_names(capture_names, path, known_placeholders)
 	return normalized, errors
 end
 
+---Validate and copy a placeholder capture-name list.
+---@param capture_names any
+---@param path string
+---@param known_placeholders? table<string, true>
+---@return string[]? normalized
+---@return wiremux.validate.Error[] errors
+function M.capture_names(capture_names, path, known_placeholders)
+	return validate_capture_names(capture_names, path, known_placeholders)
+end
+
 ---@class wiremux.validate.ComposeOptionsOptions
 ---@field path? string
 ---@field allow_capture_placeholders? boolean
