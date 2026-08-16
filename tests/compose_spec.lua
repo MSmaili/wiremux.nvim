@@ -57,11 +57,13 @@ describe("compose UI", function()
 		pcall(vim.api.nvim_del_augroup_by_id, event_group)
 	end)
 
-	it("appends pages, saves edits, navigates, and confirms in order", function()
+	it("appends pages, saves edits, navigates, and confirms captures in order", function()
 		local confirmed_pages
 		local cancelled = false
+		local first_capture = { source = "one" }
+		local second_capture = { source = "two" }
 		open("first", {
-			page_meta = "one",
+			capture = first_capture,
 			on_confirm = function()
 				error("old callback should be replaced")
 			end,
@@ -71,9 +73,9 @@ describe("compose UI", function()
 
 		open("second", {
 			compose = { title = " Review " },
-			page_meta = "two",
+			capture = second_capture,
 			on_confirm = function(pages)
-				confirmed_pages = vim.deepcopy(pages)
+				confirmed_pages = pages
 				return true
 			end,
 			on_cancel = function()
@@ -90,10 +92,10 @@ describe("compose UI", function()
 		mapping("<C-n>")()
 		mapping("<CR>")()
 
-		assert.are.same({
-			{ text = "edited first", meta = "one" },
-			{ text = "second", meta = "two" },
-		}, confirmed_pages)
+		assert.are.equal("edited first", confirmed_pages[1].text)
+		assert.are.equal(first_capture, confirmed_pages[1].capture)
+		assert.are.equal("second", confirmed_pages[2].text)
+		assert.are.equal(second_capture, confirmed_pages[2].capture)
 		assert.is_nil(compose.get_buf())
 		assert.is_false(cancelled)
 	end)
@@ -120,13 +122,16 @@ describe("compose UI", function()
 		assert.matches("%[2/2%]", title())
 	end)
 
-	it("treats an empty invocation as reopen only", function()
+	it("treats an empty invocation as reopen only without replacing its capture", function()
 		local first_called = false
 		local empty_called = false
+		local original_capture = { source = "original" }
+		local ignored_capture = { source = "ignored" }
 		open("draft", {
 			compose = { title = " Original " },
+			capture = original_capture,
 			on_confirm = function(pages)
-				first_called = pages[1].text == "draft"
+				first_called = pages[1].text == "draft" and pages[1].capture == original_capture
 				return true
 			end,
 		})
@@ -134,6 +139,7 @@ describe("compose UI", function()
 
 		open("", {
 			compose = { title = " Ignored " },
+			capture = ignored_capture,
 			on_confirm = function()
 				empty_called = true
 				return true
@@ -183,6 +189,81 @@ describe("compose UI", function()
 		assert.matches("Latest Title", title())
 		mapping("<CR>")()
 		assert.is_true(latest_called)
+	end)
+
+	it("keeps the existing page capture and rejects the incoming capture", function()
+		config.opts.ui.compose.on_new_payload = "keep"
+		local original_capture = { source = "original" }
+		local rejected_capture = { source = "rejected" }
+		local pages
+		open("first", {
+			capture = original_capture,
+			on_confirm = function() end,
+		})
+		open("ignored", {
+			capture = rejected_capture,
+			on_confirm = function(value)
+				pages = value
+				return false
+			end,
+		})
+
+		mapping("<CR>")()
+
+		assert.are.equal(1, #pages)
+		assert.are.equal("first", pages[1].text)
+		assert.are.equal(original_capture, pages[1].capture)
+		assert.are_not.equal(rejected_capture, pages[1].capture)
+	end)
+
+	it("replaces all old pages and captures", function()
+		config.opts.ui.compose.on_new_payload = "replace"
+		local old_capture = { source = "old" }
+		local replacement_capture = { source = "replacement" }
+		local pages
+		open("old", {
+			capture = old_capture,
+			on_confirm = function() end,
+		})
+		open("replacement", {
+			capture = replacement_capture,
+			on_confirm = function(value)
+				pages = value
+				return false
+			end,
+		})
+
+		mapping("<CR>")()
+
+		assert.are.equal(1, #pages)
+		assert.are.equal("replacement", pages[1].text)
+		assert.are.equal(replacement_capture, pages[1].capture)
+		assert.are_not.equal(old_capture, pages[1].capture)
+	end)
+
+	it("keeps distinct opaque captures for identical appended text", function()
+		local first_capture = { future = { source = "first" } }
+		local second_capture = { future = { source = "second" } }
+		local pages
+		open("same", {
+			capture = first_capture,
+			on_confirm = function() end,
+		})
+		open("same", {
+			capture = second_capture,
+			on_confirm = function(value)
+				pages = value
+				return false
+			end,
+		})
+
+		mapping("<CR>")()
+
+		assert.are.equal(2, #pages)
+		assert.are.equal(first_capture, pages[1].capture)
+		assert.are.equal(second_capture, pages[2].capture)
+		assert.are.same({ source = "first" }, pages[1].capture.future)
+		assert.are.same({ source = "second" }, pages[2].capture.future)
 	end)
 
 	it("merges per-session compose options over global defaults", function()

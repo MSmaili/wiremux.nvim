@@ -232,9 +232,10 @@ end
 local function prepare_compose_pages(pages)
 	local materialized_pages = {}
 	for index, page in ipairs(pages) do
-		local capture = type(page.meta) == "table" and page.meta.placeholder_capture or nil
 		local ok, materialized = pcall(function()
-			local extended = context.extend(capture, page.text)
+			assert(type(page.capture) == "table", "wiremux compose page capture must be a table")
+			local placeholder_capture = page.capture.placeholder_capture
+			local extended = context.extend(placeholder_capture, page.text)
 			return context.materialize(page.text, extended)
 		end)
 		if not ok then
@@ -268,7 +269,7 @@ local function resolve_and_send(item, opts, placeholder_capture, compose_config)
 	if compose_config then
 		require("wiremux.ui.compose").open(item.value, {
 			config = compose_config,
-			page_meta = { placeholder_capture = placeholder_capture },
+			capture = { placeholder_capture = placeholder_capture },
 			on_confirm = function(pages)
 				local materialized = prepare_compose_pages(pages)
 				if materialized == nil then

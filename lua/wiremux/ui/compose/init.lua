@@ -9,7 +9,7 @@ local M = {}
 ---@class wiremux.ui.ComposeOpenOptions
 ---@field on_confirm fun(pages: wiremux.ui.ComposePage[]): boolean?
 ---@field on_cancel? fun()
----@field page_meta? any
+---@field capture? any
 ---@field config wiremux.config.ComposeSessionConfig Resolved session configuration
 
 ---@class wiremux.ui.ComposeSession
@@ -399,11 +399,11 @@ end
 
 ---@param session wiremux.ui.ComposeSession
 ---@param text string
----@param meta? any
-local function apply_new_payload_policy(session, text, meta)
+---@param capture? any
+local function apply_new_payload_policy(session, text, capture)
 	save_current_page(session)
 	if draft_model.is_empty(session.draft) then
-		draft_model.replace(session.draft, text, meta)
+		draft_model.replace(session.draft, text, capture)
 		load_buffer_text(session.buf, text)
 		return
 	end
@@ -419,10 +419,10 @@ local function apply_new_payload_policy(session, text, meta)
 	end
 
 	if policy == "replace" then
-		draft_model.replace(session.draft, text, meta)
+		draft_model.replace(session.draft, text, capture)
 		load_buffer_text(session.buf, text)
 	elseif policy == "append" then
-		draft_model.append(session.draft, text, meta)
+		draft_model.append(session.draft, text, capture)
 		load_buffer_text(session.buf, text)
 	end
 end
@@ -447,7 +447,7 @@ function M.open(text, opts)
 			session.title = config.title or " Compose Message "
 			session.on_confirm = opts.on_confirm
 			session.on_cancel = opts.on_cancel
-			apply_new_payload_policy(session, text, opts.page_meta)
+			apply_new_payload_policy(session, text, opts.capture)
 		end
 		show_session(session, true)
 		return
@@ -458,7 +458,7 @@ function M.open(text, opts)
 		buf = create_buffer(text),
 		config = config,
 		title = config.title or " Compose Message ",
-		draft = draft_model.new(text, opts.page_meta),
+		draft = draft_model.new(text, opts.capture),
 		on_confirm = opts.on_confirm,
 		on_cancel = opts.on_cancel,
 		confirming = false,

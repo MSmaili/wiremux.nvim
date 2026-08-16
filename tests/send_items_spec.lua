@@ -143,7 +143,7 @@ describe("send single item", function()
 		mocks.compose.open = function(text, compose_opts)
 			compose_opened = true
 			assert.are.equal("draft", text)
-			compose_opts.on_confirm({ { text = "edited draft", meta = compose_opts.page_meta } })
+			compose_opts.on_confirm({ { text = "edited draft", capture = compose_opts.capture } })
 		end
 
 		mocks.backend.send = function(text)
@@ -172,7 +172,7 @@ describe("send single item", function()
 		mocks.compose.open = function(text, compose_opts)
 			compose_opened = true
 			assert.are.equal("draft", text)
-			compose_opts.on_confirm({ { text = "edited from opts", meta = compose_opts.page_meta } })
+			compose_opts.on_confirm({ { text = "edited from opts", capture = compose_opts.capture } })
 		end
 
 		mocks.backend.send = function(text)
@@ -225,7 +225,7 @@ describe("send single item", function()
 
 		mocks.compose.open = function(text, compose_opts)
 			compose_config = compose_opts.config
-			compose_opts.on_confirm({ { text = text, meta = compose_opts.page_meta } })
+			compose_opts.on_confirm({ { text = text, capture = compose_opts.capture } })
 		end
 		mocks.action.run = function(_, callbacks)
 			callbacks.on_definition("test", {}, {})
@@ -285,6 +285,29 @@ describe("send single item", function()
 		assert.are.equal(2, #calls)
 		assert.is_nil(calls[1].capture_names)
 		assert.are.same({ "selection", "custom_context" }, calls[2].capture_names)
+	end)
+
+	it("transfers one failed eager capture into an explicit page capture", function()
+		local placeholder_capture = {
+			enabled = true,
+			capture_set = { failed = true },
+			values = {},
+		}
+		mocks.context.capture = function()
+			return placeholder_capture
+		end
+		local page_capture
+		mocks.compose.open = function(_, compose_opts)
+			page_capture = compose_opts.capture
+		end
+
+		mocks.send.send({ value = "{failed}", compose = true })
+
+		assert.are.same({ placeholder_capture = placeholder_capture }, page_capture)
+		assert.are.equal(placeholder_capture, page_capture.placeholder_capture)
+		assert.are.equal(placeholder_capture.capture_set, page_capture.placeholder_capture.capture_set)
+		assert.is_true(page_capture.placeholder_capture.capture_set.failed)
+		assert.is_nil(page_capture.placeholder_capture.values.failed)
 	end)
 
 	it("passes a complete session config without the global capture policy", function()
@@ -422,7 +445,7 @@ describe("send single item", function()
 			local confirmed = compose_opts.on_confirm({
 				{
 					text = " {value}  ",
-					meta = {
+					capture = {
 						placeholder_capture = {
 							enabled = true,
 							capture_set = { value = true },
@@ -432,13 +455,13 @@ describe("send single item", function()
 				},
 				{
 					text = "",
-					meta = {
+					capture = {
 						placeholder_capture = { enabled = true, capture_set = {}, values = {} },
 					},
 				},
 				{
 					text = "{value}",
-					meta = {
+					capture = {
 						placeholder_capture = {
 							enabled = true,
 							capture_set = { value = true },
@@ -495,7 +518,7 @@ describe("send single item", function()
 		end
 		mocks.compose.open = function(_, compose_opts)
 			confirmation_result = compose_opts.on_confirm({
-				{ text = "draft", meta = { placeholder_capture = { enabled = true } } },
+				{ text = "draft", capture = { placeholder_capture = { enabled = true } } },
 			})
 		end
 		mocks.action.run = function()

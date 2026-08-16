@@ -1,19 +1,22 @@
 local M = {}
 
+---@class wiremux.ui.ComposePageCapture
+---@field placeholder_capture wiremux.context.PlaceholderCapture
+
 ---@class wiremux.ui.ComposePage
 ---@field text string
----@field meta? any
+---@field capture any
 
 ---@class wiremux.ui.ComposeDraft
 ---@field pages wiremux.ui.ComposePage[]
 ---@field current_page number
 
 ---@param text? string
----@param meta? any
+---@param capture? any
 ---@return wiremux.ui.ComposeDraft
-function M.new(text, meta)
+function M.new(text, capture)
 	return {
-		pages = { { text = text or "", meta = meta } },
+		pages = { { text = text or "", capture = capture } },
 		current_page = 1,
 	}
 end
@@ -32,17 +35,17 @@ end
 
 ---@param draft wiremux.ui.ComposeDraft
 ---@param text string
----@param meta? any
-function M.append(draft, text, meta)
-	table.insert(draft.pages, { text = text, meta = meta })
+---@param capture? any
+function M.append(draft, text, capture)
+	table.insert(draft.pages, { text = text, capture = capture })
 	draft.current_page = #draft.pages
 end
 
 ---@param draft wiremux.ui.ComposeDraft
 ---@param text string
----@param meta? any
-function M.replace(draft, text, meta)
-	draft.pages = { { text = text, meta = meta } }
+---@param capture? any
+function M.replace(draft, text, capture)
+	draft.pages = { { text = text, capture = capture } }
 	draft.current_page = 1
 end
 
