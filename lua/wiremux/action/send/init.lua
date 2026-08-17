@@ -1,5 +1,6 @@
 local M = {}
-local context = require("wiremux.context")
+local delivery = require("wiremux.action.send.delivery")
+local materialize = require("wiremux.action.send.materialize")
 local notify = require("wiremux.utils.notify")
 local request_builder = require("wiremux.action.send.request")
 
@@ -48,97 +49,36 @@ local function warn_preparation_errors(errors)
 	end
 end
 
----Execute the send action with fully prepared delivery options.
 ---@param payload string
----@param delivery wiremux.action.DeliveryOptions
----@param title? string
-local function do_send(payload, delivery, title)
-	local action = require("wiremux.core.action")
-	local backend = require("wiremux.backend").get()
-	if not backend then
-		return
+---@param request wiremux.action.PreparedSendRequest
+local function deliver_payload(payload, request)
+	local started, err = delivery.send(payload, request.delivery, request.target_title)
+	if not started then
+		assert(err ~= nil, "wiremux delivery failure requires an error")
+		notify.error(err.message)
 	end
-
-	local backend_send_opts = {
-		focus = delivery.focus,
-		pre_keys = delivery.pre_keys,
-		post_keys = delivery.post_keys,
-	}
-
-	action.run({
-		prompt = "Send to",
-		behavior = delivery.behavior,
-		mode = delivery.mode,
-		filter = delivery.filter,
-		target = delivery.target,
-	}, {
-		on_targets = function(targets, state)
-			backend.send(payload, targets, backend_send_opts, state)
-		end,
-		on_definition = function(name, def, state)
-			local has_own_cmd = def.cmd ~= nil
-			local modified_def = vim.tbl_extend("force", {}, def, {
-				cmd = def.cmd or payload,
-				title = title,
-			})
-			local inst = backend.create(name, modified_def, state)
-			if inst and has_own_cmd then
-				backend.wait_for_ready(inst, { timeout_ms = def.startup_timeout }, function()
-					backend.send(payload, { inst }, backend_send_opts, state)
-				end)
-			end
-		end,
-	})
-end
-
----@param text string
----@param capture wiremux.context.PlaceholderCapture
----@return string?
-local function materialize_with_context(text, capture)
-	local ok, materialized = pcall(function()
-		local extended = context.extend(capture, text)
-		return context.materialize(text, extended)
-	end)
-	if not ok then
-		notify.error(materialized)
-		return nil
-	end
-	return materialized
-end
-
----@param pages wiremux.ui.ComposePage[]
----@return string?
-local function prepare_compose_pages(pages)
-	local materialized_pages = {}
-	for index, page in ipairs(pages) do
-		local ok, materialized = pcall(function()
-			assert(type(page.capture) == "table", "wiremux compose page capture must be a table")
-			local placeholder_capture = page.capture.placeholder_capture
-			local extended = context.extend(placeholder_capture, page.text)
-			return context.materialize(page.text, extended)
-		end)
-		if not ok then
-			notify.error(string.format("Failed to prepare compose page %d: %s", index, tostring(materialized)))
-			return nil
-		end
-		materialized_pages[index] = materialized:gsub("%s+$", "")
-	end
-	return table.concat(materialized_pages, "\n\n")
 end
 
 ---@param request wiremux.action.PreparedSendRequest
 local function execute_request(request)
 	if request.compose then
+		local confirmed = false
 		require("wiremux.ui.compose").open(request.raw_text, {
 			config = request.compose.config,
 			capture = { placeholder_capture = request.placeholder_capture },
 			on_confirm = function(pages)
-				local materialized = prepare_compose_pages(pages)
-				if materialized == nil then
+				if confirmed then
+					return true
+				end
+				local payload, err = materialize.compose(pages)
+				if payload == nil then
+					assert(err ~= nil, "wiremux compose materialization failure requires an error")
+					notify.error(err.message)
 					return false
 				end
+				confirmed = true
 				vim.schedule(function()
-					do_send(materialized, request.delivery, request.target_title)
+					deliver_payload(payload, request)
 				end)
 				return true
 			end,
@@ -146,11 +86,13 @@ local function execute_request(request)
 		return
 	end
 
-	local materialized = materialize_with_context(request.raw_text, request.placeholder_capture)
-	if materialized == nil then
+	local payload, err = materialize.direct(request)
+	if payload == nil then
+		assert(err ~= nil, "wiremux direct materialization failure requires an error")
+		notify.error(err.message)
 		return
 	end
-	do_send(materialized, request.delivery, request.target_title)
+	deliver_payload(payload, request)
 end
 
 ---@param item wiremux.action.SendItem
@@ -187,12 +129,17 @@ local function send_from_library(items, preparation)
 		return
 	end
 
+	local selected = false
 	require("wiremux.picker").select(picker_items, {
 		prompt = "Select item",
 		format_item = function(picker_item)
 			return picker_item.label
 		end,
 	}, function(choice)
+		if selected then
+			return
+		end
+		selected = true
 		if choice then
 			execute_request(choice.value)
 		end

@@ -648,6 +648,24 @@ describe("send list of items", function()
 		assert.are_not.equal(captured["first {one}"], selected_capture)
 	end)
 
+	it("ignores duplicate library-picker callbacks", function()
+		local sends = 0
+		mocks.backend.send = function()
+			sends = sends + 1
+		end
+		mocks.action.run = function(_, callbacks)
+			callbacks.on_targets({}, {})
+		end
+		mocks.picker.select = function(items, _, callback)
+			callback(items[1])
+			callback(items[1])
+		end
+
+		mocks.send.send({ { value = "selected" } })
+
+		assert.are.equal(1, sends)
+	end)
+
 	it("handles picker cancellation", function()
 		local send_called = false
 

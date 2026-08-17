@@ -4,6 +4,8 @@ local M = {}
 
 local MODULES = {
 	"wiremux.action.send",
+	"wiremux.action.send.delivery",
+	"wiremux.action.send.materialize",
 	"wiremux.action.send.request",
 	"wiremux.backend",
 	"wiremux.core.action",
