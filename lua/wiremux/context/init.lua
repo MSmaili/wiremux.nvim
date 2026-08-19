@@ -6,10 +6,10 @@ local M = {}
 
 ---@alias wiremux.context.Resolver fun(): string?
 
----@class wiremux.context.PlaceholderCapture
----@field enabled boolean
----@field capture_set table<string, true>
----@field values table<string, string>
+---@class wiremux.context.PlaceholderCapture Point-in-time placeholder capture owned by one prepared request or compose page.
+---@field enabled boolean Whether extension and materialization are enabled.
+---@field capture_set table<string, true> Every attempted name, including unavailable outcomes that must not be retried.
+---@field values table<string, string> Successful string results captured at that point in time, including empty strings.
 
 ---@type table<string, wiremux.context.Resolver>
 local resolvers = {}
@@ -125,7 +125,7 @@ function M.is_available(name)
 	return value ~= nil and value ~= ""
 end
 
----Create an enabled capture for placeholders found in text and explicit capture names.
+---Create an enabled point-in-time capture for placeholders found in text and explicit capture names.
 ---@param texts string|string[]
 ---@param capture_names? string[]
 ---@return wiremux.context.PlaceholderCapture
@@ -154,7 +154,8 @@ function M.capture(texts, capture_names)
 	return capture
 end
 
----Clone a capture and resolve names in text that were not previously attempted.
+---Create a working clone and resolve names in text that were not previously attempted.
+---The stored input capture is never mutated.
 ---@param capture wiremux.context.PlaceholderCapture
 ---@param text string
 ---@return wiremux.context.PlaceholderCapture
@@ -179,7 +180,7 @@ function M.extend(capture, text)
 	return extended
 end
 
----Materialize text using capture values without invoking a resolver.
+---Materialize complete text through capture lookup only, without invoking a resolver.
 ---@param text string
 ---@param capture wiremux.context.PlaceholderCapture
 ---@return string

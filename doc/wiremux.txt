@@ -31,7 +31,7 @@ Features:
 
   - Create/focus/close named tmux targets
   - Send text (or pick from a list of prompts)
-  - Expand context placeholders like {file}, {position}, {diagnostics_all}
+  - Capture and materialize placeholders like {file} and {diagnostics_all}
   - Store instance metadata in tmux (survives Neovim restarts)
   - Lazy loaded (near zero startup cost)
 
@@ -163,8 +163,8 @@ Item-level `pre_keys`/`post_keys` override opts-level when both are set.
 Compose drafts ~
                                                *wiremux-howto-compose*
 
-Use `compose = true` to edit unresolved text before selecting a target. A table
-also enables compose and can set the compose window title:
+Use `compose = true` to edit a raw placeholder template before selecting a
+target. A table also enables compose and can set the compose window title:
 >lua
   require("wiremux").send("Review {this}", { compose = true })
   require("wiremux").send("Review {selection}", {
@@ -174,23 +174,44 @@ also enables compose and can set the compose window title:
 
 Set `ui.compose.on_new_payload = "append"` to collect multiple invocations in
 one paged draft. Use normal-mode `<C-p>` and `<C-n>` to navigate pages.
-Confirmation materializes each page against values captured when that page was
-added, joins pages with a blank line, and sends one payload. Each page captures
-names already in its initial text plus `ui.compose.capture_placeholders`. The
-lightweight default policy contains file, filename, position, line, selection,
-and this. More expensive or potentially large placeholders such as changes,
-diagnostics, and diagnostics_all are captured only when present initially or
-explicitly added to the policy. Other uncaptured names resolve at confirmation;
-failed eager captures remain literal. Set the global capture policy to `{}` to
-disable extra pre-capture. It is not accepted in action, call-level, or
-item-level compose tables.
+
+Each page owns an independent placeholder capture created when the page is
+added. Its stored `values` map is the page's point-in-time snapshot. Editing
+raw text does not refresh or mutate that snapshot, so identical pages added
+from different editor states can materialize differently.
+
+At confirmation, Wiremux clones each page capture into a temporary working
+capture, resolves only newly added valid names, and materializes by lookup.
+The three-tier rule is:
+
+  1. A value captured when the page was created wins.
+  2. A name attempted eagerly but unavailable stays literal and is not retried.
+  3. A previously uncaptured name resolves once for that page at confirmation;
+     unavailable results stay literal.
+
+The working capture is discarded after preparing the payload; the stored page
+capture remains unchanged. Pages are joined with one blank line and delivered
+as one prepared payload.
+
+Every page captures names in its initial text plus
+`ui.compose.capture_placeholders`. The lightweight default policy contains
+file, filename, position, line, selection, and this. Expensive or potentially
+large names such as changes, diagnostics, and diagnostics_all are opt-in unless
+present initially. buffers and quickfix typed later use confirmation-time state
+unless added to the policy. A configured list replaces the default; `{}`
+disables extra pre-capture. This option is global only, with no action,
+call-level, or item-level override.
 
 Supported new-payload policies are "ask", "keep", "replace", and "append".
-The ask dialog defaults to Keep Draft. Calling `send()` without text reopens a
-hidden draft without adding a page or changing its delivery options.
+The ask dialog defaults to Keep Draft. The latest non-empty invocation supplies
+the session configuration, callbacks, and delivery options even when older
+pages are kept. Calling `send()` without text reopens a hidden draft without
+adding a page or changing those values.
 
 Compose precedence is whole-value precedence: item `compose`, call options
-`compose`, then `actions.send.compose`. Compose tables are not merged.
+`compose`, then `actions.send.compose`. Tables are not merged across those
+levels. The selected table is merged over global session defaults, excluding
+the global-only capture_placeholders field.
 
 Customize compose on open ~
                                          *wiremux-compose-open-event*
@@ -303,6 +324,9 @@ Example usage:
      sends paragraphs
   - Visual mode: select text, then press `ga`
      sends selection
+
+Motion-captured source uses `placeholders = false`, so placeholder-shaped code
+such as `{file}` is sent literally.
 
 ==============================================================================
 4. CONFIGURATION                                              *wiremux-configuration*
@@ -587,7 +611,8 @@ You can also override filters for specific actions using `opts.filter`:
 ==============================================================================
 5. PLACEHOLDERS (CONTEXT)                                     *wiremux-placeholders*
 
-wiremux expands `{placeholders}` before sending.
+Wiremux captures and materializes `{placeholders}` before delivery. Names must
+match `[A-Za-z_][A-Za-z0-9_]*` inside one pair of braces.
 
 Built-ins:
 
@@ -603,11 +628,31 @@ Built-ins:
   {buffers}         list of listed, loaded buffers
   {changes}         git diff HEAD -- {file} (or "No changes")
 
+Resolver outcomes:
+
+  non-empty string   stored and substituted
+  empty string ""    stored and removes the placeholder text
+  nil                not stored; placeholder remains literal
+  resolver error     not stored; placeholder remains literal
+  non-string value   not stored; placeholder remains literal
+  unknown name       not stored; placeholder remains literal
+
+A capture records every attempted name in its capture set, including
+unavailable outcomes. Failed eager captures therefore are not retried against a
+later editor state. `context.materialize()` performs lookup only and never
+invokes a resolver. A send item with `placeholders = false` disables capture
+and materialization, preserving all placeholder-shaped text.
+
+Behavior correction: empty strings are successful values and now remove their
+placeholder during materialization. Older behavior could leave it literal.
+
 Custom resolver names begin with a letter or underscore and continue with
-letters, digits, or underscores. Resolvers should be fast and side-effect-free.
-If a custom resolver depends on the current editor page and may be typed after
-compose opens, add its name to `ui.compose.capture_placeholders` while retaining
-any default names you still want captured.
+letters, digits, or underscores. Custom resolvers belong to the latest
+`setup()` call; repeated setup replaces the previous custom set while retaining
+built-ins. Resolvers should be fast and side-effect-free. If one depends on the
+current editor page and may be typed after compose opens, add its name to
+`ui.compose.capture_placeholders` while retaining any default names you still
+want captured.
 
 Custom resolvers:
 >lua
@@ -702,9 +747,10 @@ wiremux.setup({opts})
 
                                                      *wiremux.send()*
 wiremux.send({text|items}, {opts})
-        Send a string, or pick from a list of items.
+        Send a string, item, or list of items.
 
-        Items are { name = string, text = string }.
+        Items use { value = string, label? = string, ... }. Set
+        {placeholders = false} to keep placeholder-shaped text literal.
 
                                                      *wiremux.focus()*
 wiremux.focus({opts})
@@ -848,5 +894,15 @@ If things do not work:
 State is stored in tmux (pane variables like `@wiremux_*`), not in Neovim.
 That makes instances survive Neovim restarts and lets multiple Neovim
 instances share the same targets.
+
+Send pipeline ~
+
+A public send candidate becomes one prepared request containing raw text,
+delivery options, compose configuration, and a point-in-time placeholder
+capture. Direct sends extend that capture without new names and materialize one
+prepared payload. Compose pages retain raw text and independent captures; at
+confirmation, a temporary working capture may add names typed later. The
+prepared payload then crosses target selection and backend delivery boundaries.
+Compose and backends do not inspect each other's domain objects.
 
 vim:tw=78:ts=8:ft=help:norl:

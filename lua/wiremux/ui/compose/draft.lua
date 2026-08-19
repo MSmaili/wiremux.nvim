@@ -1,11 +1,11 @@
 local M = {}
 
----@class wiremux.ui.ComposePageCapture
+---@class wiremux.ui.ComposePageCapture Extensible, controller-opaque point-in-time page capture.
 ---@field placeholder_capture wiremux.context.PlaceholderCapture
 
 ---@class wiremux.ui.ComposePage
----@field text string
----@field capture any
+---@field text string Raw template text edited without refreshing the page capture.
+---@field capture any Opaque page-owned capture passed unchanged to confirmation.
 
 ---@class wiremux.ui.ComposeDraft
 ---@field pages wiremux.ui.ComposePage[]

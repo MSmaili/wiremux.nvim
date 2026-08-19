@@ -114,8 +114,9 @@ end
 ---@param index number
 ---@return string
 local function get_display_name(inst, def, index)
-	if def and type(def.label) == "function" then
-		local ok, result = pcall(def.label, inst, index)
+	local configured_label = def and def.label or nil
+	if type(configured_label) == "function" then
+		local ok, result = pcall(configured_label, inst, index)
 		if ok and type(result) == "string" then
 			return result
 		elseif not ok then
@@ -126,8 +127,8 @@ local function get_display_name(inst, def, index)
 	local name
 	if inst.kind == "window" and inst.window_name and inst.window_name ~= "" then
 		name = inst.window_name
-	elseif def and type(def.label) == "string" then
-		name = def.label
+	elseif type(configured_label) == "string" then
+		name = configured_label
 	else
 		name = inst.target
 	end
@@ -196,16 +197,16 @@ local function targets_result(targets)
 end
 
 ---@param instances wiremux.Instance[]
----@param behavior wiremux.action.Behavior
----@param last_used string?
----@return wiremux.ResolveResult
----@param instances wiremux.Instance[]
 ---@return wiremux.ResolveResult.Pick
 local function pick_from_instances(instances)
 	local sorted = sort_instances(instances)
 	return pick_result(build_instance_items(sorted))
 end
 
+---@param instances wiremux.Instance[]
+---@param behavior wiremux.action.Behavior
+---@param last_used string?
+---@return wiremux.ResolveResult
 local function resolve_by_behavior(instances, behavior, last_used)
 	if behavior == "all" then
 		return targets_result(instances)

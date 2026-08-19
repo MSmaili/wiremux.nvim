@@ -242,20 +242,20 @@ require("wiremux").send({
 
 Each item in the picker can have:
 
-| Field       | What it does                          | Example                                          |
-| ----------- | ------------------------------------- | ------------------------------------------------ |
-| `value`     | **(Required)** The text to send       | `"Explain {file}"`                               |
-| `label`     | Display name in the picker            | `"Explain file"`                                 |
-| `submit`    | Auto-press Enter after sending        | `true` (useful for commands)                     |
-| `visible`   | Show/hide this item dynamically       | `function() return vim.bo.filetype == "lua" end` |
-| `compose`   | Review before sending (`true` or `ui.compose` overrides) | `{ on_new_payload = "append" }` |
-| `placeholders` | Expand placeholders; set `false` for literal source text | `false` |
-| `pre_keys`  | Keystrokes to send before pasting     | `"C-c"`, `{"C-c", "i"}`                         |
-| `post_keys` | Keystrokes to send after pasting      | `"Escape"`, `{"Escape", "Enter"}`                |
+| Field          | What it does                                                  | Example                                          |
+| -------------- | ------------------------------------------------------------- | ------------------------------------------------ |
+| `value`        | **(Required)** The text to send                               | `"Explain {file}"`                               |
+| `label`        | Display name in the picker                                    | `"Explain file"`                                 |
+| `submit`       | Auto-press Enter after sending                                | `true` (useful for commands)                     |
+| `visible`      | Show/hide this item dynamically                               | `function() return vim.bo.filetype == "lua" end` |
+| `compose`      | Review before sending (`true` or `ui.compose` overrides)      | `{ on_new_payload = "append" }`                  |
+| `placeholders` | Materialize placeholders; set `false` for literal source text | `false`                                          |
+| `pre_keys`     | Keystrokes to send before pasting                             | `"C-c"`, `{"C-c", "i"}`                          |
+| `post_keys`    | Keystrokes to send after pasting                              | `"Escape"`, `{"Escape", "Enter"}`                |
 
 ### Compose Drafts
 
-Use compose mode to edit unresolved text before choosing a target:
+Use compose mode to edit the raw placeholder template before choosing a target:
 
 ```lua
 require("wiremux").send("Review {this}", { compose = true })
@@ -285,11 +285,20 @@ vim.keymap.set({ "n", "x" }, "<leader>ar", function()
 end)
 ```
 
-Compose keeps placeholders raw while editing. Every page captures names already present plus the global `ui.compose.capture_placeholders` policy when it is added, so `{this}` from different files or selections uses the correct original location at confirmation time. The lightweight default policy contains `file`, `filename`, `position`, `line`, `selection`, and `this`. More expensive or potentially large placeholders such as `{changes}`, `{diagnostics}`, and `{diagnostics_all}` are captured only when present initially or explicitly added to the policy. Other placeholders typed later resolve at confirmation, while failed eager captures remain literal. A configured list replaces the default policy; set it to `{}` to disable extra pre-capture. Capture policy is not accepted in action, call-level, or item-level compose tables.
+Compose keeps the template raw while editing. Each page owns an independent placeholder capture created when that page is added. Its stored `values` map is the page's point-in-time snapshot; editing text never refreshes or mutates it. This is why identical pages added from different files, cursor positions, or selections can materialize differently.
 
-When a draft already exists, `on_new_payload` supports `"ask"`, `"keep"`, `"replace"`, and `"append"`. The ask dialog defaults to **Keep Draft**. Calling `send()` without text reopens an existing hidden draft without adding a page or changing its delivery options.
+At confirmation, Wiremux clones each stored page capture into a temporary working capture. It resolves only valid placeholder names added after page creation, materializes the complete page through lookup only, and discards the working capture. Resolution follows three tiers:
 
-Compose option precedence is whole-value precedence: item-level `compose`, then call-level `opts.compose`, then `actions.send.compose`. Tables imply compose is enabled and are not merged across those levels. The selected table uses the same fields as `ui.compose` and is deep-merged over those global defaults for the compose session.
+1. A value stored at page creation wins.
+2. A name attempted eagerly but unavailable remains literal and is not retried.
+3. A name not previously captured is resolved once for that page at confirmation; unavailable results remain literal.
+
+Every page captures names already present plus the global `ui.compose.capture_placeholders` policy. The lightweight default policy contains `file`, `filename`, `position`, `line`, `selection`, and `this`. More expensive or potentially large placeholders such as `changes`, `diagnostics`, and `diagnostics_all` are opt-in unless present initially. `{buffers}` and `{quickfix}` typed later intentionally use confirmation-time state unless added to the policy. A configured list replaces the default policy; set it to `{}` to disable extra pre-capture. This policy exists only at `ui.compose.capture_placeholders`; there are no action, call-level, or item-level overrides.
+
+When a draft already exists, `on_new_payload` supports `"ask"`, `"keep"`, `"replace"`, and `"append"`.
+The ask dialog defaults to **Keep Draft**. The latest non-empty invocation supplies the session configuration, callbacks, and delivery options even when content policy keeps older pages. Calling `send()` without text reopens an existing hidden draft without adding a page or changing any of those values.
+
+Compose option precedence is whole-value precedence: item-level `compose`, then call-level `opts.compose`, then `actions.send.compose`. Tables imply compose is enabled and are not merged across those levels. The selected table uses the session fields from `ui.compose` and is deep-merged over those global defaults; the global-only `capture_placeholders` field is excluded.
 
 #### Customize Compose On Open
 
@@ -347,9 +356,9 @@ Item-level `pre_keys`/`post_keys` override opts-level when both are set.
 
 ## Placeholders
 
-wiremux expands `{placeholders}` before sending.
+Wiremux captures and materializes `{placeholders}` before delivery. A placeholder name must match `[A-Za-z_][A-Za-z0-9_]*` inside one pair of braces.
 
-| Placeholder         | What it expands to                             |
+| Placeholder         | What it materializes to                        |
 | ------------------- | ---------------------------------------------- |
 | `{file}`            | current buffer path                            |
 | `{filename}`        | basename of `{file}`                           |
@@ -362,6 +371,21 @@ wiremux expands `{placeholders}` before sending.
 | `{quickfix}`        | formatted quickfix list                        |
 | `{buffers}`         | list of listed, loaded buffers                 |
 | `{changes}`         | `git diff HEAD -- {file}` (or "No changes")    |
+
+Resolver outcomes are intentionally distinct:
+
+| Resolver outcome  | Stored value | Materialized text            |
+| ----------------- | ------------ | ---------------------------- |
+| Non-empty string  | The string   | Replaces the placeholder     |
+| Empty string `""` | Empty string | Removes the placeholder text |
+| `nil`             | No value     | Placeholder remains literal  |
+| Resolver error    | No value     | Placeholder remains literal  |
+| Non-string value  | No value     | Placeholder remains literal  |
+| Unknown name      | No value     | Placeholder remains literal  |
+
+A capture records every attempted name in its capture set, including unavailable outcomes. That prevents failed eager captures from unexpectedly resolving against a later editor state. `context.materialize()` performs lookup only and never invokes a resolver. A send item with `placeholders = false` disables capture and materialization completely, preserving all placeholder-shaped text.
+
+The send pipeline captures a prepared request before picker or compose interaction, optionally edits raw pages, creates a temporary working capture at confirmation, materializes one prepared payload, then performs target selection and backend delivery.
 
 You can add custom placeholders. Resolver names must begin with a letter or underscore and continue with letters, digits, or underscores:
 
@@ -378,7 +402,7 @@ require("wiremux").setup({
 })
 ```
 
-Custom resolvers should be fast and side-effect-free. If a custom resolver depends on the current editor page and users may type it after opening compose, add its name to the global capture policy:
+Custom resolvers are owned by the latest `setup()` call: running setup again replaces the previous custom resolver set while built-ins remain available. Resolvers should be fast and side-effect-free. If a resolver depends on the current editor page and users may type it after opening compose, add its name to the global capture policy:
 
 ```lua
 ui = {
@@ -518,6 +542,8 @@ These are the main ways to interact with wiremux targets. You can use them as **
 | `focus()`       | `:Wiremux focus`       | Switches focus to a target                | Jump to your terminal or AI pane                           |
 | `close()`       | `:Wiremux close`       | Closes a target                           | Shut down an AI or terminal you're done with               |
 | `adopt()`       | `:Wiremux adopt`       | Re-owns an existing tmux pane             | Bring any existing pane under wiremux control              |
+
+`send_motion()` sends captured source with `placeholders = false`, so placeholder-shaped code such as `{file}` remains literal.
 
 ### Adopt Existing Panes
 

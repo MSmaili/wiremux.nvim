@@ -345,7 +345,7 @@ local function create_session(text, config, opts)
 	return session
 end
 
----Open a compose draft with unresolved text.
+---Open a compose draft with raw template text and an opaque page capture.
 ---@param text string
 ---@param opts? wiremux.ui.ComposeOpenOptions
 function M.open(text, opts)

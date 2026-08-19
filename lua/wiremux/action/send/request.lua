@@ -6,7 +6,7 @@ local validate = require("wiremux.utils.validate")
 
 ---@alias wiremux.action.SendMode "auto"|"instances"|"definitions"|"all"
 
----@class wiremux.action.DeliveryOptions
+---@class wiremux.action.DeliveryOptions Immutable-by-ownership options consumed only by target selection and delivery.
 ---@field focus? boolean
 ---@field behavior wiremux.action.Behavior
 ---@field mode wiremux.action.SendMode
@@ -15,13 +15,13 @@ local validate = require("wiremux.utils.validate")
 ---@field pre_keys? string|string[]
 ---@field post_keys? string|string[]
 
----@class wiremux.action.PreparedSendRequest
----@field raw_text string
+---@class wiremux.action.PreparedSendRequest Complete execution input fixed before picker or compose interaction.
+---@field raw_text string Raw template text; never overwritten with a materialized payload.
 ---@field label string
----@field placeholder_capture wiremux.context.PlaceholderCapture
+---@field placeholder_capture wiremux.context.PlaceholderCapture Point-in-time capture owned by this request and transferred to its compose page when applicable.
 ---@field compose? { config: wiremux.config.ComposeSessionConfig }
 ---@field delivery wiremux.action.DeliveryOptions
----@field target_title? string
+---@field target_title? string Target creation title, separate from the compose window title.
 
 ---@alias wiremux.action.SendPreparationErrorCode "invalid_config"|"invalid_item"|"invalid_option"|"invalid_compose"|"capture_failed"
 

@@ -9,7 +9,7 @@ local request_builder = require("wiremux.action.send.request")
 ---@field label? string Display name in picker (optional, defaults to value)
 ---@field submit? boolean Auto-submit after sending (default: false)
 ---@field compose? boolean|wiremux.config.ComposeOptions Open compose buffer before sending (default: false)
----@field placeholders? boolean Expand placeholders (default: true). Set false for literal source text.
+---@field placeholders? boolean Materialize placeholders (default: true). Set false to preserve placeholder-shaped source text literally.
 ---@field visible? boolean|fun(): boolean Show this item in picker (default: true)
 ---@field title? string Custom tmux window / zellij tab name when creating
 ---@field pre_keys? string|string[] Keystrokes to send before pasting (e.g. {"C-c"}, {"i"})

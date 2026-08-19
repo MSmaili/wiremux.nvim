@@ -27,6 +27,7 @@ local function materialize_text(text, capture)
 	return payload
 end
 
+---Create one prepared payload from a direct request without mutating its capture.
 ---@param request wiremux.action.PreparedSendRequest
 ---@return string? payload
 ---@return wiremux.action.SendMaterializationError? error
@@ -48,6 +49,7 @@ function M.direct(request)
 	return payload, nil
 end
 
+---Create one prepared payload from ordered raw compose pages and temporary working captures.
 ---@param pages wiremux.ui.ComposePage[]
 ---@return string? payload
 ---@return wiremux.action.SendMaterializationError? error

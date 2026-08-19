@@ -35,7 +35,7 @@ local M = {}
 ---@field keymaps? wiremux.config.ComposeKeymaps Custom keymaps
 
 ---@class wiremux.config.ComposeUIConfig: wiremux.config.ComposeSessionConfig
----@field capture_placeholders? string[] Placeholder names captured when each compose page is created
+---@field capture_placeholders? string[] Global-only names captured into each page's point-in-time snapshot when the page is created.
 
 ---@class wiremux.config.ComposeKeymap
 ---@field [1] string Key

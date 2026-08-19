@@ -13,6 +13,7 @@ local function delivery_error(code, message)
 	return { code = code, message = message }
 end
 
+---Perform target selection and backend delivery for one prepared payload.
 ---@param payload string
 ---@param options wiremux.action.DeliveryOptions
 ---@param target_title? string
