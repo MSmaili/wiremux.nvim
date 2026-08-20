@@ -181,21 +181,11 @@ end
 ---@return table<string, true> known_placeholders
 local function configure_resolvers(opts)
 	local custom_resolvers = type(opts.context) == "table" and opts.context.resolvers or nil
-	local configured_resolvers = {}
-	if type(custom_resolvers) == "table" then
-		local is_valid_name = require("wiremux.placeholder").is_valid_name
-		for name, resolver in pairs(custom_resolvers) do
-			if is_valid_name(name) and type(resolver) == "function" then
-				configured_resolvers[name] = resolver
-			end
-		end
-	end
+	local context = require("wiremux.context")
+	local configured_resolvers = context.configure(custom_resolvers)
 
 	opts.context = type(opts.context) == "table" and opts.context or {}
 	opts.context.resolvers = configured_resolvers
-
-	local context = require("wiremux.context")
-	context.configure(configured_resolvers)
 	local known_placeholders = {}
 	for _, name in ipairs(context.list()) do
 		known_placeholders[name] = true

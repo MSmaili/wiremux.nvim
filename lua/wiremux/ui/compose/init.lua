@@ -365,7 +365,7 @@ function M.open(text, opts)
 	end
 
 	assert(type(opts.on_confirm) == "function", "wiremux compose requires on_confirm")
-	assert(type(opts.config) == "table", "wiremux compose requires resolved config")
+	assert(type(opts.config) == "table", "wiremux compose requires a complete session config")
 	local config = vim.deepcopy(opts.config)
 	if active_session and active_session.status == "editing" then
 		local session = active_session

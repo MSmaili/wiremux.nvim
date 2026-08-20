@@ -67,7 +67,7 @@ local function floating_window_config(config, title, footer)
 	local width = clamp(math.floor(vim.o.columns * width_ratio), min_width, vim.o.columns)
 	local height = clamp(math.floor(vim.o.lines * height_ratio), min_height, vim.o.lines)
 
-	return {
+	local window_config = {
 		relative = "editor",
 		width = width,
 		height = height,
@@ -77,9 +77,12 @@ local function floating_window_config(config, title, footer)
 		border = config.border,
 		title = title,
 		title_pos = "center",
-		footer = footer,
-		footer_pos = "center",
 	}
+	if footer ~= "" then
+		window_config.footer = footer
+		window_config.footer_pos = "center"
+	end
+	return window_config
 end
 
 ---@param view wiremux.ui.ComposeView

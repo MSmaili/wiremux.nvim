@@ -1,7 +1,6 @@
 local M = {}
 
 local context = require("wiremux.context")
-local placeholder = require("wiremux.placeholder")
 local validate = require("wiremux.utils.validate")
 
 ---@alias wiremux.action.SendMode "auto"|"instances"|"definitions"|"all"
@@ -117,7 +116,7 @@ end
 
 ---@param value any
 ---@return boolean
-local function valid_keys(value)
+local function keys_are_valid(value)
 	if value == nil or type(value) == "string" then
 		return true
 	end
@@ -145,12 +144,6 @@ local function valid_filter(value)
 		and (value.definitions == nil or type(value.definitions) == "function")
 end
 
----@param value any
----@return string|string[]|any
-local function copy_keys(value)
-	return copy_mutable(value)
-end
-
 ---@param post_keys? string|string[]
 ---@return string[]
 local function append_submit(post_keys)
@@ -166,35 +159,12 @@ local function append_submit(post_keys)
 	return result
 end
 
----@param capture any
----@return boolean
-local function valid_capture(capture)
-	if type(capture) ~= "table"
-		or type(capture.enabled) ~= "boolean"
-		or type(capture.capture_set) ~= "table"
-		or type(capture.values) ~= "table"
-	then
-		return false
-	end
-	for name, attempted in pairs(capture.capture_set) do
-		if not placeholder.is_valid_name(name) or attempted ~= true then
-			return false
-		end
-	end
-	for name, value in pairs(capture.values) do
-		if not placeholder.is_valid_name(name) or capture.capture_set[name] ~= true or type(value) ~= "string" then
-			return false
-		end
-	end
-	return true
-end
-
----Snapshot call-level and global send configuration once for a public send invocation.
+---Prepare call-level and global send configuration once for a public send invocation.
 ---@param opts? wiremux.config.ActionConfig
 ---@param config wiremux.config.UserOptions
 ---@return wiremux.action.SendPreparationContext? context
 ---@return wiremux.action.SendPreparationError[] errors
-function M.snapshot(opts, config)
+function M.prepare_context(opts, config)
 	if opts ~= nil and type(opts) ~= "table" then
 		return nil, {
 			preparation_error("invalid_option", "opts", "wiremux.send opts must be a table"),
@@ -248,7 +218,7 @@ end
 ---@param value any
 ---@return wiremux.action.SendPreparationError?
 local function validate_keys(path, value)
-	if valid_keys(value) then
+	if keys_are_valid(value) then
 		return nil
 	end
 	return preparation_error("invalid_option", path, path .. " must be a string or list of strings")
@@ -352,8 +322,8 @@ local function prepare_delivery(item, preparation)
 	end
 
 	delivery.filter = copy_filter(delivery.filter)
-	delivery.pre_keys = copy_keys(delivery.pre_keys)
-	delivery.post_keys = submit and append_submit(delivery.post_keys) or copy_keys(delivery.post_keys)
+	delivery.pre_keys = copy_mutable(delivery.pre_keys)
+	delivery.post_keys = submit and append_submit(delivery.post_keys) or copy_mutable(delivery.post_keys)
 	return delivery, {}
 end
 
@@ -377,7 +347,7 @@ local function prepare_capture(item, preparation, compose_config)
 			preparation_error("capture_failed", "item.value", "Failed to capture placeholders: " .. tostring(capture)),
 		}
 	end
-	if not valid_capture(capture) then
+	if not context.is_valid_capture(capture) then
 		return nil, {
 			preparation_error("capture_failed", "item.value", "Placeholder capture returned an invalid capture"),
 		}

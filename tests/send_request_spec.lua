@@ -15,8 +15,8 @@ describe("prepared send request", function()
 		helpers.teardown()
 	end)
 
-	local function snapshot(opts)
-		local preparation, errors = request_builder.snapshot(opts, mocks.config.get())
+	local function prepare_context(opts)
+		local preparation, errors = request_builder.prepare_context(opts, mocks.config.get())
 		assert.are.same({}, errors)
 		assert.is_not_nil(preparation)
 		return preparation
@@ -38,7 +38,7 @@ describe("prepared send request", function()
 		}
 		mocks.config.opts.ui.compose.width = 0.6
 
-		local preparation = snapshot({
+		local preparation = prepare_context({
 			focus = true,
 			behavior = "last",
 			mode = "definitions",
@@ -85,7 +85,7 @@ describe("prepared send request", function()
 			post_keys = { "default-post" },
 			compose = { title = " Default Compose " },
 		}
-		local preparation = snapshot({
+		local preparation = prepare_context({
 			submit = false,
 			pre_keys = { "call-pre" },
 			compose = { title = " Call Compose " },
@@ -111,7 +111,7 @@ describe("prepared send request", function()
 			return resolve_compose(...)
 		end
 
-		local preparation = snapshot({ compose = { title = " Call " } })
+		local preparation = prepare_context({ compose = { title = " Call " } })
 		local request = assert(request_builder.prepare({
 			value = "payload",
 			compose = { title = " Item " },
@@ -124,7 +124,7 @@ describe("prepared send request", function()
 
 	it("folds submit into a copied post-keys list", function()
 		local post_keys = { "Escape" }
-		local preparation = snapshot({ post_keys = post_keys, submit = true })
+		local preparation = prepare_context({ post_keys = post_keys, submit = true })
 		local request = assert(request_builder.prepare({ value = "payload" }, preparation))
 
 		assert.are.same({ "Escape" }, post_keys)
@@ -139,7 +139,7 @@ describe("prepared send request", function()
 			captured_names = names
 			return { enabled = true, capture_set = {}, values = {} }
 		end
-		local preparation = snapshot({ compose = true })
+		local preparation = prepare_context({ compose = true })
 
 		local request = assert(request_builder.prepare({ value = "draft" }, preparation))
 
@@ -155,7 +155,7 @@ describe("prepared send request", function()
 		local request, errors = request_builder.prepare({
 			value = "draft",
 			placeholders = "no",
-		}, snapshot())
+		}, prepare_context())
 
 		assert.is_nil(request)
 		assert.are.equal(0, captures)
@@ -169,7 +169,7 @@ describe("prepared send request", function()
 			error("capture must not run")
 		end
 
-		local preparation, errors = request_builder.snapshot({}, mocks.config.get())
+		local preparation, errors = request_builder.prepare_context({}, mocks.config.get())
 
 		assert.is_nil(preparation)
 		assert.are.equal("invalid_config", errors[1].code)
@@ -192,7 +192,7 @@ describe("prepared send request", function()
 			filter = option_filter,
 			post_keys = option_post,
 		}
-		local preparation = snapshot(opts)
+		local preparation = prepare_context(opts)
 		local request = assert(request_builder.prepare(item, preparation))
 
 		item.value = "mutated"
@@ -392,8 +392,8 @@ describe("real context request capture", function()
 		package.loaded["wiremux.context"] = nil
 	end)
 
-	local function snapshot(capture_placeholders)
-		local preparation, errors = request_builder.snapshot({}, {
+	local function prepare_context(capture_placeholders)
+		local preparation, errors = request_builder.prepare_context({}, {
 			actions = { send = { behavior = "pick", compose = false } },
 			ui = { compose = { capture_placeholders = capture_placeholders or {} } },
 		})
@@ -413,7 +413,7 @@ describe("real context request capture", function()
 				return "B"
 			end,
 		})
-		local preparation = snapshot({ "beta" })
+		local preparation = prepare_context({ "beta" })
 
 		local first = assert(request_builder.prepare({
 			value = "{alpha} {alpha}",
@@ -444,7 +444,7 @@ describe("real context request capture", function()
 		})
 		local request = assert(request_builder.prepare({
 			value = "{missing} {missing} {failed}",
-		}, snapshot()))
+		}, prepare_context()))
 
 		local extended = context.extend(request.placeholder_capture, request.raw_text)
 		local materialized = context.materialize(request.raw_text, extended)
@@ -473,7 +473,7 @@ describe("real context request capture", function()
 				return "L"
 			end,
 		})
-		local preparation = snapshot({ "policy" })
+		local preparation = prepare_context({ "policy" })
 		local request = assert(request_builder.prepare({ value = "{eager}", compose = true }, preparation))
 
 		local extended = context.extend(request.placeholder_capture, "{eager} {policy} {late} {late}")

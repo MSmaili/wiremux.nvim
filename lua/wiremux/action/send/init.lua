@@ -50,9 +50,10 @@ local function warn_preparation_errors(errors)
 end
 
 ---@param payload string
----@param request wiremux.action.PreparedSendRequest
-local function deliver_payload(payload, request)
-	local started, err = delivery.send(payload, request.delivery, request.target_title)
+---@param options wiremux.action.DeliveryOptions
+---@param target_title? string
+local function deliver_payload(payload, options, target_title)
+	local started, err = delivery.send(payload, options, target_title)
 	if not started then
 		assert(err ~= nil, "wiremux delivery failure requires an error")
 		notify.error(err.message)
@@ -61,6 +62,8 @@ end
 
 ---@param request wiremux.action.PreparedSendRequest
 local function execute_request(request)
+	local delivery_options = request.delivery
+	local target_title = request.target_title
 	if request.compose then
 		local confirmed = false
 		require("wiremux.ui.compose").open(request.raw_text, {
@@ -78,7 +81,7 @@ local function execute_request(request)
 				end
 				confirmed = true
 				vim.schedule(function()
-					deliver_payload(payload, request)
+					deliver_payload(payload, delivery_options, target_title)
 				end)
 				return true
 			end,
@@ -92,7 +95,7 @@ local function execute_request(request)
 		notify.error(err.message)
 		return
 	end
-	deliver_payload(payload, request)
+	deliver_payload(payload, delivery_options, target_title)
 end
 
 ---@param item wiremux.action.SendItem
@@ -168,7 +171,7 @@ function M.send(text, opts)
 	end
 
 	local config = require("wiremux.config").get()
-	local preparation, errors = request_builder.snapshot(opts, config)
+	local preparation, errors = request_builder.prepare_context(opts, config)
 	if not preparation then
 		warn_preparation_errors(errors)
 		return
