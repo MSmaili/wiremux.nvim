@@ -6,7 +6,6 @@ local M = {}
 
 ---@class wiremux.ui.ComposeViewIntents
 ---@field on_wipeout fun()
----@field on_window_closed? fun()
 
 ---@class wiremux.ui.ComposeViewMapping
 ---@field mode string
@@ -287,14 +286,9 @@ local function setup_autocmds(view)
 		group = group,
 		pattern = "*",
 		callback = function(args)
-			if view.win ~= tonumber(args.match) then
-				return
-			end
-			view.win = nil
-			view.applied_window_options = {}
-			local on_window_closed = view.intents and view.intents.on_window_closed
-			if on_window_closed then
-				on_window_closed()
+			if view.win == tonumber(args.match) then
+				view.win = nil
+				view.applied_window_options = {}
 			end
 		end,
 	})

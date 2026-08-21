@@ -2,7 +2,7 @@ local M = {}
 
 local context = require("wiremux.context")
 
----@alias wiremux.action.SendMaterializationErrorCode "invalid_request"|"direct_failed"|"invalid_pages"|"compose_page_failed"
+---@alias wiremux.action.SendMaterializationErrorCode "direct_failed"|"invalid_pages"|"compose_page_failed"
 
 ---@class wiremux.action.SendMaterializationError
 ---@field code wiremux.action.SendMaterializationErrorCode
@@ -32,13 +32,6 @@ end
 ---@return string? payload
 ---@return wiremux.action.SendMaterializationError? error
 function M.direct(request)
-	if type(request) ~= "table" or type(request.raw_text) ~= "string" then
-		return nil, materialization_error(
-			"invalid_request",
-			"Failed to prepare direct payload: prepared request must contain raw text"
-		)
-	end
-
 	local ok, payload = pcall(materialize_text, request.raw_text, request.placeholder_capture)
 	if not ok then
 		return nil, materialization_error(

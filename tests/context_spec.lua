@@ -285,21 +285,6 @@ describe("placeholder context", function()
 			assert.are.equal(0, calls)
 		end)
 
-		it("validates the complete capture invariant", function()
-			assert.is_true(context.is_valid_capture({
-				enabled = true,
-				capture_set = { value = true },
-				values = { value = "" },
-			}))
-			assert.is_false(context.is_valid_capture(nil))
-			assert.is_false(context.is_valid_capture({ enabled = true, capture_set = {}, values = { value = "x" } }))
-			assert.is_false(context.is_valid_capture({
-				enabled = true,
-				capture_set = { ["bad-name"] = true },
-				values = {},
-			}))
-		end)
-
 		it("rejects malformed captures", function()
 			assert.has_error(function()
 				context.extend(nil, "text")

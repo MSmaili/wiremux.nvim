@@ -1,6 +1,6 @@
 local M = {}
 
----@alias wiremux.action.SendDeliveryErrorCode "invalid_delivery"|"backend_unavailable"|"delivery_failed"
+---@alias wiremux.action.SendDeliveryErrorCode "backend_unavailable"|"delivery_failed"
 
 ---@class wiremux.action.SendDeliveryError
 ---@field code wiremux.action.SendDeliveryErrorCode
@@ -20,13 +20,6 @@ end
 ---@return boolean started
 ---@return wiremux.action.SendDeliveryError? error
 function M.send(payload, options, target_title)
-	if type(payload) ~= "string" or type(options) ~= "table" then
-		return false, delivery_error(
-			"invalid_delivery",
-			"Failed to deliver payload: payload and delivery options are required"
-		)
-	end
-
 	local backend = require("wiremux.backend").get()
 	if backend == nil then
 		return false, delivery_error("backend_unavailable", "Failed to deliver payload: no active backend")

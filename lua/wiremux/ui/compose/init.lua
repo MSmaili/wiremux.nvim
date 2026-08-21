@@ -14,7 +14,6 @@ local M = {}
 
 ---@class wiremux.ui.ComposeSession
 ---@field view? wiremux.ui.ComposeView
----@field visible boolean
 ---@field config? wiremux.config.ComposeSessionConfig
 ---@field title? string
 ---@field draft wiremux.ui.ComposeDraft
@@ -68,7 +67,6 @@ local function finalize_session(session, status)
 	local on_cancel = status == "cancelled" and session.on_cancel or nil
 	local session_view = session.view
 	session.status = status
-	session.visible = false
 	if active_session == session then
 		active_session = nil
 	end
@@ -97,13 +95,6 @@ local function on_view_wipeout(session)
 end
 
 ---@param session wiremux.ui.ComposeSession
-local function on_view_window_closed(session)
-	if active_session == session and session.status ~= "sent" and session.status ~= "cancelled" then
-		session.visible = false
-	end
-end
-
----@param session wiremux.ui.ComposeSession
 ---@param reopened boolean
 local function show_session(session, reopened)
 	if session.status ~= "editing" or not session.view then
@@ -111,7 +102,6 @@ local function show_session(session, reopened)
 	end
 	view.set_title(session.view, window_title(session))
 	local opened, event_data = view.show(session.view, reopened)
-	session.visible = view.is_visible(session.view)
 	if not opened or not event_data then
 		return
 	end
@@ -133,7 +123,6 @@ local function hide_session(session)
 	end
 	save_current_page(session)
 	view.hide(session.view)
-	session.visible = false
 end
 
 ---@param session wiremux.ui.ComposeSession
@@ -183,7 +172,7 @@ local function insert_file(session)
 			if active_session ~= session
 				or session.status ~= "editing"
 				or session.view ~= originating_view
-				or not session.visible
+				or not view.is_visible(originating_view)
 			then
 				return
 			end
@@ -324,7 +313,6 @@ local function create_session(text, config, opts)
 	---@type wiremux.ui.ComposeSession
 	local session = {
 		view = nil,
-		visible = false,
 		config = config,
 		title = config.title or " Compose Message ",
 		draft = draft_model.new(text, opts.capture),
@@ -335,9 +323,6 @@ local function create_session(text, config, opts)
 	session.view = view.new(text, config, {
 		on_wipeout = function()
 			on_view_wipeout(session)
-		end,
-		on_window_closed = function()
-			on_view_window_closed(session)
 		end,
 	})
 	view.install_keymaps(session.view, session_handlers(session))

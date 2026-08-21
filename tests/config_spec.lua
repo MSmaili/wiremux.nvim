@@ -3,18 +3,12 @@
 describe("compose configuration", function()
 	it("accepts append and rejects unknown payload policies", function()
 		local validate = require("wiremux.utils.validate")
-		local valid_errors = validate.validate({
-			log_level = "warn",
-			ui = { compose = { on_new_payload = "append" } },
-		})
-		local invalid_errors = validate.validate({
-			log_level = "warn",
-			ui = { compose = { on_new_payload = "merge" } },
-		})
+		local _, valid_errors = validate.compose_options({ on_new_payload = "append" })
+		local _, invalid_errors = validate.compose_options({ on_new_payload = "merge" })
 
 		assert.are.same({}, valid_errors)
 		assert.are.equal(1, #invalid_errors)
-		assert.matches("invalid on_new_payload", invalid_errors[1])
+		assert.matches("invalid on_new_payload", invalid_errors[1].message)
 	end)
 
 	it("provides previous and next navigation defaults", function()

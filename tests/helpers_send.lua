@@ -18,8 +18,6 @@ local MODULES = {
 
 function M.setup()
 	helpers.clear(MODULES)
-	local is_valid_capture = require("wiremux.context").is_valid_capture
-	package.loaded["wiremux.context"] = nil
 
 	local mocks = {
 		backend = helpers.mock_backend({ send = function() end }),
@@ -41,7 +39,6 @@ function M.setup()
 		picker = helpers.mock_picker(),
 		notify = helpers.mock_notify(),
 		context = {
-			is_valid_capture = is_valid_capture,
 			list = function()
 				return { "custom_context", "file", "selection" }
 			end,

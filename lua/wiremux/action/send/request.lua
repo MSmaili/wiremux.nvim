@@ -183,12 +183,7 @@ function M.prepare_context(opts, config)
 		}
 	end
 
-	local listed, resolver_names = pcall(context.list)
-	if not listed or type(resolver_names) ~= "table" then
-		return nil, {
-			preparation_error("invalid_config", "context.resolvers", "Unable to read configured placeholder resolvers"),
-		}
-	end
+	local resolver_names = context.list()
 	local known_placeholders = {}
 	for _, name in ipairs(resolver_names) do
 		known_placeholders[name] = true
@@ -345,11 +340,6 @@ local function prepare_capture(item, preparation, compose_config)
 	if not ok then
 		return nil, {
 			preparation_error("capture_failed", "item.value", "Failed to capture placeholders: " .. tostring(capture)),
-		}
-	end
-	if not context.is_valid_capture(capture) then
-		return nil, {
-			preparation_error("capture_failed", "item.value", "Placeholder capture returned an invalid capture"),
 		}
 	end
 	return capture, {}

@@ -37,53 +37,21 @@ local function clone_map(source)
 end
 
 ---@param capture any
----@return string? error
-local function capture_validation_error(capture)
-	if type(capture) ~= "table" then
-		return "wiremux placeholder capture must be a table"
-	end
-	if type(capture.enabled) ~= "boolean" then
-		return "wiremux placeholder capture.enabled must be a boolean"
-	end
-	if type(capture.capture_set) ~= "table" then
-		return "wiremux placeholder capture.capture_set must be a table"
-	end
-	if type(capture.values) ~= "table" then
-		return "wiremux placeholder capture.values must be a table"
-	end
+local function assert_capture(capture)
+	assert(type(capture) == "table", "wiremux placeholder capture must be a table")
+	assert(type(capture.enabled) == "boolean", "wiremux placeholder capture.enabled must be a boolean")
+	assert(type(capture.capture_set) == "table", "wiremux placeholder capture.capture_set must be a table")
+	assert(type(capture.values) == "table", "wiremux placeholder capture.values must be a table")
 
 	for name, attempted in pairs(capture.capture_set) do
-		if not placeholder.is_valid_name(name) then
-			return "wiremux placeholder capture contains an invalid name"
-		end
-		if attempted ~= true then
-			return "wiremux placeholder capture.capture_set values must be true"
-		end
+		assert(placeholder.is_valid_name(name), "wiremux placeholder capture contains an invalid name")
+		assert(attempted == true, "wiremux placeholder capture.capture_set values must be true")
 	end
 	for name, value in pairs(capture.values) do
-		if not placeholder.is_valid_name(name) then
-			return "wiremux placeholder capture contains an invalid value name"
-		end
-		if capture.capture_set[name] ~= true then
-			return "wiremux placeholder capture value was not captured"
-		end
-		if type(value) ~= "string" then
-			return "wiremux placeholder capture values must be strings"
-		end
+		assert(placeholder.is_valid_name(name), "wiremux placeholder capture contains an invalid value name")
+		assert(capture.capture_set[name] == true, "wiremux placeholder capture value was not captured")
+		assert(type(value) == "string", "wiremux placeholder capture values must be strings")
 	end
-end
-
----Check the complete PlaceholderCapture domain invariant without mutating it.
----@param capture any
----@return boolean
-function M.is_valid_capture(capture)
-	return capture_validation_error(capture) == nil
-end
-
----@param capture any
-local function assert_capture(capture)
-	local err = capture_validation_error(capture)
-	assert(err == nil, err)
 end
 
 ---@param capture wiremux.context.PlaceholderCapture
@@ -123,12 +91,7 @@ end
 ---List registered placeholder names in deterministic order.
 ---@return string[]
 function M.list()
-	local names = {}
-	for name in pairs(resolvers) do
-		table.insert(names, name)
-	end
-	table.sort(names)
-	return names
+	return sorted_names(resolvers)
 end
 
 ---Get a context value by name.

@@ -288,12 +288,13 @@ local function valid_border(border)
 	return true
 end
 
+---Validate and copy a placeholder capture-name list.
 ---@param capture_names any
 ---@param path string
 ---@param known_placeholders? table<string, true>
 ---@return string[]? normalized
 ---@return wiremux.validate.Error[] errors
-local function validate_capture_names(capture_names, path, known_placeholders)
+function M.capture_names(capture_names, path, known_placeholders)
 	if type(capture_names) ~= "table" or not vim.islist(capture_names) then
 		return nil, {
 			validation_error(path, string.format("%s must be a list of placeholder names", path)),
@@ -318,16 +319,6 @@ local function validate_capture_names(capture_names, path, known_placeholders)
 		end
 	end
 	return normalized, errors
-end
-
----Validate and copy a placeholder capture-name list.
----@param capture_names any
----@param path string
----@param known_placeholders? table<string, true>
----@return string[]? normalized
----@return wiremux.validate.Error[] errors
-function M.capture_names(capture_names, path, known_placeholders)
-	return validate_capture_names(capture_names, path, known_placeholders)
 end
 
 ---@class wiremux.validate.ComposeOptionsOptions
@@ -360,7 +351,7 @@ function M.compose_options(options, opts)
 					"capture_placeholders is only allowed at ui.compose.capture_placeholders"
 				))
 			else
-				local names, name_errors = validate_capture_names(value, field_path, opts.known_placeholders)
+				local names, name_errors = M.capture_names(value, field_path, opts.known_placeholders)
 				vim.list_extend(errors, name_errors)
 				if names ~= nil then
 					normalized.capture_placeholders = names
@@ -575,23 +566,6 @@ function M.validate(opts)
 			name = "behavior",
 			context = "for action '" .. action .. "'",
 		}))
-	end
-
-	local global_compose = vim.tbl_get(opts, "ui", "compose")
-	if global_compose ~= nil then
-		local _, compose_errors = M.compose_options(global_compose, {
-			path = "ui.compose",
-			allow_capture_placeholders = true,
-		})
-		vim.list_extend(errors, M.error_messages(compose_errors))
-	end
-
-	local action_compose = vim.tbl_get(opts, "actions", "send", "compose")
-	if type(action_compose) == "table" then
-		local _, compose_errors = M.compose_options(action_compose, { path = "actions.send.compose" })
-		vim.list_extend(errors, M.error_messages(compose_errors))
-	elseif action_compose ~= nil and type(action_compose) ~= "boolean" then
-		table.insert(errors, string.format("actions.send.compose must be a boolean or table, got %s", type(action_compose)))
 	end
 
 	collect_error(validate_picker(opts.picker))

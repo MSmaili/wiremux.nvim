@@ -222,18 +222,6 @@ local function normalize_action_compose(opts)
 	return errors
 end
 
----@param messages string[]
-local function warn_once(messages)
-	local notify = require("wiremux.utils.notify")
-	local warned = {}
-	for _, message in ipairs(messages) do
-		if not warned[message] then
-			warned[message] = true
-			notify.warn(message)
-		end
-	end
-end
-
 function M.setup(user_opts)
 	user_opts = user_opts or {}
 	M.opts = vim.tbl_deep_extend("force", defaults, user_opts)
@@ -249,7 +237,10 @@ function M.setup(user_opts)
 	local action_errors = normalize_action_compose(M.opts)
 	vim.list_extend(warning_messages, validate.error_messages(action_errors))
 
-	warn_once(warning_messages)
+	local notify = require("wiremux.utils.notify")
+	for _, message in ipairs(warning_messages) do
+		notify.warn(message)
+	end
 end
 
 function M.get()
