@@ -49,6 +49,21 @@ function M.replace(draft, text, capture)
 	draft.current_page = 1
 end
 
+---Delete the current page and select the next one, or clear the only page.
+---@param draft wiremux.ui.ComposeDraft
+---@return number current_page
+function M.delete_current(draft)
+	if #draft.pages == 1 then
+		draft.pages[1].text = ""
+	else
+		table.remove(draft.pages, draft.current_page)
+		if draft.current_page > #draft.pages then
+			draft.current_page = 1
+		end
+	end
+	return draft.current_page
+end
+
 ---@param draft wiremux.ui.ComposeDraft
 ---@return number
 function M.previous(draft)

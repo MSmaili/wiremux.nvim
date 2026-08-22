@@ -26,7 +26,7 @@ local M = {}
 ---@field private finalized boolean
 ---@field private applied_window_options table<string, true>
 
-local ACTION_ORDER = { "send", "close", "discard", "files", "previous", "next" }
+local ACTION_ORDER = { "send", "close", "discard", "files", "delete_page", "previous", "next" }
 
 ---@param value number
 ---@param min_value number
@@ -94,6 +94,7 @@ local function footer_text(view)
 		{ entry = view.footer_keymaps.close, label = "Close" },
 		{ entry = view.footer_keymaps.discard, label = "Discard" },
 		{ entry = view.footer_keymaps.files, label = "Files" },
+		{ entry = view.footer_keymaps.delete_page, label = "Delete Page" },
 	}
 	for _, item in ipairs(entries) do
 		local key = keymaps.find_key_for_mode(item.entry, current_mode)

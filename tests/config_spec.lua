@@ -11,13 +11,14 @@ describe("compose configuration", function()
 		assert.matches("invalid on_new_payload", invalid_errors[1].message)
 	end)
 
-	it("provides previous and next navigation defaults", function()
+	it("provides compose page keymap defaults", function()
 		package.loaded["wiremux.config"] = nil
 		local config = require("wiremux.config")
 		config.setup()
 
 		assert.are.equal("<C-p>", config.opts.ui.compose.keymaps.previous[1])
 		assert.are.equal("<C-n>", config.opts.ui.compose.keymaps.next[1])
+		assert.are.equal("<C-x>", config.opts.ui.compose.keymaps.delete_page[1])
 	end)
 
 	it("replaces custom resolvers on repeated setup", function()

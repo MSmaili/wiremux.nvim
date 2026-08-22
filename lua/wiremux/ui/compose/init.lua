@@ -195,6 +195,17 @@ local function navigate(session, direction)
 end
 
 ---@param session wiremux.ui.ComposeSession
+local function delete_page(session)
+	if session.status ~= "editing" or not session.view then
+		return
+	end
+	draft_model.delete_current(session.draft)
+	view.load_text(session.view, draft_model.current(session.draft).text)
+	view.set_title(session.view, window_title(session))
+	view.move_cursor_to_end(session.view)
+end
+
+---@param session wiremux.ui.ComposeSession
 local function request_close(session)
 	if session.status ~= "editing" then
 		return
@@ -237,6 +248,9 @@ local function session_handlers(session)
 		end,
 		files = function()
 			insert_file(session)
+		end,
+		delete_page = function()
+			delete_page(session)
 		end,
 		previous = function()
 			navigate(session, "previous")

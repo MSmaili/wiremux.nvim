@@ -147,6 +147,37 @@ describe("compose UI", function()
 		assert.is_false(cancelled)
 	end)
 
+	it("deletes the current page, wraps forward, and clears the only page", function()
+		local captures = { { page = 1 }, { page = 2 }, { page = 3 } }
+		local confirmed_pages
+		open("first", { capture = captures[1], on_confirm = function() end })
+		open("second", { capture = captures[2], on_confirm = function() end })
+		open("third", {
+			capture = captures[3],
+			on_confirm = function(pages)
+				confirmed_pages = pages
+				return true
+			end,
+		})
+		local buf = assert(compose.get_buf())
+
+		mapping("<C-x>")()
+		assert.are.equal("first", vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1])
+		assert.matches("%[1/2%]", title())
+
+		mapping("<C-x>")()
+		assert.are.equal("second", vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1])
+		assert.is_nil(title():match("%["))
+
+		mapping("<C-x>")()
+		assert.are.same({ "" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+		mapping("<CR>")()
+
+		assert.are.equal(1, #confirmed_pages)
+		assert.are.equal("", confirmed_pages[1].text)
+		assert.are.equal(captures[2], confirmed_pages[1].capture)
+	end)
+
 	it("preserves the complete draft when confirmation fails", function()
 		local calls = 0
 		open("first", {

@@ -125,6 +125,7 @@ These are the full defaults from `config.lua`. You only need to override what yo
         files = {
           { "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
         },
+        delete_page = { "<C-x>", mode = "n", desc = "Delete compose page" },
         previous = { "<C-p>", mode = "n", desc = "Previous compose page" },
         next = { "<C-n>", mode = "n", desc = "Next compose page" },
       },
@@ -269,7 +270,7 @@ require("wiremux").send("Review {selection}", {
 })
 ```
 
-Set `on_new_payload = "append"` for one compose configuration to collect multiple editor locations into one paged draft. Each invocation becomes a page, normal-mode `<C-p>` and `<C-n>` navigate pages, and confirmation sends all pages once with a blank line between them:
+Set `on_new_payload = "append"` for one compose configuration to collect multiple editor locations into one paged draft. Each invocation becomes a page, normal-mode `<C-p>` and `<C-n>` navigate pages, and `<C-x>` deletes the current page and moves to the next one. Deleting the last page wraps to the first; with only one page, `<C-x>` clears its text instead. Confirmation sends all pages once with a blank line between them:
 
 ```lua
 -- Map this in normal or visual mode, then invoke it from each location.

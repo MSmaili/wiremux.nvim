@@ -47,6 +47,7 @@ local M = {}
 ---@field close? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field discard? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field files? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
+---@field delete_page? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field previous? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field next? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 
@@ -132,6 +133,7 @@ local defaults = {
 				files = {
 					{ "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
 				},
+				delete_page = { "<C-x>", mode = "n", desc = "Delete compose page" },
 				previous = { "<C-p>", mode = "n", desc = "Previous compose page" },
 				next = { "<C-n>", mode = "n", desc = "Next compose page" },
 			},
