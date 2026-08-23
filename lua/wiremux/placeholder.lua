@@ -1,9 +1,9 @@
 local M = {}
 
-M.validation_pattern = "^[A-Za-z_][A-Za-z0-9_]*$"
-M.discovery_pattern = "{([A-Za-z_][A-Za-z0-9_]*)}"
-M.materialization_pattern = M.discovery_pattern
-M.vim_highlight_pattern = "{[A-Za-z_][A-Za-z0-9_]*}"
+local name_pattern = "[A-Za-z_][A-Za-z0-9_]*"
+M.validation_pattern = "^" .. name_pattern .. "$"
+M.discovery_pattern = "{(" .. name_pattern .. ")}"
+M.vim_highlight_pattern = "{" .. name_pattern .. "}"
 
 ---@param name any
 ---@return boolean
@@ -28,25 +28,17 @@ function M.at(text, column)
 	end
 end
 
----@param texts string|string[]
----@return table<string, true>
-function M.discover(texts)
-	if type(texts) == "string" then
-		texts = { texts }
-	end
-
-	local names = {}
-	if type(texts) ~= "table" then
-		return names
-	end
-
-	for _, text in ipairs(texts) do
-		if type(text) == "string" and text:find("{", 1, true) then
-			for name in text:gmatch(M.discovery_pattern) do
-				names[name] = true
-			end
+---@param text string
+---@return string[] Sorted unique names.
+function M.discover(text)
+	local names, seen = {}, {}
+	for name in text:gmatch(M.discovery_pattern) do
+		if not seen[name] then
+			seen[name] = true
+			table.insert(names, name)
 		end
 	end
+	table.sort(names)
 	return names
 end
 

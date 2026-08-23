@@ -9,6 +9,10 @@ local context = require("wiremux.context")
 ---@field message string
 ---@field page? integer
 
+---@class wiremux.action.ComposePageCapture
+---@field placeholder_capture wiremux.context.PlaceholderCapture
+---@field origin? wiremux.context.ResolverOrigin
+
 ---@param code wiremux.action.SendMaterializationErrorCode
 ---@param message string
 ---@param page? integer
@@ -22,10 +26,7 @@ end
 ---@param origin? wiremux.context.ResolverOrigin
 ---@return string
 local function materialize_text(text, capture, origin)
-	local working_capture = context.extend(capture, text, origin)
-	local payload = context.materialize(text, working_capture)
-	assert(type(payload) == "string", "wiremux context materialization must return a string")
-	return payload
+	return context.materialize(text, context.extend(capture, text, origin))
 end
 
 ---Create one prepared payload from a direct request without mutating its capture.
@@ -33,7 +34,7 @@ end
 ---@return string? payload
 ---@return wiremux.action.SendMaterializationError? error
 function M.direct(request)
-	local ok, payload = pcall(materialize_text, request.raw_text, request.placeholder_capture)
+	local ok, payload = pcall(context.materialize, request.raw_text, request.placeholder_capture)
 	if not ok then
 		return nil, materialization_error(
 			"direct_failed",
@@ -44,7 +45,7 @@ function M.direct(request)
 end
 
 ---Resolve one compose placeholder through a temporary capture copy.
----@param capture wiremux.ui.ComposePageCapture
+---@param capture wiremux.action.ComposePageCapture
 ---@param name string
 ---@return string? value
 ---@return wiremux.action.SendMaterializationError? error
@@ -56,8 +57,8 @@ function M.preview_placeholder(capture, name)
 			"Placeholder replacement is disabled for this page."
 		)
 	end
-	local value = working.values[name]
-	if value == nil then
+	local value = working.results[name]
+	if type(value) ~= "string" then
 		return nil, materialization_error(
 			"placeholder_unavailable",
 			string.format("No value is available for {%s}.", name)

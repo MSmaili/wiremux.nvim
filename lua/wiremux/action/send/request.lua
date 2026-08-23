@@ -19,7 +19,7 @@ local validate = require("wiremux.utils.validate")
 ---@field label string
 ---@field placeholder_capture wiremux.context.PlaceholderCapture Point-in-time capture owned by this request and transferred to its compose page when applicable.
 ---@field origin? wiremux.context.ResolverOrigin Source location transferred to a compose page for deferred resolution.
----@field compose? { config: wiremux.config.ComposeSessionConfig }
+---@field compose? wiremux.config.ComposeSessionConfig
 ---@field delivery wiremux.action.DeliveryOptions
 ---@field target_title? string Target creation title, separate from the compose window title.
 
@@ -308,7 +308,7 @@ end
 ---@return wiremux.action.SendPreparationError[] errors
 local function prepare_capture(item)
 	if item.placeholders == false then
-		return { enabled = false, capture_set = {}, values = {} }, {}
+		return { enabled = false, results = {} }, {}
 	end
 
 	local ok, capture = pcall(context.capture, item.value)
@@ -318,24 +318,6 @@ local function prepare_capture(item)
 		}
 	end
 	return capture, {}
-end
-
----@param item wiremux.action.SendItem
----@param compose_config? wiremux.config.ComposeSessionConfig
----@param delivery wiremux.action.DeliveryOptions
----@param capture wiremux.context.PlaceholderCapture
----@param origin? wiremux.context.ResolverOrigin
----@return wiremux.action.PreparedSendRequest
-local function build_request(item, compose_config, delivery, capture, origin)
-	return {
-		raw_text = item.value,
-		label = item.label or item.value,
-		placeholder_capture = capture,
-		origin = origin,
-		compose = compose_config and { config = compose_config } or nil,
-		delivery = delivery,
-		target_title = item.title,
-	}
 end
 
 ---@param item wiremux.action.SendItem
@@ -364,7 +346,15 @@ function M.prepare(item, preparation)
 		return nil, capture_errors
 	end
 
-	return build_request(item, compose_config, delivery, capture, origin), {}
+	return {
+		raw_text = item.value,
+		label = item.label or item.value,
+		placeholder_capture = capture,
+		origin = origin,
+		compose = compose_config,
+		delivery = delivery,
+		target_title = item.title,
+	}, {}
 end
 
 return M

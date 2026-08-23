@@ -15,49 +15,19 @@ local M = {}
 
 ---@class wiremux.context.PlaceholderCapture Point-in-time placeholder capture owned by one prepared request or compose page.
 ---@field enabled boolean Whether extension and materialization are enabled.
----@field capture_set table<string, true> Every attempted name, including unavailable outcomes that must not be retried.
----@field values table<string, string> Successful string results captured at that point in time, including empty strings.
+---@field results table<string, string|false> Resolved strings, including empty strings, or false for attempted unavailable names.
 
 ---@type table<string, wiremux.context.Resolver>
 local resolvers = {}
-
----@param names table<string, true>
----@return string[]
-local function sorted_names(names)
-	local result = {}
-	for name in pairs(names) do
-		table.insert(result, name)
-	end
-	table.sort(result)
-	return result
-end
-
----@generic T
----@param source table<string, T>
----@return table<string, T>
-local function clone_map(source)
-	local result = {}
-	for key, value in pairs(source) do
-		result[key] = value
-	end
-	return result
-end
 
 ---@param capture any
 local function assert_capture(capture)
 	assert(type(capture) == "table", "wiremux placeholder capture must be a table")
 	assert(type(capture.enabled) == "boolean", "wiremux placeholder capture.enabled must be a boolean")
-	assert(type(capture.capture_set) == "table", "wiremux placeholder capture.capture_set must be a table")
-	assert(type(capture.values) == "table", "wiremux placeholder capture.values must be a table")
-
-	for name, attempted in pairs(capture.capture_set) do
+	assert(type(capture.results) == "table", "wiremux placeholder capture.results must be a table")
+	for name, result in pairs(capture.results) do
 		assert(placeholder.is_valid_name(name), "wiremux placeholder capture contains an invalid name")
-		assert(attempted == true, "wiremux placeholder capture.capture_set values must be true")
-	end
-	for name, value in pairs(capture.values) do
-		assert(placeholder.is_valid_name(name), "wiremux placeholder capture contains an invalid value name")
-		assert(capture.capture_set[name] == true, "wiremux placeholder capture value was not captured")
-		assert(type(value) == "string", "wiremux placeholder capture values must be strings")
+		assert(result == false or type(result) == "string", "wiremux placeholder capture results must be strings or false")
 	end
 end
 
@@ -65,11 +35,7 @@ end
 ---@return wiremux.context.PlaceholderCapture
 local function clone_capture(capture)
 	assert_capture(capture)
-	return {
-		enabled = capture.enabled,
-		capture_set = clone_map(capture.capture_set),
-		values = clone_map(capture.values),
-	}
+	return vim.deepcopy(capture)
 end
 
 ---Replace all custom context resolvers while preserving builtins.
@@ -146,22 +112,12 @@ function M.is_available(name)
 end
 
 ---Create an enabled point-in-time capture for placeholders found in text.
----@param texts string|string[]
+---@param text string
 ---@return wiremux.context.PlaceholderCapture
-function M.capture(texts)
-	local names = placeholder.discover(texts)
-
-	local capture = {
-		enabled = true,
-		capture_set = {},
-		values = {},
-	}
-	for _, name in ipairs(sorted_names(names)) do
-		capture.capture_set[name] = true
-		local value = M.get(name)
-		if value ~= nil then
-			capture.values[name] = value
-		end
+function M.capture(text)
+	local capture = { enabled = true, results = {} }
+	for _, name in ipairs(placeholder.discover(text)) do
+		capture.results[name] = M.get(name) or false
 	end
 	return capture
 end
@@ -179,15 +135,9 @@ function M.extend(capture, text, origin)
 		return extended
 	end
 
-	local names = placeholder.discover(text)
-	for name in pairs(extended.capture_set) do
-		names[name] = nil
-	end
-	for _, name in ipairs(sorted_names(names)) do
-		extended.capture_set[name] = true
-		local value = M.get(name, origin)
-		if value ~= nil then
-			extended.values[name] = value
+	for _, name in ipairs(placeholder.discover(text)) do
+		if extended.results[name] == nil then
+			extended.results[name] = M.get(name, origin) or false
 		end
 	end
 	return extended
@@ -204,15 +154,7 @@ function M.materialize(text, capture)
 		return text
 	end
 
-	return (
-		text:gsub(placeholder.materialization_pattern, function(name)
-			local value = capture.values[name]
-			if value == nil then
-				return nil
-			end
-			return value
-		end)
-	)
+	return (text:gsub(placeholder.discovery_pattern, capture.results))
 end
 
 M.configure()

@@ -3,11 +3,13 @@ local h = require("wiremux.context.helpers")
 local M = {}
 
 ---@param origin? wiremux.context.ResolverOrigin
+---@return string
 M.file = function(origin)
 	return h.file_for(origin)
 end
 
 ---@param origin? wiremux.context.ResolverOrigin
+---@return string
 M.filename = function(origin)
 	local path = h.file_for(origin)
 	if path == "" then
@@ -17,16 +19,19 @@ M.filename = function(origin)
 end
 
 ---@param origin? wiremux.context.ResolverOrigin
+---@return string
 M.position = function(origin)
 	return h.position_for(origin)
 end
 
 ---@param origin? wiremux.context.ResolverOrigin
+---@return string?
 M.line = function(origin)
 	return h.line_for(origin)
 end
 
 ---@param origin? wiremux.context.ResolverOrigin
+---@return string
 M.selection = function(origin)
 	if origin then
 		return origin.selection
@@ -43,6 +48,7 @@ M.selection = function(origin)
 end
 
 ---@param origin? wiremux.context.ResolverOrigin
+---@return string | nil
 M.diagnostics = function(origin)
 	local bufnr = h.buffer_for(origin)
 	if not bufnr then
@@ -57,6 +63,7 @@ M.diagnostics = function(origin)
 end
 
 ---@param origin? wiremux.context.ResolverOrigin
+---@return string | nil
 M.diagnostics_all = function(origin)
 	local bufnr = h.buffer_for(origin)
 	if not bufnr then
@@ -69,6 +76,7 @@ M.diagnostics_all = function(origin)
 	return h.file_for(origin) .. "\n" .. h.format_diagnostics(diags)
 end
 
+---@return string
 M.buffers = function()
 	local bufs = {}
 	for _, b in ipairs(vim.api.nvim_list_bufs()) do
@@ -82,6 +90,7 @@ M.buffers = function()
 	return table.concat(bufs, "\n")
 end
 
+---@return string
 M.quickfix = function()
 	local qf = vim.fn.getqflist({ title = 1, items = 1 })
 	if #qf.items == 0 then
@@ -95,6 +104,7 @@ M.quickfix = function()
 end
 
 ---@param origin? wiremux.context.ResolverOrigin
+---@return string
 M.this = function(origin)
 	if origin then
 		local position = h.position_for(origin)
@@ -108,6 +118,7 @@ M.this = function(origin)
 end
 
 ---@param origin? wiremux.context.ResolverOrigin
+---@return string
 M.changes = function(origin)
 	local file = h.file_for(origin)
 	if file == "" then
