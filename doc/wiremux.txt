@@ -184,9 +184,9 @@ page. Empty values appear as `(empty)`, unavailable values show a short
 message, and `{changes}` uses diff syntax.
 
 Each page owns an independent placeholder capture created when the page is
-added. Its stored `values` map is the page's point-in-time snapshot. Editing
-raw text does not refresh or mutate that snapshot, so identical pages added
-from different editor states can materialize differently.
+added. Stored results and unavailable attempts form its point-in-time snapshot.
+Editing raw text does not refresh or mutate that snapshot, so identical pages
+added from different editor states can materialize differently.
 
 At confirmation, Wiremux clones each page capture into a temporary working
 capture, resolves only newly added valid names, and materializes by lookup.
@@ -898,8 +898,8 @@ Send pipeline ~
 
 A public send candidate becomes one prepared request containing raw text,
 delivery options, compose configuration, and a point-in-time placeholder
-capture. Direct sends extend that capture without new names and materialize one
-prepared payload. Compose pages retain raw text and independent captures; at
+capture. Direct sends materialize that stored capture without extending it.
+Compose pages retain raw text and independent captures; at
 confirmation, a temporary working capture may add names typed later. The
 prepared payload then crosses target selection and backend delivery boundaries.
 Compose and backends do not inspect each other's domain objects.
