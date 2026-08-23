@@ -13,7 +13,7 @@ local valid = {
 	compose_styles = { minimal = true },
 	compose_borders = { none = true, single = true, double = true, rounded = true, solid = true, shadow = true },
 	keymap_modes = { [""] = true, n = true, v = true, x = true, s = true, o = true, i = true, l = true, c = true, t = true, ["!"] = true },
-	keymap_actions = { send = true, close = true, discard = true, files = true, delete_page = true, previous = true, next = true },
+	keymap_actions = { send = true, close = true, discard = true, files = true, delete_page = true, preview_placeholder = true, previous = true, next = true },
 }
 
 local compose_session_fields = {

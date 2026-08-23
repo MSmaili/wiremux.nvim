@@ -69,6 +69,13 @@ local function execute_request(request)
 		require("wiremux.ui.compose").open(request.raw_text, {
 			config = request.compose.config,
 			capture = { placeholder_capture = request.placeholder_capture },
+			on_preview = function(capture, name)
+				local value, err = materialize.preview_placeholder(capture, name)
+				if value == nil then
+					return assert(err).message, "text"
+				end
+				return value == "" and "(empty)" or value, name == "changes" and "diff" or "text"
+			end,
 			on_confirm = function(pages)
 				if confirmed then
 					return true

@@ -6,6 +6,7 @@ local M = {}
 
 ---@class wiremux.ui.ComposeOpenOptions
 ---@field on_confirm fun(pages: wiremux.ui.ComposePage[]): boolean?
+---@field on_preview? fun(capture: any, name: string): string?, string?
 ---@field on_cancel? fun()
 ---@field capture? any
 ---@field config wiremux.config.ComposeSessionConfig Resolved session configuration
@@ -18,6 +19,7 @@ local M = {}
 ---@field title? string
 ---@field draft wiremux.ui.ComposeDraft
 ---@field on_confirm? fun(pages: wiremux.ui.ComposePage[]): boolean?
+---@field on_preview? fun(capture: any, name: string): string?, string?
 ---@field on_cancel? fun()
 ---@field status wiremux.ui.ComposeLifecycle
 
@@ -74,6 +76,7 @@ local function finalize_session(session, status)
 	session.config = nil
 	session.title = nil
 	session.on_confirm = nil
+	session.on_preview = nil
 	session.on_cancel = nil
 	session.draft.pages = {}
 	session.draft.current_page = 1
@@ -182,6 +185,28 @@ local function insert_file(session)
 end
 
 ---@param session wiremux.ui.ComposeSession
+local function preview_placeholder(session)
+	if session.status ~= "editing" or not session.view or not session.on_preview then
+		return
+	end
+	if view.focus_placeholder_preview(session.view) then
+		return
+	end
+	local name = view.placeholder_at_cursor(session.view)
+	if name == nil then
+		return
+	end
+	local ok, text, syntax = pcall(session.on_preview, draft_model.current(session.draft).capture, name)
+	if not ok then
+		notify.error("wiremux placeholder preview failed: " .. tostring(text))
+		return
+	end
+	if text then
+		view.show_placeholder_preview(session.view, text, syntax or "text")
+	end
+end
+
+---@param session wiremux.ui.ComposeSession
 ---@param direction "previous"|"next"
 local function navigate(session, direction)
 	if session.status ~= "editing" or #session.draft.pages == 1 or not session.view then
@@ -252,6 +277,9 @@ local function session_handlers(session)
 		delete_page = function()
 			delete_page(session)
 		end,
+		preview_placeholder = function()
+			preview_placeholder(session)
+		end,
 		previous = function()
 			navigate(session, "previous")
 		end,
@@ -315,6 +343,7 @@ local function refresh_session(session, config, opts)
 	session.config = config
 	session.title = config.title or " Compose Message "
 	session.on_confirm = opts.on_confirm
+	session.on_preview = opts.on_preview
 	session.on_cancel = opts.on_cancel
 	refresh_view(session)
 end
@@ -331,6 +360,7 @@ local function create_session(text, config, opts)
 		title = config.title or " Compose Message ",
 		draft = draft_model.new(text, opts.capture),
 		on_confirm = opts.on_confirm,
+		on_preview = opts.on_preview,
 		on_cancel = opts.on_cancel,
 		status = "editing",
 	}

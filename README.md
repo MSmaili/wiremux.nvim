@@ -126,6 +126,7 @@ The following example shows all default values from `config.lua`. Override only 
           { "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
         },
         delete_page = { "<C-x>", mode = "n", desc = "Delete compose page" },
+        preview_placeholder = { "K", mode = "n", desc = "Preview placeholder" },
         previous = { "<C-p>", mode = "n", desc = "Previous compose page" },
         next = { "<C-n>", mode = "n", desc = "Next compose page" },
       },
@@ -282,6 +283,8 @@ vim.keymap.set({ "n", "x" }, "<leader>ar", function()
   })
 end)
 ```
+
+Place the cursor on a placeholder and press `K` to preview its value. Press `K` again to focus the preview. Use `q` or `<Esc>` to close it. Wiremux shows `(empty)` for an empty value and a short message for an unavailable value. A `{changes}` preview uses diff syntax. The preview uses a temporary capture and does not change the page.
 
 Wiremux keeps the placeholder template unchanged while you edit it. Each page has a separate placeholder capture. Wiremux creates this capture when it adds the page. Later edits do not change the stored values. Thus, identical pages can use different values from different editor locations.
 

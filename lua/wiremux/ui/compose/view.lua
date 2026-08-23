@@ -16,6 +16,7 @@ local M = {}
 ---@class wiremux.ui.ComposeView
 ---@field private buf number?
 ---@field private win number?
+---@field private preview_win number?
 ---@field private augroup number?
 ---@field private config wiremux.config.ComposeSessionConfig
 ---@field private title string
@@ -26,7 +27,7 @@ local M = {}
 ---@field private finalized boolean
 ---@field private applied_window_options table<string, true>
 
-local ACTION_ORDER = { "send", "close", "discard", "files", "delete_page", "previous", "next" }
+local ACTION_ORDER = { "send", "close", "discard", "files", "delete_page", "preview_placeholder", "previous", "next" }
 
 ---@param value number
 ---@param min_value number
@@ -52,6 +53,15 @@ end
 ---@return boolean
 local function window_is_valid(view)
 	return view.win ~= nil and vim.api.nvim_win_is_valid(view.win)
+end
+
+---@param view wiremux.ui.ComposeView
+local function close_placeholder_preview(view)
+	local preview_win = view.preview_win
+	view.preview_win = nil
+	if preview_win and vim.api.nvim_win_is_valid(preview_win) then
+		pcall(vim.api.nvim_win_close, preview_win, true)
+	end
 end
 
 ---@param config wiremux.config.ComposeSessionConfig
@@ -138,10 +148,7 @@ local function apply_window_config(view)
 	if not window_is_valid(view) then
 		return
 	end
-	vim.api.nvim_win_set_config(
-		view.win,
-		floating_window_config(view.config, view.title, footer_text(view))
-	)
+	vim.api.nvim_win_set_config(view.win, floating_window_config(view.config, view.title, footer_text(view)))
 	apply_window_options(view)
 end
 
@@ -242,6 +249,7 @@ local function release(view, options)
 	local win = view.win
 	local augroup = view.augroup
 	local on_wipeout = options.report_wipeout and view.intents and view.intents.on_wipeout or nil
+	close_placeholder_preview(view)
 	view.buf = nil
 	view.win = nil
 	view.augroup = nil
@@ -310,6 +318,7 @@ function M.new(text, config, intents)
 	local view = {
 		buf = buf,
 		win = nil,
+		preview_win = nil,
 		augroup = nil,
 		config = vim.deepcopy(config),
 		title = config.title or " Compose Message ",
@@ -353,11 +362,54 @@ function M.read_text(view)
 end
 
 ---@param view wiremux.ui.ComposeView
+---@return string? name
+function M.placeholder_at_cursor(view)
+	if not buffer_is_valid(view) or not window_is_valid(view) then
+		return nil
+	end
+	local cursor = vim.api.nvim_win_get_cursor(view.win)
+	local line = vim.api.nvim_buf_get_lines(view.buf, cursor[1] - 1, cursor[1], false)[1] or ""
+	return placeholder.at(line, cursor[2])
+end
+
+---@param view wiremux.ui.ComposeView
+---@return boolean focused
+function M.focus_placeholder_preview(view)
+	if view.preview_win and vim.api.nvim_win_is_valid(view.preview_win) then
+		vim.api.nvim_set_current_win(view.preview_win)
+		return true
+	end
+	view.preview_win = nil
+	return false
+end
+
+---@param view wiremux.ui.ComposeView
+---@param text string
+---@param syntax string
+function M.show_placeholder_preview(view, text, syntax)
+	if not buffer_is_valid(view) or not window_is_valid(view) then
+		return
+	end
+	local preview_buf, preview_win = vim.lsp.util.open_floating_preview(
+		vim.split(text, "\n", { plain = true }),
+		syntax,
+		{ border = view.config.border }
+	)
+	view.preview_win = preview_win
+	vim.keymap.set("n", "<Esc>", function()
+		if vim.api.nvim_win_is_valid(preview_win) then
+			vim.api.nvim_win_close(preview_win, true)
+		end
+	end, { buffer = preview_buf, silent = true })
+end
+
+---@param view wiremux.ui.ComposeView
 ---@param text string
 function M.load_text(view, text)
 	if not buffer_is_valid(view) then
 		return
 	end
+	close_placeholder_preview(view)
 	local undolevels = vim.bo[view.buf].undolevels
 	vim.bo[view.buf].undolevels = -1
 	vim.api.nvim_buf_set_lines(view.buf, 0, -1, false, vim.split(text, "\n"))
@@ -367,6 +419,7 @@ end
 ---@param view wiremux.ui.ComposeView
 ---@param config wiremux.config.ComposeSessionConfig
 function M.reconfigure(view, config)
+	close_placeholder_preview(view)
 	view.config = vim.deepcopy(config)
 	view.footer_keymaps = vim.deepcopy(config.keymaps or {})
 	apply_window_config(view)
@@ -436,11 +489,8 @@ function M.show(view, reopened)
 	end
 	local opened = not window_is_valid(view)
 	if opened then
-		view.win = vim.api.nvim_open_win(
-			view.buf,
-			true,
-			floating_window_config(view.config, view.title, footer_text(view))
-		)
+		view.win =
+			vim.api.nvim_open_win(view.buf, true, floating_window_config(view.config, view.title, footer_text(view)))
 		view.applied_window_options = {}
 		apply_window_options(view)
 	else
@@ -459,6 +509,7 @@ function M.hide(view)
 	if not window_is_valid(view) then
 		return
 	end
+	close_placeholder_preview(view)
 	local win = view.win
 	vim.api.nvim_win_close(win, true)
 	if view.win == win then

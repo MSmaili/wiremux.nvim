@@ -11,6 +11,23 @@ function M.is_valid_name(name)
 	return type(name) == "string" and name:match(M.validation_pattern) ~= nil
 end
 
+---@param text string
+---@param column integer Zero-based byte column.
+---@return string? name
+function M.at(text, column)
+	local offset = 1
+	while true do
+		local first, last, name = text:find(M.discovery_pattern, offset)
+		if first == nil then
+			return nil
+		end
+		if column >= first - 1 and column <= last - 1 then
+			return name
+		end
+		offset = last + 1
+	end
+end
+
 ---@param texts string|string[]
 ---@return table<string, true>
 function M.discover(texts)

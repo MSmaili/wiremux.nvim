@@ -76,6 +76,40 @@ describe("send materialization", function()
 		assert.are_not.equal(capture, calls[2].working)
 	end)
 
+	it("previews stored and new values without mutating or retrying the page capture", function()
+		local calls = { stored = 0, missing = 0, late = 0 }
+		local stored_value = "stored"
+		context.configure({
+			stored = function()
+				calls.stored = calls.stored + 1
+				return stored_value
+			end,
+			missing = function()
+				calls.missing = calls.missing + 1
+				return nil
+			end,
+			late = function()
+				calls.late = calls.late + 1
+				return "late"
+			end,
+		})
+		local capture = context.capture("{stored} {missing}")
+		local original = vim.deepcopy(capture)
+		local page_capture = { placeholder_capture = capture }
+		stored_value = "changed"
+
+		local stored = assert(materialize.preview_placeholder(page_capture, "stored"))
+		local missing, missing_error = materialize.preview_placeholder(page_capture, "missing")
+		local late = assert(materialize.preview_placeholder(page_capture, "late"))
+
+		assert.are.equal("stored", stored)
+		assert.is_nil(missing)
+		assert.are.equal("placeholder_unavailable", missing_error.code)
+		assert.are.equal("late", late)
+		assert.are.same({ stored = 1, missing = 1, late = 1 }, calls)
+		assert.are.same(original, capture)
+	end)
+
 	it("preserves page positions while trimming only trailing whitespace", function()
 		local capture = { enabled = true, capture_set = {}, values = {} }
 		local function page(text)
@@ -146,6 +180,24 @@ describe("send materialization orchestration", function()
 
 	after_each(function()
 		send_helpers.teardown()
+	end)
+
+	it("formats captured changes for the compose placeholder preview", function()
+		local preview
+		mocks.context.capture = function()
+			return {
+				enabled = true,
+				capture_set = { changes = true },
+				values = { changes = "diff --git a/file b/file" },
+			}
+		end
+		mocks.compose.open = function(_, options)
+			preview = { options.on_preview(options.capture, "changes") }
+		end
+
+		mocks.send.send({ value = "{changes}", compose = true })
+
+		assert.are.same({ "diff --git a/file b/file", "diff" }, preview)
 	end)
 
 	it("queues exactly one delivery after successful synchronous confirmation", function()

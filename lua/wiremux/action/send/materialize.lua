@@ -2,7 +2,7 @@ local M = {}
 
 local context = require("wiremux.context")
 
----@alias wiremux.action.SendMaterializationErrorCode "direct_failed"|"invalid_pages"|"compose_page_failed"
+---@alias wiremux.action.SendMaterializationErrorCode "direct_failed"|"invalid_pages"|"compose_page_failed"|"placeholder_unavailable"
 
 ---@class wiremux.action.SendMaterializationError
 ---@field code wiremux.action.SendMaterializationErrorCode
@@ -40,6 +40,29 @@ function M.direct(request)
 		)
 	end
 	return payload, nil
+end
+
+---Resolve one compose placeholder through a temporary capture copy.
+---@param capture wiremux.ui.ComposePageCapture
+---@param name string
+---@return string? value
+---@return wiremux.action.SendMaterializationError? error
+function M.preview_placeholder(capture, name)
+	local working = context.extend(capture.placeholder_capture, "{" .. name .. "}")
+	if not working.enabled then
+		return nil, materialization_error(
+			"placeholder_unavailable",
+			"Placeholder replacement is disabled for this page."
+		)
+	end
+	local value = working.values[name]
+	if value == nil then
+		return nil, materialization_error(
+			"placeholder_unavailable",
+			string.format("No value is available for {%s}.", name)
+		)
+	end
+	return value, nil
 end
 
 ---Create one prepared payload from ordered raw compose pages and temporary working captures.

@@ -56,6 +56,7 @@ describe("compose UI", function()
 			config = session_config(overrides),
 			capture = opts.capture,
 			on_confirm = opts.on_confirm or function() end,
+			on_preview = opts.on_preview,
 			on_cancel = opts.on_cancel,
 		})
 	end
@@ -176,6 +177,46 @@ describe("compose UI", function()
 		assert.are.equal(1, #confirmed_pages)
 		assert.are.equal("", confirmed_pages[1].text)
 		assert.are.equal(captures[2], confirmed_pages[1].capture)
+	end)
+
+	it("previews the placeholder under the cursor without changing its page", function()
+		local capture = { source = "stored" }
+		local preview_calls = 0
+		local preview_capture
+		open("Review {changes}", {
+			capture = capture,
+			on_preview = function(page_capture, name)
+				preview_calls = preview_calls + 1
+				preview_capture = page_capture
+				assert.are.equal("changes", name)
+				return "diff --git a/file b/file", "diff"
+			end,
+			on_confirm = function()
+				return false
+			end,
+		})
+		local compose_buf = assert(compose.get_buf())
+		vim.api.nvim_win_set_cursor(0, { 1, 9 })
+
+		mapping("K")()
+
+		local preview_win = vim.b[compose_buf].lsp_floating_preview
+		assert.is_true(vim.api.nvim_win_is_valid(preview_win))
+		local preview_buf = vim.api.nvim_win_get_buf(preview_win)
+		assert.are.same({ "diff --git a/file b/file" }, vim.api.nvim_buf_get_lines(preview_buf, 0, -1, false))
+		assert.are.equal("diff", vim.bo[preview_buf].syntax)
+		assert.are.same({ "Review {changes}" }, vim.api.nvim_buf_get_lines(compose_buf, 0, -1, false))
+		assert.are.equal(capture, preview_capture)
+
+		mapping("K")()
+		assert.are.equal(preview_win, vim.api.nvim_get_current_win())
+		mapping("<Esc>")()
+		assert.is_false(vim.api.nvim_win_is_valid(preview_win))
+
+		vim.api.nvim_set_current_win(vim.fn.bufwinid(compose_buf))
+		vim.api.nvim_win_set_cursor(0, { 1, 0 })
+		mapping("K")()
+		assert.are.equal(1, preview_calls)
 	end)
 
 	it("preserves the complete draft when confirmation fails", function()

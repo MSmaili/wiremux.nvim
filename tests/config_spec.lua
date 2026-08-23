@@ -19,6 +19,7 @@ describe("compose configuration", function()
 		assert.are.equal("<C-p>", config.opts.ui.compose.keymaps.previous[1])
 		assert.are.equal("<C-n>", config.opts.ui.compose.keymaps.next[1])
 		assert.are.equal("<C-x>", config.opts.ui.compose.keymaps.delete_page[1])
+		assert.are.equal("K", config.opts.ui.compose.keymaps.preview_placeholder[1])
 	end)
 
 	it("replaces custom resolvers on repeated setup", function()

@@ -177,6 +177,12 @@ one paged draft. Use normal-mode `<C-p>` and `<C-n>` to navigate pages.
 `<C-x>` deletes the current page and moves to the next, wrapping to the first
 when necessary. With only one page, `<C-x>` clears its text instead.
 
+Place the cursor on a placeholder and press normal-mode `K` to preview its
+value. Press `K` again to focus the read-only preview; use `q` or `<Esc>` to
+close it. Preview resolution uses a temporary capture and never changes the
+page. Empty values appear as `(empty)`, unavailable values show a short
+message, and `{changes}` uses diff syntax.
+
 Each page owns an independent placeholder capture created when the page is
 added. Its stored `values` map is the page's point-in-time snapshot. Editing
 raw text does not refresh or mutate that snapshot, so identical pages added
@@ -270,6 +276,7 @@ You can use a function for `label` to create dynamic display names:
         on_new_payload = "append", -- "ask" | "keep" | "replace" | "append"
         keymaps = {
           delete_page = { "<C-x>", mode = "n" },
+          preview_placeholder = { "K", mode = "n" },
           previous = { "<C-p>", mode = "n" },
           next = { "<C-n>", mode = "n" },
         },
