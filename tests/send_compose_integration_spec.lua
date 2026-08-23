@@ -123,7 +123,6 @@ describe("send compose integration", function()
 			},
 			ui = {
 				compose = {
-					capture_placeholders = { "page_state" },
 					on_new_payload = "append",
 					close_behavior = "hide",
 				},
@@ -157,6 +156,29 @@ describe("send compose integration", function()
 		assert.are.same({ "latest" }, deliveries[1].options.post_keys)
 	end)
 
+	it("resolves names typed later against each page source origin", function()
+		setup({
+			ui = {
+				compose = {
+					on_new_payload = "append",
+					close_behavior = "hide",
+				},
+			},
+		})
+		new_source("/tmp/wiremux-origin-one.lua", { "source one" })
+		send.send("page one", { compose = true })
+		set_compose_text("page one {line}")
+		hide()
+
+		new_source("/tmp/wiremux-origin-two.lua", { "source two" })
+		send.send("page two", { compose = true })
+		set_compose_text("page two {line}")
+		confirm()
+		wait_for_deliveries(1)
+
+		assert.are.equal("page one source one\n\npage two source two", deliveries[1].payload)
+	end)
+
 	it("combines captured and confirmation-time values without mutating the page capture", function()
 		local calls = { captured = 0, live = 0 }
 		local captured_state = "page snapshot"
@@ -164,7 +186,7 @@ describe("send compose integration", function()
 		setup({
 			context = {
 				resolvers = {
-					captured_later = function()
+					initial_value = function()
 						calls.captured = calls.captured + 1
 						return captured_state
 					end,
@@ -174,21 +196,20 @@ describe("send compose integration", function()
 					end,
 				},
 			},
-			ui = { compose = { capture_placeholders = { "captured_later" } } },
 		})
 		new_source("/tmp/wiremux-working-capture.lua", { "source" })
-		send.send("raw", { compose = true })
+		send.send("{initial_value}", { compose = true })
 		assert.are.same({ captured = 1, live = 0 }, calls)
-		set_compose_text("{captured_later}|{live_later}")
+		set_compose_text("{initial_value}|{live_later}")
 
 		local stored_capture
 		local stored_before
 		local working_capture
 		local extend = context.extend
-		context.extend = function(capture, text)
+		context.extend = function(capture, text, origin)
 			stored_capture = capture
 			stored_before = vim.deepcopy(capture)
-			local working = extend(capture, text)
+			local working = extend(capture, text, origin)
 			working_capture = vim.deepcopy(working)
 			return working
 		end
@@ -199,14 +220,14 @@ describe("send compose integration", function()
 		assert.are.equal("page snapshot|confirmation value", deliveries[1].payload)
 		assert.are.same({ captured = 1, live = 1 }, calls)
 		assert.are.same(stored_before, stored_capture)
-		assert.is_true(stored_capture.capture_set.captured_later)
+		assert.is_true(stored_capture.capture_set.initial_value)
 		assert.is_nil(stored_capture.capture_set.live_later)
-		assert.are.equal("page snapshot", working_capture.values.captured_later)
+		assert.are.equal("page snapshot", working_capture.values.initial_value)
 		assert.are.equal("confirmation value", working_capture.values.live_later)
 	end)
 
 	it("resolves buffers and quickfix from confirmation-time editor state", function()
-		setup({ ui = { compose = { capture_placeholders = {} } } })
+		setup()
 		local source = new_source("/tmp/wiremux-live-builtins.lua", { "source" })
 		send.send("raw", { compose = true })
 		vim.fn.setqflist({}, "r", {
@@ -251,7 +272,6 @@ describe("send compose integration", function()
 					end,
 				},
 			},
-			ui = { compose = { capture_placeholders = {} } },
 		})
 		local raw = table.concat({
 			"{unknown_result}",
@@ -291,7 +311,6 @@ describe("send compose integration", function()
 					picker_callback = callback
 				end,
 			},
-			ui = { compose = { capture_placeholders = {} } },
 		})
 		new_source("/tmp/wiremux-library-capture.lua", { "source" })
 
@@ -321,7 +340,6 @@ describe("send compose integration", function()
 			context = { resolvers = { page_value = function() return "value" end } },
 			ui = {
 				compose = {
-					capture_placeholders = {},
 					on_new_payload = "append",
 					close_behavior = "hide",
 				},
@@ -356,7 +374,6 @@ describe("send compose integration", function()
 			context = { resolvers = { release_value = function() return "captured" end } },
 			ui = {
 				compose = {
-					capture_placeholders = {},
 					on_new_payload = "replace",
 					close_behavior = "discard",
 				},
@@ -424,7 +441,6 @@ describe("send compose integration", function()
 					callback(nil)
 				end,
 			},
-			ui = { compose = { capture_placeholders = {} } },
 		})
 
 		send.send("confirmed", {

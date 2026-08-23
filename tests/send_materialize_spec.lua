@@ -79,6 +79,7 @@ describe("send materialization", function()
 	it("previews stored and new values without mutating or retrying the page capture", function()
 		local calls = { stored = 0, missing = 0, late = 0 }
 		local stored_value = "stored"
+		local late_origin
 		context.configure({
 			stored = function()
 				calls.stored = calls.stored + 1
@@ -88,14 +89,18 @@ describe("send materialization", function()
 				calls.missing = calls.missing + 1
 				return nil
 			end,
-			late = function()
+			late = function(origin)
 				calls.late = calls.late + 1
+				late_origin = origin
 				return "late"
 			end,
 		})
 		local capture = context.capture("{stored} {missing}")
 		local original = vim.deepcopy(capture)
-		local page_capture = { placeholder_capture = capture }
+		local page_capture = {
+			placeholder_capture = capture,
+			origin = { bufnr = 1, path = "/source.lua", row = 3, col = 2, selection = "" },
+		}
 		stored_value = "changed"
 
 		local stored = assert(materialize.preview_placeholder(page_capture, "stored"))
@@ -106,6 +111,7 @@ describe("send materialization", function()
 		assert.is_nil(missing)
 		assert.are.equal("placeholder_unavailable", missing_error.code)
 		assert.are.equal("late", late)
+		assert.are.same({ bufnr = 1, path = "/source.lua", row = 3, col = 2, selection = "" }, late_origin)
 		assert.are.same({ stored = 1, missing = 1, late = 1 }, calls)
 		assert.are.same(original, capture)
 	end)
@@ -192,6 +198,13 @@ describe("send materialization orchestration", function()
 			}
 		end
 		mocks.compose.open = function(_, options)
+			assert.are.same({
+				bufnr = 1,
+				path = "/source.lua",
+				row = 1,
+				col = 0,
+				selection = "",
+			}, options.capture.origin)
 			preview = { options.on_preview(options.capture, "changes") }
 		end
 

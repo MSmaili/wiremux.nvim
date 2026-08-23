@@ -271,22 +271,6 @@ describe("send single item", function()
 		assert.is_true(action_called)
 	end)
 
-	it("captures the global policy only for compose candidates", function()
-		mocks.config.opts.ui.compose.capture_placeholders = { "selection", "custom_context" }
-		local calls = {}
-		mocks.context.capture = function(text, capture_names)
-			table.insert(calls, { text = text, capture_names = capture_names })
-			return { enabled = true, capture_set = {}, values = {} }
-		end
-
-		mocks.send.send("direct {file}")
-		mocks.send.send({ value = "compose {file}", compose = true })
-
-		assert.are.equal(2, #calls)
-		assert.is_nil(calls[1].capture_names)
-		assert.are.same({ "selection", "custom_context" }, calls[2].capture_names)
-	end)
-
 	it("transfers one failed eager capture into an explicit page capture", function()
 		local placeholder_capture = {
 			enabled = true,
@@ -303,20 +287,22 @@ describe("send single item", function()
 
 		mocks.send.send({ value = "{failed}", compose = true })
 
-		assert.are.same({ placeholder_capture = placeholder_capture }, page_capture)
+		assert.are.same({
+			placeholder_capture = placeholder_capture,
+			origin = { bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "" },
+		}, page_capture)
 		assert.are.equal(placeholder_capture, page_capture.placeholder_capture)
 		assert.are.equal(placeholder_capture.capture_set, page_capture.placeholder_capture.capture_set)
 		assert.is_true(page_capture.placeholder_capture.capture_set.failed)
 		assert.is_nil(page_capture.placeholder_capture.values.failed)
 	end)
 
-	it("passes a complete session config without the global capture policy", function()
+	it("passes a complete compose session config", function()
 		mocks.config.opts.ui.compose = {
 			width = 0.6,
 			height = 0.4,
 			title = " Global ",
 			wo = { wrap = true, number = false },
-			capture_placeholders = { "file" },
 		}
 		local received_config
 		mocks.compose.open = function(_, compose_opts)
@@ -332,7 +318,6 @@ describe("send single item", function()
 		assert.are.equal(0.4, received_config.height)
 		assert.are.equal(" Runtime ", received_config.title)
 		assert.are.same({ wrap = true, number = true }, received_config.wo)
-		assert.is_nil(received_config.capture_placeholders)
 	end)
 
 	it("rejects invalid item compose options before capture or UI", function()
@@ -361,29 +346,6 @@ describe("send single item", function()
 		assert.matches("invalid on_new_payload", warning)
 	end)
 
-	it("rejects capture policy outside global compose config", function()
-		local capture_calls = 0
-		local compose_opened = false
-		local warning
-		mocks.context.capture = function()
-			capture_calls = capture_calls + 1
-		end
-		mocks.compose.open = function()
-			compose_opened = true
-		end
-		mocks.notify.warn = function(message)
-			warning = message
-		end
-
-		mocks.send.send({ value = "draft" }, {
-			compose = { capture_placeholders = { "file" } },
-		})
-
-		assert.are.equal(0, capture_calls)
-		assert.is_false(compose_opened)
-		assert.matches("only allowed at ui.compose", warning)
-	end)
-
 	it("does not evaluate ignored lower-precedence compose options", function()
 		local action_called = false
 		mocks.action.run = function()
@@ -398,7 +360,6 @@ describe("send single item", function()
 	end)
 
 	it("reopens an existing empty compose invocation without recapturing", function()
-		mocks.config.opts.ui.compose.capture_placeholders = { "file" }
 		mocks.compose.get_buf = function()
 			return 10
 		end
@@ -415,20 +376,16 @@ describe("send single item", function()
 		assert.is_true(opened)
 	end)
 
-	it("captures the global policy for a brand-new empty compose draft", function()
-		mocks.config.opts.ui.compose.capture_placeholders = { "file", "selection" }
+	it("captures a brand-new empty compose draft", function()
 		local captured_text
-		local captured_names
-		mocks.context.capture = function(text, names)
+		mocks.context.capture = function(text)
 			captured_text = text
-			captured_names = names
 			return { enabled = true, capture_set = {}, values = {} }
 		end
 
 		mocks.send.send()
 
 		assert.are.equal("", captured_text)
-		assert.are.same({ "file", "selection" }, captured_names)
 	end)
 
 	it("materializes all compose page captures and preserves empty pages", function()

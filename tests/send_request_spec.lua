@@ -72,6 +72,25 @@ describe("prepared send request", function()
 		assert.are.same({ "item-post", "Enter" }, request.delivery.post_keys)
 		assert.are.equal(" Item Compose ", request.compose.config.title)
 		assert.are.equal(0.6, request.compose.config.width)
+		assert.are.same({ bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "" }, request.origin)
+	end)
+
+	it("skips source capture when placeholders are disabled", function()
+		mocks.context.capture_origin = function()
+			error("origin capture must not run")
+		end
+		mocks.context.capture = function()
+			error("placeholder capture must not run")
+		end
+
+		local request = assert(request_builder.prepare({
+			value = "literal {file}",
+			compose = true,
+			placeholders = false,
+		}, prepare_context()))
+
+		assert.is_nil(request.origin)
+		assert.is_false(request.placeholder_capture.enabled)
 	end)
 
 	it("uses call then action defaults when item-specific fields are absent", function()
@@ -132,21 +151,6 @@ describe("prepared send request", function()
 		assert.are_not.equal(post_keys, request.delivery.post_keys)
 	end)
 
-	it("uses only the global capture policy for compose", function()
-		mocks.config.opts.ui.compose.capture_placeholders = { "file", "selection" }
-		local captured_names
-		mocks.context.capture = function(_, names)
-			captured_names = names
-			return { enabled = true, capture_set = {}, values = {} }
-		end
-		local preparation = prepare_context({ compose = true })
-
-		local request = assert(request_builder.prepare({ value = "draft" }, preparation))
-
-		assert.are.same({ "file", "selection" }, captured_names)
-		assert.is_nil(request.compose.config.capture_placeholders)
-	end)
-
 	it("returns structured errors before capture for invalid inputs", function()
 		local captures = 0
 		mocks.context.capture = function()
@@ -161,19 +165,6 @@ describe("prepared send request", function()
 		assert.are.equal(0, captures)
 		assert.are.equal("invalid_item", errors[1].code)
 		assert.are.equal("item.placeholders", errors[1].path)
-	end)
-
-	it("validates the global capture policy before invoking a resolver", function()
-		mocks.config.opts.ui.compose.capture_placeholders = "file"
-		mocks.context.capture = function()
-			error("capture must not run")
-		end
-
-		local preparation, errors = request_builder.prepare_context({}, mocks.config.get())
-
-		assert.is_nil(preparation)
-		assert.are.equal("invalid_config", errors[1].code)
-		assert.are.equal("ui.compose.capture_placeholders", errors[1].path)
 	end)
 
 	it("does not retain mutable item, options, or config tables", function()

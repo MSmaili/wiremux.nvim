@@ -39,8 +39,8 @@ function M.setup()
 		picker = helpers.mock_picker(),
 		notify = helpers.mock_notify(),
 		context = {
-			list = function()
-				return { "custom_context", "file", "selection" }
+			capture_origin = function()
+				return { bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "" }
 			end,
 			capture = function()
 				return { enabled = true, capture_set = {}, values = {} }

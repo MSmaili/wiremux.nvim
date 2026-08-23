@@ -40,7 +40,7 @@ describe("placeholder context", function()
 			assert.are_not.equal("override", context.get("file"))
 		end)
 
-		it("omits invalid resolver definitions and returns a sorted name copy", function()
+		it("omits invalid resolver definitions", function()
 			context.configure({
 				valid_name = function()
 					return "valid"
@@ -51,16 +51,24 @@ describe("placeholder context", function()
 				invalid_value = "not a function",
 			})
 
-			local names = context.list()
-			local sorted = vim.deepcopy(names)
-			table.sort(sorted)
-			assert.are.same(sorted, names)
 			assert.are.equal("valid", context.get("valid_name"))
 			assert.is_nil(context.get("bad-name"))
 			assert.is_nil(context.get("invalid_value"))
+		end)
+	end)
 
-			table.insert(names, "mutated")
-			assert.is_false(vim.tbl_contains(context.list(), "mutated"))
+	describe("page origin", function()
+		it("captures the source selection once", function()
+			local builtins = require("wiremux.context.builtins")
+			local selection = builtins.selection
+			builtins.selection = function()
+				return "selected text"
+			end
+
+			local origin = context.capture_origin()
+			builtins.selection = selection
+
+			assert.are.equal("selected text", origin.selection)
 		end)
 	end)
 
@@ -149,7 +157,7 @@ describe("placeholder context", function()
 				end,
 			})
 
-			local capture = context.capture("{zeta} {alpha} {zeta}", { "alpha", "zeta" })
+			local capture = context.capture("{zeta} {alpha} {zeta}")
 
 			assert.are.same({ "alpha", "zeta" }, calls)
 			assert.are.same({ alpha = "a", zeta = "z" }, capture.values)
@@ -192,6 +200,119 @@ describe("placeholder context", function()
 			assert.are.equal("creation confirmation", context.materialize("{seeded} {added}", extended))
 		end)
 
+		it("uses a copied page origin for late built-in and custom resolvers", function()
+			local received_origin
+			context.configure({ custom = function(origin)
+				received_origin = origin
+				origin.path = "mutated"
+				return "custom"
+			end })
+			local command, system_options
+			local system = vim.system
+			vim.system = function(args, options)
+				command, system_options = args, options
+				return { wait = function()
+					return { code = 0, stdout = "diff" }
+				end }
+			end
+			local origin = { bufnr = -1, path = "/project/source.lua", row = 4, col = 2, selection = "" }
+
+			local ok, extended = pcall(context.extend, context.capture("plain"), "{changes} {custom}", origin)
+			vim.system = system
+
+			assert(ok, extended)
+			assert.are.same({ "git", "diff", "HEAD", "--", "/project/source.lua" }, command)
+			assert.are.same({ text = true, cwd = "/project" }, system_options)
+			assert.are.equal("diff", extended.values.changes)
+			assert.are.same({ bufnr = -1, path = "mutated", row = 4, col = 2, selection = "" }, received_origin)
+			assert.are.equal("/project/source.lua", origin.path)
+		end)
+
+		it("keeps the captured path while using a live or reopened origin buffer", function()
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_name(bufnr, "/tmp/wiremux-origin.lua")
+			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "first", "source line" })
+			local namespace = vim.api.nvim_create_namespace("wiremux-origin-test")
+			vim.diagnostic.set(namespace, bufnr, {
+				{ lnum = 1, col = 1, message = "origin problem", severity = vim.diagnostic.severity.ERROR },
+			})
+			local origin = {
+				bufnr = bufnr,
+				path = vim.api.nvim_buf_get_name(bufnr),
+				row = 2,
+				col = 0,
+				selection = "chosen text",
+			}
+			vim.api.nvim_buf_set_name(bufnr, "/tmp/wiremux-renamed.lua")
+
+			local extended = context.extend(
+				context.capture("plain"),
+				"{file} {filename} {position} {line} {selection} {this} {diagnostics} {diagnostics_all}",
+				origin
+			)
+
+			assert.are.equal(origin.path, extended.values.file)
+			assert.are.equal("wiremux-origin.lua", extended.values.filename)
+			assert.are.equal(origin.path .. ":2:1", extended.values.position)
+			assert.are.equal("source line", extended.values.line)
+			assert.are.equal("chosen text", extended.values.selection)
+			assert.are.equal(origin.path .. ":2:1\nchosen text", extended.values.this)
+			assert.matches("/tmp/wiremux%-origin.lua", extended.values.diagnostics)
+			assert.matches("origin problem", extended.values.diagnostics_all)
+			vim.api.nvim_buf_delete(bufnr, { force = true })
+			assert.are.same({}, context.extend(context.capture("plain"), "{line} {diagnostics}", origin).values)
+
+			local reopened = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_name(reopened, origin.path)
+			vim.api.nvim_buf_set_lines(reopened, 0, -1, false, { "first", "reopened line" })
+			assert.are.equal("reopened line", context.extend(context.capture("plain"), "{line}", origin).values.line)
+			vim.api.nvim_buf_delete(reopened, { force = true })
+		end)
+
+		it("matches a reopened buffer path literally", function()
+			local collision = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_name(collision, "/tmp/wiremux-x.lua")
+			vim.api.nvim_buf_set_lines(collision, 0, -1, false, { "collision" })
+			local exact = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_name(exact, "/tmp/wiremux-[x].lua")
+			vim.api.nvim_buf_set_lines(exact, 0, -1, false, { "exact" })
+			local origin = {
+				bufnr = -1,
+				path = vim.api.nvim_buf_get_name(exact),
+				row = 1,
+				col = 0,
+				selection = "",
+			}
+
+			local extended = context.extend(context.capture("plain"), "{line}", origin)
+
+			assert.are.equal("exact", extended.values.line)
+			vim.api.nvim_buf_delete(collision, { force = true })
+			vim.api.nvim_buf_delete(exact, { force = true })
+		end)
+
+		it("preserves current-context changes options when no origin is supplied", function()
+			local current = vim.api.nvim_get_current_buf()
+			local bufnr = vim.api.nvim_create_buf(false, true)
+			vim.api.nvim_buf_set_name(bufnr, "/tmp/wiremux-direct.lua")
+			vim.api.nvim_set_current_buf(bufnr)
+			local options
+			local system = vim.system
+			vim.system = function(_, value)
+				options = value
+				return { wait = function()
+					return { code = 0, stdout = "diff" }
+				end }
+			end
+
+			context.get("changes")
+			vim.system = system
+			vim.api.nvim_set_current_buf(current)
+			vim.api.nvim_buf_delete(bufnr, { force = true })
+
+			assert.are.same({ text = true }, options)
+		end)
+
 		it("never retries a failed eager capture", function()
 			local calls = 0
 			local available = false
@@ -199,7 +320,7 @@ describe("placeholder context", function()
 				calls = calls + 1
 				return available and "late" or nil
 			end })
-			local stored = context.capture("", { "eager" })
+			local stored = context.capture("{eager}")
 			available = true
 
 			local extended = context.extend(stored, "{eager}")

@@ -40,7 +40,6 @@ describe("compose UI", function()
 	local function session_config(overrides)
 		overrides = overrides or {}
 		local resolved = vim.tbl_deep_extend("force", {}, config.opts.ui.compose, overrides)
-		resolved.capture_placeholders = nil
 		if overrides.keymaps ~= nil then
 			resolved.keymaps = vim.deepcopy(overrides.keymaps)
 		end
