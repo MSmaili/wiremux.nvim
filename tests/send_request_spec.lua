@@ -70,8 +70,8 @@ describe("prepared send request", function()
 		assert.are.equal(call_filter_fn, request.delivery.filter.instances)
 		assert.are.same({ "item-pre" }, request.delivery.pre_keys)
 		assert.are.same({ "item-post", "Enter" }, request.delivery.post_keys)
-		assert.are.equal(" Item Compose ", request.compose.config.title)
-		assert.are.equal(0.6, request.compose.config.width)
+		assert.are.equal(" Item Compose ", request.compose.title)
+		assert.are.equal(0.6, request.compose.width)
 		assert.are.same({ bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "" }, request.origin)
 	end)
 
@@ -118,7 +118,7 @@ describe("prepared send request", function()
 		assert.are.equal("default-target", request.delivery.target)
 		assert.are.same({ "call-pre" }, request.delivery.pre_keys)
 		assert.are.same({ "default-post" }, request.delivery.post_keys)
-		assert.are.equal(" Call Compose ", request.compose.config.title)
+		assert.are.equal(" Call Compose ", request.compose.title)
 	end)
 
 	it("applies compose whole-value precedence exactly once", function()
@@ -138,7 +138,7 @@ describe("prepared send request", function()
 		require("wiremux.utils.validate").resolve_compose = resolve_compose
 
 		assert.are.equal(1, calls)
-		assert.are.equal(" Item ", request.compose.config.title)
+		assert.are.equal(" Item ", request.compose.title)
 	end)
 
 	it("folds submit into a copied post-keys list", function()
@@ -202,8 +202,8 @@ describe("prepared send request", function()
 		assert.are.equal("last", request.delivery.behavior)
 		assert.is_true(request.delivery.filter.instances())
 		assert.is_false(request.delivery.focus)
-		assert.is_true(request.compose.config.wo.wrap)
-		assert.are_not.equal(mocks.config.opts.ui.compose.wo, request.compose.config.wo)
+		assert.is_true(request.compose.wo.wrap)
+		assert.are_not.equal(mocks.config.opts.ui.compose.wo, request.compose.wo)
 	end)
 end)
 
@@ -242,8 +242,7 @@ describe("prepared request orchestration", function()
 		mocks.context.capture = function(text)
 			local capture = {
 				enabled = true,
-				capture_set = { source = true },
-				values = { source = text },
+				results = { source = text },
 			}
 			table.insert(captures, capture)
 			return capture
@@ -268,7 +267,7 @@ describe("prepared request orchestration", function()
 		local capture_calls = 0
 		mocks.context.capture = function(text)
 			capture_calls = capture_calls + 1
-			return { enabled = true, capture_set = {}, values = {} }
+			return { enabled = true, results = {} }
 		end
 		mocks.picker.select = function(items, _, callback)
 			picker_items = items
@@ -299,16 +298,14 @@ describe("prepared request orchestration", function()
 		local captures = 0
 		local failed_capture = {
 			enabled = true,
-			capture_set = { failed = true },
-			values = {},
+			results = { failed = false },
 		}
 		mocks.context.capture = function()
 			captures = captures + 1
 			return failed_capture
 		end
-		mocks.context.extend = function(capture)
-			assert.are.equal(failed_capture, capture)
-			return capture
+		mocks.context.extend = function()
+			error("direct materialization must not extend its capture")
 		end
 		local received
 		mocks.backend.send = function(text)

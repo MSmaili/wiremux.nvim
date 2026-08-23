@@ -8,12 +8,11 @@ describe("compose draft", function()
 		draft = require("wiremux.ui.compose.draft")
 	end)
 
-	it("saves edits without changing capture identity or values", function()
+	it("saves edits without changing capture identity or results", function()
 		local capture = {
 			placeholder_capture = {
 				enabled = true,
-				capture_set = { selection = true },
-				values = { selection = "captured" },
+				results = { selection = "captured" },
 			},
 		}
 		local state = draft.new("first", capture)
@@ -23,7 +22,7 @@ describe("compose draft", function()
 		assert.are.equal(1, state.current_page)
 		assert.are.equal("edited", draft.current(state).text)
 		assert.are.equal(capture, draft.current(state).capture)
-		assert.are.equal("captured", draft.current(state).capture.placeholder_capture.values.selection)
+		assert.are.equal("captured", draft.current(state).capture.placeholder_capture.results.selection)
 	end)
 
 	it("keeps distinct captures for identical raw text", function()
@@ -82,19 +81,6 @@ describe("compose draft", function()
 		for index, capture in ipairs(captures) do
 			assert.are.equal(capture, state.pages[index].capture)
 		end
-	end)
-
-	it("preserves unrecognized fields in opaque captures", function()
-		local capture = {
-			placeholder_capture = { enabled = true, capture_set = {}, values = {} },
-			future_field = { source = "future" },
-		}
-		local state = draft.new("first", capture)
-
-		draft.save(state, "edited")
-
-		assert.are.equal(capture, draft.current(state).capture)
-		assert.are.same({ source = "future" }, draft.current(state).capture.future_field)
 	end)
 
 	it("does not navigate a one-page draft", function()

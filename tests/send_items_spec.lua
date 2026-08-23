@@ -274,8 +274,7 @@ describe("send single item", function()
 	it("transfers one failed eager capture into an explicit page capture", function()
 		local placeholder_capture = {
 			enabled = true,
-			capture_set = { failed = true },
-			values = {},
+			results = { failed = false },
 		}
 		mocks.context.capture = function()
 			return placeholder_capture
@@ -292,9 +291,7 @@ describe("send single item", function()
 			origin = { bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "" },
 		}, page_capture)
 		assert.are.equal(placeholder_capture, page_capture.placeholder_capture)
-		assert.are.equal(placeholder_capture.capture_set, page_capture.placeholder_capture.capture_set)
-		assert.is_true(page_capture.placeholder_capture.capture_set.failed)
-		assert.is_nil(page_capture.placeholder_capture.values.failed)
+		assert.is_false(page_capture.placeholder_capture.results.failed)
 	end)
 
 	it("passes a complete compose session config", function()
@@ -380,7 +377,7 @@ describe("send single item", function()
 		local captured_text
 		mocks.context.capture = function(text)
 			captured_text = text
-			return { enabled = true, capture_set = {}, values = {} }
+			return { enabled = true, results = {} }
 		end
 
 		mocks.send.send()
@@ -396,7 +393,7 @@ describe("send single item", function()
 			return capture
 		end
 		mocks.context.materialize = function(text, capture)
-			return text:gsub("{value}", capture.values.value or "{value}")
+			return text:gsub("{value}", capture.results.value or "{value}")
 		end
 		mocks.compose.open = function(_, compose_opts)
 			local confirmed = compose_opts.on_confirm({
@@ -405,15 +402,14 @@ describe("send single item", function()
 					capture = {
 						placeholder_capture = {
 							enabled = true,
-							capture_set = { value = true },
-							values = { value = "first" },
+							results = { value = "first" },
 						},
 					},
 				},
 				{
 					text = "",
 					capture = {
-						placeholder_capture = { enabled = true, capture_set = {}, values = {} },
+						placeholder_capture = { enabled = true, results = {} },
 					},
 				},
 				{
@@ -421,8 +417,7 @@ describe("send single item", function()
 					capture = {
 						placeholder_capture = {
 							enabled = true,
-							capture_set = { value = true },
-							values = { value = "third" },
+							results = { value = "third" },
 						},
 					},
 				},
@@ -443,7 +438,7 @@ describe("send single item", function()
 
 		assert.are.equal(" first\n\n\n\nthird", received_text)
 		assert.are.equal(3, #extend_calls)
-		assert.are.same({}, extend_calls[2].capture.values)
+		assert.are.same({}, extend_calls[2].capture.results)
 	end)
 
 	it("keeps compose open when a page capture is missing", function()
@@ -470,7 +465,7 @@ describe("send single item", function()
 		local confirmation_result
 		local action_called = false
 		mocks.context.extend = function(capture)
-			assert(type(capture.capture_set) == "table", "malformed placeholder capture")
+			assert(type(capture.results) == "table", "malformed placeholder capture")
 			return capture
 		end
 		mocks.compose.open = function(_, compose_opts)
@@ -519,7 +514,7 @@ describe("send list of items", function()
 		local warnings = {}
 		mocks.context.capture = function()
 			capture_calls = capture_calls + 1
-			return { enabled = true, capture_set = {}, values = {} }
+			return { enabled = true, results = {} }
 		end
 		mocks.notify.warn = function(message)
 			table.insert(warnings, message)
@@ -582,14 +577,11 @@ describe("send list of items", function()
 		local captured = {}
 		local selected_capture
 		mocks.context.capture = function(text)
-			captured[text] = { enabled = true, capture_set = { source = true }, values = { source = text } }
+			captured[text] = { enabled = true, results = { source = text } }
 			return captured[text]
 		end
-		mocks.context.extend = function(capture)
+		mocks.context.materialize = function(_, capture)
 			selected_capture = capture
-			return capture
-		end
-		mocks.context.materialize = function()
 			return "expanded"
 		end
 		mocks.picker.select = function(items, _, callback)

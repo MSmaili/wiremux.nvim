@@ -23,7 +23,7 @@ describe("send materialization", function()
 		helpers.clear(MODULES)
 	end)
 
-	it("extends a direct capture without resolving again or changing whitespace", function()
+	it("materializes a direct capture without resolving again or changing whitespace", function()
 		local resolver_calls = 0
 		context.configure({
 			direct_value = function()
@@ -55,7 +55,7 @@ describe("send materialization", function()
 	end)
 
 	it("routes direct and compose text through the same lookup-only materializer", function()
-		local capture = { enabled = true, capture_set = {}, values = {} }
+		local capture = { enabled = true, results = {} }
 		local calls = {}
 		local context_materialize = context.materialize
 		context.materialize = function(text, working)
@@ -72,7 +72,7 @@ describe("send materialization", function()
 		assert.are.equal(2, #calls)
 		assert.are.equal("direct", calls[1].text)
 		assert.are.equal("compose", calls[2].text)
-		assert.are_not.equal(capture, calls[1].working)
+		assert.are.equal(capture, calls[1].working)
 		assert.are_not.equal(capture, calls[2].working)
 	end)
 
@@ -117,7 +117,7 @@ describe("send materialization", function()
 	end)
 
 	it("preserves page positions while trimming only trailing whitespace", function()
-		local capture = { enabled = true, capture_set = {}, values = {} }
+		local capture = { enabled = true, results = {} }
 		local function page(text)
 			return { text = text, capture = { placeholder_capture = capture } }
 		end
@@ -135,7 +135,7 @@ describe("send materialization", function()
 	it("returns a page-numbered error for missing and malformed captures", function()
 		local _, missing = materialize.compose({ { text = "draft" } })
 		local _, malformed = materialize.compose({
-			{ text = "valid", capture = { placeholder_capture = { enabled = true, capture_set = {}, values = {} } } },
+			{ text = "valid", capture = { placeholder_capture = { enabled = true, results = {} } } },
 			{ text = "invalid", capture = { placeholder_capture = { enabled = true } } },
 		})
 
@@ -148,7 +148,7 @@ describe("send materialization", function()
 	end)
 
 	it("returns no partial payload and stops after the first page failure", function()
-		local capture = { enabled = true, capture_set = {}, values = {} }
+		local capture = { enabled = true, results = {} }
 		local materialize_calls = 0
 		local context_materialize = context.materialize
 		context.materialize = function(text, working)
@@ -193,8 +193,7 @@ describe("send materialization orchestration", function()
 		mocks.context.capture = function()
 			return {
 				enabled = true,
-				capture_set = { changes = true },
-				values = { changes = "diff --git a/file b/file" },
+				results = { changes = "diff --git a/file b/file" },
 			}
 		end
 		mocks.compose.open = function(_, options)

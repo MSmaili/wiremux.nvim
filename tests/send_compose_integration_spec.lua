@@ -220,10 +220,10 @@ describe("send compose integration", function()
 		assert.are.equal("page snapshot|confirmation value", deliveries[1].payload)
 		assert.are.same({ captured = 1, live = 1 }, calls)
 		assert.are.same(stored_before, stored_capture)
-		assert.is_true(stored_capture.capture_set.initial_value)
-		assert.is_nil(stored_capture.capture_set.live_later)
-		assert.are.equal("page snapshot", working_capture.values.initial_value)
-		assert.are.equal("confirmation value", working_capture.values.live_later)
+		assert.are.equal("page snapshot", stored_capture.results.initial_value)
+		assert.is_nil(stored_capture.results.live_later)
+		assert.are.equal("page snapshot", working_capture.results.initial_value)
+		assert.are.equal("confirmation value", working_capture.results.live_later)
 	end)
 
 	it("resolves buffers and quickfix from confirmation-time editor state", function()
@@ -325,8 +325,8 @@ describe("send compose integration", function()
 			picker_items[1].value.placeholder_capture,
 			picker_items[2].value.placeholder_capture
 		)
-		assert.are.equal("candidate 1", picker_items[1].value.placeholder_capture.values.candidate_value)
-		assert.are.equal("candidate 2", picker_items[2].value.placeholder_capture.values.candidate_value)
+		assert.are.equal("candidate 1", picker_items[1].value.placeholder_capture.results.candidate_value)
+		assert.are.equal("candidate 2", picker_items[2].value.placeholder_capture.results.candidate_value)
 		picker_callback(picker_items[2])
 		confirm()
 		wait_for_deliveries(1)
@@ -359,7 +359,7 @@ describe("send compose integration", function()
 		send.send("first {page_value}", { compose = true })
 		hide()
 		send.send("second {page_value}", { compose = true })
-		second_capture.values = nil
+		second_capture.results = nil
 
 		confirm()
 		context.capture = capture

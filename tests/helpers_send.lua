@@ -43,7 +43,7 @@ function M.setup()
 				return { bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "" }
 			end,
 			capture = function()
-				return { enabled = true, capture_set = {}, values = {} }
+				return { enabled = true, results = {} }
 			end,
 			extend = function(capture)
 				return capture
