@@ -2,27 +2,35 @@ local h = require("wiremux.context.helpers")
 
 local M = {}
 
-M.file = function()
-	return h.current_file()
+---@param origin? wiremux.context.ResolverOrigin
+M.file = function(origin)
+	return h.file_for(origin)
 end
 
-M.filename = function()
-	local path = h.current_file()
+---@param origin? wiremux.context.ResolverOrigin
+M.filename = function(origin)
+	local path = h.file_for(origin)
 	if path == "" then
 		return ""
 	end
 	return vim.fn.fnamemodify(path, ":t")
 end
 
-M.position = function()
-	return h.current_position()
+---@param origin? wiremux.context.ResolverOrigin
+M.position = function(origin)
+	return h.position_for(origin)
 end
 
-M.line = function()
-	return vim.api.nvim_get_current_line()
+---@param origin? wiremux.context.ResolverOrigin
+M.line = function(origin)
+	return h.line_for(origin)
 end
 
-M.selection = function()
+---@param origin? wiremux.context.ResolverOrigin
+M.selection = function(origin)
+	if origin then
+		return origin.selection
+	end
 	local mode = vim.fn.mode()
 	if not mode:match("[vV\22]") then
 		return ""
@@ -34,21 +42,31 @@ M.selection = function()
 	return table.concat(lines, "\n")
 end
 
-M.diagnostics = function()
-	local row = vim.api.nvim_win_get_cursor(0)[1]
-	local diags = vim.diagnostic.get(0, { lnum = row - 1, namespace = nil })
+---@param origin? wiremux.context.ResolverOrigin
+M.diagnostics = function(origin)
+	local bufnr = h.buffer_for(origin)
+	if not bufnr then
+		return nil
+	end
+	local row = origin and origin.row or vim.api.nvim_win_get_cursor(0)[1]
+	local diags = vim.diagnostic.get(bufnr, { lnum = row - 1, namespace = nil })
 	if #diags == 0 then
 		return "No diagnostics on current line"
 	end
-	return h.current_file() .. "\n" .. h.format_diagnostics(diags)
+	return h.file_for(origin) .. "\n" .. h.format_diagnostics(diags)
 end
 
-M.diagnostics_all = function()
-	local diags = vim.diagnostic.get(0, { namespace = nil })
+---@param origin? wiremux.context.ResolverOrigin
+M.diagnostics_all = function(origin)
+	local bufnr = h.buffer_for(origin)
+	if not bufnr then
+		return nil
+	end
+	local diags = vim.diagnostic.get(bufnr, { namespace = nil })
 	if #diags == 0 then
 		return "No diagnostics"
 	end
-	return h.current_file() .. "\n" .. h.format_diagnostics(diags)
+	return h.file_for(origin) .. "\n" .. h.format_diagnostics(diags)
 end
 
 M.buffers = function()
@@ -76,20 +94,30 @@ M.quickfix = function()
 	return table.concat(lines, "\n")
 end
 
-M.this = function()
+---@param origin? wiremux.context.ResolverOrigin
+M.this = function(origin)
+	if origin then
+		local position = h.position_for(origin)
+		return origin.selection ~= "" and position .. "\n" .. origin.selection or position
+	end
 	local mode = vim.fn.mode()
 	if mode:match("[vV\22]") then
-		return h.current_position() .. "\n" .. M.selection()
+		return h.position_for() .. "\n" .. M.selection()
 	end
-	return h.current_position()
+	return h.position_for()
 end
 
-M.changes = function()
-	local file = h.current_file()
+---@param origin? wiremux.context.ResolverOrigin
+M.changes = function(origin)
+	local file = h.file_for(origin)
 	if file == "" then
 		return "No file"
 	end
-	local result = vim.system({ "git", "diff", "HEAD", "--", file }, { text = true }):wait()
+	local options = { text = true }
+	if origin then
+		options.cwd = vim.fs.dirname(file)
+	end
+	local result = vim.system({ "git", "diff", "HEAD", "--", file }, options):wait()
 	if result.code ~= 0 or result.stdout == "" then
 		return "No changes"
 	end

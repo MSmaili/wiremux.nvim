@@ -18,6 +18,7 @@ local validate = require("wiremux.utils.validate")
 ---@field raw_text string Raw template text; never overwritten with a materialized payload.
 ---@field label string
 ---@field placeholder_capture wiremux.context.PlaceholderCapture Point-in-time capture owned by this request and transferred to its compose page when applicable.
+---@field origin? wiremux.context.ResolverOrigin Source location transferred to a compose page for deferred resolution.
 ---@field compose? { config: wiremux.config.ComposeSessionConfig }
 ---@field delivery wiremux.action.DeliveryOptions
 ---@field target_title? string Target creation title, separate from the compose window title.
@@ -32,8 +33,7 @@ local validate = require("wiremux.utils.validate")
 ---@class wiremux.action.SendPreparationContext
 ---@field defaults table
 ---@field call table
----@field global_compose wiremux.config.ComposeUIConfig
----@field capture_placeholders string[]
+---@field global_compose wiremux.config.ComposeSessionConfig
 
 ---@generic T
 ---@param first T?
@@ -183,29 +183,10 @@ function M.prepare_context(opts, config)
 		}
 	end
 
-	local resolver_names = context.list()
-	local known_placeholders = {}
-	for _, name in ipairs(resolver_names) do
-		known_placeholders[name] = true
-	end
-	local capture_names, capture_errors = validate.capture_names(
-		global_compose.capture_placeholders,
-		"ui.compose.capture_placeholders",
-		known_placeholders
-	)
-	if #capture_errors > 0 then
-		local errors = {}
-		for _, err in ipairs(capture_errors) do
-			table.insert(errors, preparation_error("invalid_config", err.path, err.message))
-		end
-		return nil, errors
-	end
-
 	return {
 		defaults = copy_action_options(vim.tbl_get(config, "actions", "send")),
 		call = copy_action_options(opts),
 		global_compose = vim.deepcopy(global_compose),
-		capture_placeholders = capture_names or {},
 	}, {}
 end
 
@@ -323,20 +304,14 @@ local function prepare_delivery(item, preparation)
 end
 
 ---@param item wiremux.action.SendItem
----@param preparation wiremux.action.SendPreparationContext
----@param compose_config? wiremux.config.ComposeSessionConfig
 ---@return wiremux.context.PlaceholderCapture? capture
 ---@return wiremux.action.SendPreparationError[] errors
-local function prepare_capture(item, preparation, compose_config)
+local function prepare_capture(item)
 	if item.placeholders == false then
 		return { enabled = false, capture_set = {}, values = {} }, {}
 	end
 
-	local ok, capture = pcall(
-		context.capture,
-		item.value,
-		compose_config and preparation.capture_placeholders or nil
-	)
+	local ok, capture = pcall(context.capture, item.value)
 	if not ok then
 		return nil, {
 			preparation_error("capture_failed", "item.value", "Failed to capture placeholders: " .. tostring(capture)),
@@ -349,12 +324,14 @@ end
 ---@param compose_config? wiremux.config.ComposeSessionConfig
 ---@param delivery wiremux.action.DeliveryOptions
 ---@param capture wiremux.context.PlaceholderCapture
+---@param origin? wiremux.context.ResolverOrigin
 ---@return wiremux.action.PreparedSendRequest
-local function build_request(item, compose_config, delivery, capture)
+local function build_request(item, compose_config, delivery, capture, origin)
 	return {
 		raw_text = item.value,
 		label = item.label or item.value,
 		placeholder_capture = capture,
+		origin = origin,
 		compose = compose_config and { config = compose_config } or nil,
 		delivery = delivery,
 		target_title = item.title,
@@ -381,12 +358,13 @@ function M.prepare(item, preparation)
 		return nil, delivery_errors
 	end
 
-	local capture, capture_errors = prepare_capture(item, preparation, compose_config)
+	local origin = compose_config and item.placeholders ~= false and context.capture_origin() or nil
+	local capture, capture_errors = prepare_capture(item)
 	if capture == nil then
 		return nil, capture_errors
 	end
 
-	return build_request(item, compose_config, delivery, capture), {}
+	return build_request(item, compose_config, delivery, capture, origin), {}
 end
 
 return M

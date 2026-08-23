@@ -34,9 +34,6 @@ local M = {}
 ---@field wo? table<string, any> Window options (default: { wrap = true, number = false, relativenumber = false })
 ---@field keymaps? wiremux.config.ComposeKeymaps Custom keymaps
 
----@class wiremux.config.ComposeUIConfig: wiremux.config.ComposeSessionConfig
----@field capture_placeholders? string[] Global-only names captured into each page's point-in-time snapshot when the page is created.
-
 ---@class wiremux.config.ComposeKeymap
 ---@field [1] string Key
 ---@field mode? string|string[] Mode(s) (default: "n")
@@ -59,8 +56,8 @@ local M = {}
 ---@field targets? { definitions?: table<string, wiremux.target.definition> }
 ---@field actions? { send?: wiremux.config.ActionConfig, focus?: wiremux.config.ActionConfig, close?: wiremux.config.ActionConfig }
 ---@field picker? wiremux.config.PickerConfig
----@field context? { resolvers?: table<string, fun(): string> }
----@field ui? { compose?: wiremux.config.ComposeUIConfig }
+---@field context? { resolvers?: table<string, wiremux.context.Resolver> }
+---@field ui? { compose?: wiremux.config.ComposeSessionConfig }
 
 -- User-facing config (all fields optional)
 ---@class wiremux.config.ActionConfig
@@ -113,14 +110,6 @@ local defaults = {
 				wrap = true,
 				number = false,
 				relativenumber = false,
-			},
-			capture_placeholders = {
-				"file",
-				"filename",
-				"position",
-				"line",
-				"selection",
-				"this",
 			},
 			keymaps = {
 				send = {
@@ -182,7 +171,6 @@ local function validate_picker_callbacks(picker)
 end
 
 ---@param opts wiremux.config.UserOptions
----@return table<string, true> known_placeholders
 local function configure_resolvers(opts)
 	local custom_resolvers = type(opts.context) == "table" and opts.context.resolvers or nil
 	local context = require("wiremux.context")
@@ -190,25 +178,15 @@ local function configure_resolvers(opts)
 
 	opts.context = type(opts.context) == "table" and opts.context or {}
 	opts.context.resolvers = configured_resolvers
-	local known_placeholders = {}
-	for _, name in ipairs(context.list()) do
-		known_placeholders[name] = true
-	end
-	return known_placeholders
 end
 
 ---@param opts wiremux.config.UserOptions
 ---@param user_opts wiremux.config.UserOptions
----@param known_placeholders table<string, true>
 ---@return wiremux.validate.Error[] errors
-local function normalize_global_compose(opts, user_opts, known_placeholders)
+local function normalize_global_compose(opts, user_opts)
 	local raw_ui = type(user_opts.ui) == "table" and user_opts.ui or nil
 	local raw_compose = raw_ui and raw_ui.compose or nil
-	local compose, errors = require("wiremux.utils.validate").normalize_global_compose(
-		raw_compose,
-		defaults.ui.compose,
-		known_placeholders
-	)
+	local compose, errors = require("wiremux.utils.validate").normalize_global_compose(raw_compose, defaults.ui.compose)
 	opts.ui = type(opts.ui) == "table" and opts.ui or {}
 	opts.ui.compose = compose
 	return errors
@@ -233,9 +211,9 @@ function M.setup(user_opts)
 
 	local validate = require("wiremux.utils.validate")
 	local warning_messages = validate.validate(M.opts)
-	local known_placeholders = configure_resolvers(M.opts)
+	configure_resolvers(M.opts)
 
-	local global_errors = normalize_global_compose(M.opts, user_opts, known_placeholders)
+	local global_errors = normalize_global_compose(M.opts, user_opts)
 	vim.list_extend(warning_messages, validate.error_messages(global_errors))
 
 	local action_errors = normalize_action_compose(M.opts)

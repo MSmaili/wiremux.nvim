@@ -19,9 +19,10 @@ end
 
 ---@param text string
 ---@param capture wiremux.context.PlaceholderCapture
+---@param origin? wiremux.context.ResolverOrigin
 ---@return string
-local function materialize_text(text, capture)
-	local working_capture = context.extend(capture, text)
+local function materialize_text(text, capture, origin)
+	local working_capture = context.extend(capture, text, origin)
 	local payload = context.materialize(text, working_capture)
 	assert(type(payload) == "string", "wiremux context materialization must return a string")
 	return payload
@@ -48,7 +49,7 @@ end
 ---@return string? value
 ---@return wiremux.action.SendMaterializationError? error
 function M.preview_placeholder(capture, name)
-	local working = context.extend(capture.placeholder_capture, "{" .. name .. "}")
+	local working = context.extend(capture.placeholder_capture, "{" .. name .. "}", capture.origin)
 	if not working.enabled then
 		return nil, materialization_error(
 			"placeholder_unavailable",
@@ -83,7 +84,7 @@ function M.compose(pages)
 			assert(type(page) == "table", "wiremux compose page must be a table")
 			assert(type(page.text) == "string", "wiremux compose page text must be a string")
 			assert(type(page.capture) == "table", "wiremux compose page capture must be a table")
-			return materialize_text(page.text, page.capture.placeholder_capture)
+			return materialize_text(page.text, page.capture.placeholder_capture, page.capture.origin)
 		end)
 		if not ok then
 			return nil, materialization_error(

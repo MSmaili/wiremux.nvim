@@ -288,52 +288,13 @@ local function valid_border(border)
 	return true
 end
 
----Validate and copy a placeholder capture-name list.
----@param capture_names any
----@param path string
----@param known_placeholders? table<string, true>
----@return string[]? normalized
----@return wiremux.validate.Error[] errors
-function M.capture_names(capture_names, path, known_placeholders)
-	if type(capture_names) ~= "table" or not vim.islist(capture_names) then
-		return nil, {
-			validation_error(path, string.format("%s must be a list of placeholder names", path)),
-		}
-	end
-
-	local normalized = {}
-	local errors = {}
-	local seen = {}
-	for index, name in ipairs(capture_names) do
-		local item_path = string.format("%s[%d]", path, index)
-		if not placeholder.is_valid_name(name) then
-			table.insert(errors, validation_error(
-				item_path,
-				string.format("%s must be a placeholder name matching %s", item_path, placeholder.validation_pattern)
-			))
-		elseif known_placeholders and not known_placeholders[name] then
-			table.insert(errors, validation_error(item_path, string.format("unknown placeholder '%s' in %s", name, path)))
-		elseif not seen[name] then
-			seen[name] = true
-			table.insert(normalized, name)
-		end
-	end
-	return normalized, errors
-end
-
----@class wiremux.validate.ComposeOptionsOptions
----@field path? string
----@field allow_capture_placeholders? boolean
----@field known_placeholders? table<string, true>
-
 ---Validate and copy a partial compose option table.
 ---@param options any
----@param opts? wiremux.validate.ComposeOptionsOptions
+---@param path? string
 ---@return table normalized
 ---@return wiremux.validate.Error[] errors
-function M.compose_options(options, opts)
-	opts = opts or {}
-	local path = opts.path or "compose"
+function M.compose_options(options, path)
+	path = path or "compose"
 	if type(options) ~= "table" then
 		return {}, {
 			validation_error(path, string.format("%s must be a boolean or table, got %s", path, type(options))),
@@ -344,20 +305,7 @@ function M.compose_options(options, opts)
 	local errors = {}
 	for field, value in pairs(options) do
 		local field_path = path .. "." .. tostring(field)
-		if field == "capture_placeholders" then
-			if not opts.allow_capture_placeholders then
-				table.insert(errors, validation_error(
-					field_path,
-					"capture_placeholders is only allowed at ui.compose.capture_placeholders"
-				))
-			else
-				local names, name_errors = M.capture_names(value, field_path, opts.known_placeholders)
-				vim.list_extend(errors, name_errors)
-				if names ~= nil then
-					normalized.capture_placeholders = names
-				end
-			end
-		elseif not compose_session_fields[field] then
+		if not compose_session_fields[field] then
 			table.insert(errors, validation_error(field_path, string.format("unknown compose option '%s' for %s", tostring(field), path)))
 		elseif field == "width" or field == "height" then
 			if type(value) == "number" and value >= 0.1 and value <= 1 then
@@ -432,9 +380,6 @@ end
 ---@return table
 local function merge_compose(base, overrides)
 	local merged = vim.tbl_deep_extend("force", {}, base, overrides)
-	if overrides.capture_placeholders ~= nil then
-		merged.capture_placeholders = vim.deepcopy(overrides.capture_placeholders)
-	end
 	if type(overrides.keymaps) == "table" and type(merged.keymaps) == "table" then
 		for action, entry in pairs(overrides.keymaps) do
 			if type(entry) == "table" and next(entry) == nil then
@@ -447,11 +392,10 @@ end
 
 ---Normalize global ui.compose config, falling back field-by-field to defaults.
 ---@param options any
----@param defaults wiremux.config.ComposeUIConfig
----@param known_placeholders table<string, true>
----@return wiremux.config.ComposeUIConfig normalized
+---@param defaults wiremux.config.ComposeSessionConfig
+---@return wiremux.config.ComposeSessionConfig normalized
 ---@return wiremux.validate.Error[] errors
-function M.normalize_global_compose(options, defaults, known_placeholders)
+function M.normalize_global_compose(options, defaults)
 	if options == nil then
 		return vim.deepcopy(defaults), {}
 	end
@@ -461,11 +405,7 @@ function M.normalize_global_compose(options, defaults, known_placeholders)
 		}
 	end
 
-	local normalized, errors = M.compose_options(options, {
-		path = "ui.compose",
-		allow_capture_placeholders = true,
-		known_placeholders = known_placeholders,
-	})
+	local normalized, errors = M.compose_options(options, "ui.compose")
 	return merge_compose(defaults, normalized), errors
 end
 
@@ -490,12 +430,12 @@ function M.normalize_action_compose(value, default)
 		}
 	end
 
-	local normalized, errors = M.compose_options(value, { path = "actions.send.compose" })
+	local normalized, errors = M.compose_options(value, "actions.send.compose")
 	return normalized, errors
 end
 
 ---Resolve one selected runtime compose value into a complete session-only config.
----@param global_compose wiremux.config.ComposeUIConfig
+---@param global_compose wiremux.config.ComposeSessionConfig
 ---@param value any
 ---@param path string
 ---@return wiremux.config.ComposeSessionConfig? config
@@ -512,13 +452,11 @@ function M.resolve_compose(global_compose, value, path)
 		}
 	end
 
-	local overrides, errors = M.compose_options(value, { path = path })
+	local overrides, errors = M.compose_options(value, path)
 	if #errors > 0 then
 		return nil, errors
 	end
-	local session_defaults = vim.deepcopy(global_compose)
-	session_defaults.capture_placeholders = nil
-	return merge_compose(session_defaults, overrides), {}
+	return merge_compose(global_compose, overrides), {}
 end
 
 ---@param errors wiremux.validate.Error[]

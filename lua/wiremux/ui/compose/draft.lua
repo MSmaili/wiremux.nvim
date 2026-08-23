@@ -2,6 +2,7 @@ local M = {}
 
 ---@class wiremux.ui.ComposePageCapture Extensible, controller-opaque point-in-time page capture.
 ---@field placeholder_capture wiremux.context.PlaceholderCapture
+---@field origin? wiremux.context.ResolverOrigin
 
 ---@class wiremux.ui.ComposePage
 ---@field text string Raw template text edited without refreshing the page capture.

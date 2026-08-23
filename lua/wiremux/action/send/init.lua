@@ -68,7 +68,7 @@ local function execute_request(request)
 		local confirmed = false
 		require("wiremux.ui.compose").open(request.raw_text, {
 			config = request.compose.config,
-			capture = { placeholder_capture = request.placeholder_capture },
+			capture = { placeholder_capture = request.placeholder_capture, origin = request.origin },
 			on_preview = function(capture, name)
 				local value, err = materialize.preview_placeholder(capture, name)
 				if value == nil then

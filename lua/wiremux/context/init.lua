@@ -4,7 +4,14 @@ local placeholder = require("wiremux.placeholder")
 
 local M = {}
 
----@alias wiremux.context.Resolver fun(): string?
+---@class wiremux.context.ResolverOrigin Point-in-time source location for deferred placeholder resolution.
+---@field bufnr integer
+---@field path string
+---@field row integer One-based source row.
+---@field col integer Zero-based source byte column.
+---@field selection string Point-in-time visual selection, or an empty string.
+
+---@alias wiremux.context.Resolver fun(origin?: wiremux.context.ResolverOrigin): string?
 
 ---@class wiremux.context.PlaceholderCapture Point-in-time placeholder capture owned by one prepared request or compose page.
 ---@field enabled boolean Whether extension and materialization are enabled.
@@ -88,23 +95,37 @@ function M.configure(custom_resolvers)
 	return configured_custom_resolvers
 end
 
----List registered placeholder names in deterministic order.
----@return string[]
-function M.list()
-	return sorted_names(resolvers)
+---Capture the current source location for deferred resolution.
+---@return wiremux.context.ResolverOrigin
+function M.capture_origin()
+	local bufnr = vim.api.nvim_get_current_buf()
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	return {
+		bufnr = bufnr,
+		path = vim.api.nvim_buf_get_name(bufnr),
+		row = cursor[1],
+		col = cursor[2],
+		selection = builtins.selection(),
+	}
 end
 
 ---Get a context value by name.
 ---Returns nil when the resolver is unknown, fails, or returns a non-string value.
 ---@param name string
+---@param origin? wiremux.context.ResolverOrigin
 ---@return string?
-function M.get(name)
+function M.get(name, origin)
 	local resolver = resolvers[name]
 	if not resolver then
 		return nil
 	end
 
-	local ok, result = pcall(resolver)
+	local ok, result
+	if origin then
+		ok, result = pcall(resolver, vim.deepcopy(origin))
+	else
+		ok, result = pcall(resolver)
+	end
 	if not ok then
 		notify.debug("context resolver '%s' failed: %s", name, tostring(result))
 		return nil
@@ -124,19 +145,11 @@ function M.is_available(name)
 	return value ~= nil and value ~= ""
 end
 
----Create an enabled point-in-time capture for placeholders found in text and explicit capture names.
+---Create an enabled point-in-time capture for placeholders found in text.
 ---@param texts string|string[]
----@param capture_names? string[]
 ---@return wiremux.context.PlaceholderCapture
-function M.capture(texts, capture_names)
+function M.capture(texts)
 	local names = placeholder.discover(texts)
-	if type(capture_names) == "table" then
-		for _, name in ipairs(capture_names) do
-			if placeholder.is_valid_name(name) then
-				names[name] = true
-			end
-		end
-	end
 
 	local capture = {
 		enabled = true,
@@ -157,8 +170,9 @@ end
 ---The stored input capture is never mutated.
 ---@param capture wiremux.context.PlaceholderCapture
 ---@param text string
+---@param origin? wiremux.context.ResolverOrigin
 ---@return wiremux.context.PlaceholderCapture
-function M.extend(capture, text)
+function M.extend(capture, text, origin)
 	local extended = clone_capture(capture)
 	assert(type(text) == "string", "wiremux placeholder text must be a string")
 	if not extended.enabled or not text:find("{", 1, true) then
@@ -171,7 +185,7 @@ function M.extend(capture, text)
 	end
 	for _, name in ipairs(sorted_names(names)) do
 		extended.capture_set[name] = true
-		local value = M.get(name)
+		local value = M.get(name, origin)
 		if value ~= nil then
 			extended.values[name] = value
 		end
