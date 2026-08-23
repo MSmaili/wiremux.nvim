@@ -110,9 +110,6 @@ The following example shows all default values from `config.lua`. Override only 
       close_behavior = "ask",  -- "ask" | "hide" | "discard"
       on_new_payload = "ask",  -- "ask" | "keep" | "replace" | "append"
       wo = { wrap = true, number = false, relativenumber = false },
-      capture_placeholders = {
-        "file", "filename", "position", "line", "selection", "this",
-      },
       keymaps = {
         send = {
           { "<C-s>", mode = "i", desc = "Send to target" },
@@ -159,15 +156,15 @@ require("wiremux").setup({
 <details>
 <summary><strong>Target definition fields</strong></summary>
 
-| Field        | Type                            | Default        | Description                                                           |
-| ------------ | ------------------------------- | -------------- | --------------------------------------------------------------------- |
-| `cmd`        | `string?`                       | -              | Command to run when Wiremux creates the pane or window                |
+| Field        | Type                            | Default        | Description                                                         |
+| ------------ | ------------------------------- | -------------- | ------------------------------------------------------------------- |
+| `cmd`        | `string?`                       | -              | Command to run when Wiremux creates the pane or window              |
 | `kind`       | `"pane"` \| `"window"` \| table | `"pane"`       | Target type. Use `{"pane","window"}` to select the type at run time |
-| `split`      | `"horizontal"` \| `"vertical"`  | `"horizontal"` | Split direction (panes only)                                         |
-| `split_mode` | `"before"` \| `"after"`         | `"after"`      | Split placement relative to source pane (panes only)                 |
-| `shell`      | `boolean`                       | `true`         | `true`: types `cmd` into a shell. `false`: runs `cmd` directly       |
-| `label`      | `string` \| `function?`         | target name    | Display name in picker                                               |
-| `title`      | `string?`                       | label or name  | Tmux window name (windows only)                                      |
+| `split`      | `"horizontal"` \| `"vertical"`  | `"horizontal"` | Split direction (panes only)                                        |
+| `split_mode` | `"before"` \| `"after"`         | `"after"`      | Split placement relative to source pane (panes only)                |
+| `shell`      | `boolean`                       | `true`         | `true`: types `cmd` into a shell. `false`: runs `cmd` directly      |
+| `label`      | `string` \| `function?`         | target name    | Display name in picker                                              |
+| `title`      | `string?`                       | label or name  | Tmux window name (windows only)                                     |
 
 </details>
 
@@ -201,10 +198,10 @@ keys = {
 
 Wiremux uses two main terms:
 
-| Concept        | What it is                                           | Example                             |
-| -------------- | ---------------------------------------------------- | ----------------------------------- |
+| Concept        | What it is                                              | Example                             |
+| -------------- | ------------------------------------------------------- | ----------------------------------- |
 | **Definition** | Configuration that tells Wiremux how to create a target | `{ cmd = "claude", kind = "pane" }` |
-| **Instance**   | A running tmux pane or window created from a definition | A Claude pane that is open in tmux |
+| **Instance**   | A running tmux pane or window created from a definition | A Claude pane that is open in tmux  |
 
 Wiremux stores definitions in your configuration. It creates instances when necessary. Instances remain available in tmux.
 
@@ -241,16 +238,16 @@ require("wiremux").send({
 
 Each item can contain these fields:
 
-| Field          | Function                                                      | Example                                          |
-| -------------- | ------------------------------------------------------------- | ------------------------------------------------ |
-| `value`        | **Required.** Specifies the text to send                      | `"Explain {file}"`                               |
-| `label`        | Specifies the item name in the picker                         | `"Explain file"`                                 |
-| `submit`       | Presses Enter after Wiremux sends the text                    | `true` (useful for commands)                     |
-| `visible`      | Controls whether Wiremux shows the item                       | `function() return vim.bo.filetype == "lua" end` |
-| `compose`      | Opens a draft; accepts `true` or session options              | `{ on_new_payload = "append" }`                  |
-| `placeholders` | Controls placeholder replacement; `false` sends literal text  | `false`                                          |
-| `pre_keys`     | Specifies keys to send before the text                        | `"C-c"`, `{"C-c", "i"}`                          |
-| `post_keys`    | Specifies keys to send after the text                         | `"Escape"`, `{"Escape", "Enter"}`                |
+| Field          | Function                                                     | Example                                          |
+| -------------- | ------------------------------------------------------------ | ------------------------------------------------ |
+| `value`        | **Required.** Specifies the text to send                     | `"Explain {file}"`                               |
+| `label`        | Specifies the item name in the picker                        | `"Explain file"`                                 |
+| `submit`       | Presses Enter after Wiremux sends the text                   | `true` (useful for commands)                     |
+| `visible`      | Controls whether Wiremux shows the item                      | `function() return vim.bo.filetype == "lua" end` |
+| `compose`      | Opens a draft; accepts `true` or session options             | `{ on_new_payload = "append" }`                  |
+| `placeholders` | Controls placeholder replacement; `false` sends literal text | `false`                                          |
+| `pre_keys`     | Specifies keys to send before the text                       | `"C-c"`, `{"C-c", "i"}`                          |
+| `post_keys`    | Specifies keys to send after the text                        | `"Escape"`, `{"Escape", "Enter"}`                |
 
 ### Compose drafts
 
@@ -294,11 +291,7 @@ When you confirm the draft, Wiremux copies the stored capture for each page. It 
 2. If the first capture did not produce a value, the placeholder remains literal. Wiremux does not try the name again.
 3. If Wiremux did not try a name before, it resolves the name once when you confirm the page. If no value is available, the placeholder remains literal.
 
-For each page, Wiremux captures names that are already in the text. It also captures names in `ui.compose.capture_placeholders`. The default list contains `file`, `filename`, `position`, `line`, `selection`, and `this`.
-
-The default list does not include `changes`, `diagnostics`, or `diagnostics_all` because these placeholders can require more work. Wiremux still captures one when the initial page text contains it. If you add an uncaptured placeholder later, Wiremux resolves it when you confirm the draft. This rule also applies to `{buffers}` and `{quickfix}`. Add a name to the capture list to use its value from page creation.
-
-Your configured capture list replaces the default list. Set the list to `{}` to disable additional capture. You can configure this list only in `ui.compose.capture_placeholders`.
+For each page, Wiremux captures only names that are already in the text. If you add a new placeholder later, Wiremux resolves it against the page origin. The source path, row, column, and visual selection remain fixed. Buffer contents, diagnostics, and Git output remain live. If the source buffer is unavailable, buffer-dependent names remain literal unless Wiremux finds a loaded buffer with the captured path. `{buffers}` and `{quickfix}` use live global state.
 
 When a draft exists, `on_new_payload` accepts `"ask"`, `"keep"`, `"replace"`, or `"append"`. The dialog selects **Keep Draft** by default. A non-empty `send()` call updates the session configuration, callbacks, and delivery options. This update also occurs when you keep the existing pages. A `send()` call without text only reopens a hidden draft.
 
@@ -308,7 +301,7 @@ Wiremux selects the compose value in this order:
 2. The call-level `opts.compose` value.
 3. The `actions.send.compose` value.
 
-Wiremux uses the first available value. It does not merge tables from these three levels. Wiremux merges the selected table with the session fields from `ui.compose`. It does not add the global `capture_placeholders` field to the session configuration.
+Wiremux uses the first available value. It does not merge tables from these three levels. Wiremux merges the selected table with the session fields from `ui.compose`.
 
 #### Customize compose when it opens
 
@@ -407,23 +400,15 @@ require("wiremux").setup({
         local result = vim.system({ "git", "branch", "--show-current" }, { text = true }):wait()
         return result.code == 0 and vim.trim(result.stdout) or nil
       end,
+      source_path = function(origin)
+        return origin and origin.path or vim.api.nvim_buf_get_name(0)
+      end,
     },
   },
 })
 ```
 
-Each `setup()` call replaces the previous set of custom resolvers. Built-in resolvers remain available. Keep each resolver fast. Do not change editor state from a resolver. If a resolver uses the current editor location, add its name to the global capture list:
-
-```lua
-ui = {
-  compose = {
-    capture_placeholders = {
-      "file", "filename", "position", "line", "selection", "this",
-      "git_branch",
-    },
-  },
-}
-```
+Each `setup()` call replaces the previous set of custom resolvers. Built-in resolvers remain available. Keep each resolver fast. Do not change editor state from a resolver. A resolver can accept an optional page origin for a placeholder added in compose. The origin contains `bufnr`, `path`, `row`, `col`, and `selection`. The row starts at one. The column is a zero-based byte index. Existing zero-argument resolvers continue to work, but they are not source-aware during deferred resolution. Put a placeholder in the initial page text when its value must be frozen at page creation.
 
 ## Advanced configuration
 

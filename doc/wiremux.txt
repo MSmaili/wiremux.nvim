@@ -201,14 +201,11 @@ The working capture is discarded after preparing the payload; the stored page
 capture remains unchanged. Pages are joined with one blank line and delivered
 as one prepared payload.
 
-Every page captures names in its initial text plus
-`ui.compose.capture_placeholders`. The lightweight default policy contains
-file, filename, position, line, selection, and this. Expensive or potentially
-large names such as changes, diagnostics, and diagnostics_all are opt-in unless
-present initially. buffers and quickfix typed later use confirmation-time state
-unless added to the policy. A configured list replaces the default; `{}`
-disables extra pre-capture. This option is global only, with no action,
-call-level, or item-level override.
+Every page captures only names in its initial text. Names added later resolve
+against the page origin. Its path, row, column, and visual selection remain
+fixed; buffer contents, diagnostics, and Git output are live. If the source
+buffer is unavailable, buffer-dependent names remain literal unless a loaded
+buffer has the captured path. buffers and quickfix use live global state.
 
 Supported new-payload policies are "ask", "keep", "replace", and "append".
 The ask dialog defaults to Keep Draft. The latest non-empty invocation supplies
@@ -218,8 +215,7 @@ adding a page or changing those values.
 
 Compose precedence is whole-value precedence: item `compose`, call options
 `compose`, then `actions.send.compose`. Tables are not merged across those
-levels. The selected table is merged over global session defaults, excluding
-the global-only capture_placeholders field.
+levels. The selected table is merged over global session defaults.
 
 Customize compose on open ~
                                          *wiremux-compose-open-event*
@@ -461,18 +457,6 @@ actions.send.submit (boolean)
 actions.*.focus     (boolean)
                     Focus target after action.
 
-Compose configuration ~
-
-*wiremux-config-compose-capture-placeholders*
-ui.compose.capture_placeholders (string[])
-                    Placeholder names captured when each compose page is
-                    created, even when absent from its initial text. Defaults
-                    to file, filename, position, line, selection, and this.
-                    The configured list replaces the default list; use `{}` to
-                    disable extra pre-capture. Add changes, diagnostics, or
-                    diagnostics_all explicitly when late typing should use
-                    page-creation values. This option is global only.
-
 Picker configuration ~
 
 *wiremux-config-picker*
@@ -659,10 +643,12 @@ placeholder during materialization. Older behavior could leave it literal.
 Custom resolver names begin with a letter or underscore and continue with
 letters, digits, or underscores. Custom resolvers belong to the latest
 `setup()` call; repeated setup replaces the previous custom set while retaining
-built-ins. Resolvers should be fast and side-effect-free. If one depends on the
-current editor page and may be typed after compose opens, add its name to
-`ui.compose.capture_placeholders` while retaining any default names you still
-want captured.
+built-ins. Resolvers should be fast and side-effect-free. A resolver can accept
+an optional page origin when a placeholder is added in compose. The origin has
+`bufnr`, `path`, `row`, `col`, and `selection` fields. row is one-based; col is
+a zero-based byte index. Existing zero-argument resolvers still work, but they
+are not source-aware during deferred resolution. Put a placeholder in the
+initial page text when its value must be frozen at page creation.
 
 Custom resolvers:
 >lua
@@ -672,6 +658,9 @@ Custom resolvers:
         git_branch = function()
           local result = vim.system({ "git", "branch", "--show-current" }, { text = true }):wait()
           return result.code == 0 and vim.trim(result.stdout) or nil
+        end,
+        source_path = function(origin)
+          return origin and origin.path or vim.api.nvim_buf_get_name(0)
         end,
       },
     },
