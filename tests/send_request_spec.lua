@@ -147,6 +147,13 @@ describe("prepared send request", function()
 		assert.are.equal(" Item ", request.compose.title)
 	end)
 
+	it("lets an item override a true call option with false", function()
+		local preparation = prepare_context({ submit = true, post_keys = { "Escape" } })
+		local request = assert(request_builder.prepare({ value = "payload", submit = false }, preparation))
+
+		assert.are.same({ "Escape" }, request.delivery.post_keys)
+	end)
+
 	it("folds submit into a copied post-keys list", function()
 		local post_keys = { "Escape" }
 		local preparation = prepare_context({ post_keys = post_keys, submit = true })

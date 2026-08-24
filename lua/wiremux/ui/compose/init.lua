@@ -67,8 +67,7 @@ local function finalize_session(session, status)
 	if active_session == session then
 		active_session = nil
 	end
-	-- These releases are load-bearing: the session outlives this local through buffer keymap closures
-	-- and the view's on_wipeout intent, and draft.pages can hold whole-buffer contents and full diffs.
+	-- Load-bearing: the session outlives this local, and pages can hold whole buffers and diffs.
 	session.view = nil
 	session.on_confirm = nil
 	session.on_preview = nil
@@ -163,8 +162,6 @@ local function insert_file(session)
 	local originating_view = session.view
 	local was_insert = vim.fn.mode() == "i"
 
-	---Still the same editing session, in the same view, between async hops?
-	---@return boolean
 	local function still_current()
 		return active_session == session and session.status == "editing" and session.view == originating_view
 	end

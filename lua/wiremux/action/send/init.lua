@@ -47,7 +47,7 @@ local function warn_errors(errors)
 end
 
 ---@param payload string
----@param options wiremux.action.DeliveryOptions
+---@param options wiremux.action.SendOptions
 ---@param target_title? string
 local function deliver_payload(payload, options, target_title)
 	local started, err = delivery.send(payload, options, target_title)

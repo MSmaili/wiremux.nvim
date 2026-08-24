@@ -18,7 +18,7 @@ local M = {}
 ---@field private win number?
 ---@field private preview_win number?
 ---@field private augroup number?
----@field private config wiremux.config.ComposeSessionConfig Session-owned config, copied by compose.open; treat as read-only.
+---@field private config wiremux.config.ComposeSessionConfig Read-only; copied by compose.open.
 ---@field private title string
 ---@field private owned_mappings table<string, wiremux.ui.ComposeViewMapping>
 ---@field private mappings_initialized boolean
@@ -179,9 +179,6 @@ local function refresh_mappings(view, desired)
 	local initial_install = not view.mappings_initialized
 	local next_owned = {}
 
-	---@param mapping table?
-	---@param owned wiremux.ui.ComposeViewMapping?
-	---@return boolean
 	local function still_ours(mapping, owned)
 		return mapping ~= nil and owned ~= nil and mapping.callback == owned.callback
 	end

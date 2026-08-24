@@ -3,8 +3,7 @@
 ---@field format_item? fun(item: any): string Format item for display
 
 ---@class wiremux.picker.Adapter
----Adapters may invoke on_choice more than once; wiremux latches the callback so callers see at most
----one call. Callers must not add their own single-fire protection.
+---Adapters may fire on_choice more than once; wiremux latches it so callers see at most one call.
 ---@field available fun(): boolean Check if adapter is usable
 ---@field select fun(items: any[], opts: wiremux.picker.Opts, on_choice: fun(item: any?))
 ---@field files? fun(opts: wiremux.picker.Opts, on_choice: fun(path: string?))
@@ -84,8 +83,7 @@ local function resolve()
 	local picker_cfg = get_picker_config()
 
 	if type(picker_cfg) ~= "table" then
-		-- Removed `picker = "name"` form. `validate_picker` already warned at setup; auto-detect is
-		-- the documented replacement behavior, so this fall-through is deliberate.
+		-- Removed `picker = "name"` form: warned at setup, auto-detect is the replacement.
 		cached_select = auto_detect()
 	else
 		local adapter = picker_cfg.adapter
@@ -216,7 +214,6 @@ local function resolve_files()
 	return cached_files
 end
 
----Wrap a choice callback so it runs at most once, whatever the adapter does.
 ---@generic T
 ---@param on_choice fun(choice: T?)
 ---@return fun(choice: T?)

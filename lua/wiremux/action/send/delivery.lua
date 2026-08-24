@@ -2,7 +2,7 @@ local M = {}
 
 ---Perform target selection and backend delivery for one prepared payload.
 ---@param payload string
----@param options wiremux.action.DeliveryOptions
+---@param options wiremux.action.SendOptions
 ---@param target_title? string
 ---@return boolean started
 ---@return string? error

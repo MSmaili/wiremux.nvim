@@ -3,12 +3,14 @@ local M = {}
 local context = require("wiremux.context")
 local validate = require("wiremux.utils.validate")
 
----@class wiremux.action.DeliveryOptions Immutable-by-ownership options consumed only by target selection and delivery.
+---@class wiremux.action.SendOptions One resolved option record. `submit` is folded into `post_keys`
+---before delivery, so target selection and delivery ignore it. Read-only for consumers.
 ---@field focus? boolean
 ---@field behavior wiremux.action.Behavior
 ---@field mode wiremux.ResolveMode
 ---@field target? string
 ---@field filter? wiremux.config.FilterConfig
+---@field submit? boolean
 ---@field pre_keys? string|string[]
 ---@field post_keys? string|string[]
 
@@ -18,32 +20,18 @@ local validate = require("wiremux.utils.validate")
 ---@field placeholder_capture wiremux.context.PlaceholderCapture Point-in-time capture owned by this request and transferred to its compose page when applicable.
 ---@field origin? wiremux.context.ResolverOrigin Source location transferred to a compose page for deferred resolution.
 ---@field compose? wiremux.config.ComposeSessionConfig
----@field delivery wiremux.action.DeliveryOptions
+---@field delivery wiremux.action.SendOptions
 ---@field target_title? string Target creation title, separate from the compose window title.
-
----@class wiremux.action.TargetSelection Call-level target selection, resolved and validated once per invocation.
----@field focus? boolean
----@field behavior wiremux.action.Behavior
----@field mode wiremux.ResolveMode
----@field target? string
----@field filter? wiremux.config.FilterConfig
 
 ---@class wiremux.action.ComposeSelection Compose value selected once from call options or action defaults.
 ---@field value? boolean|wiremux.config.ComposeOptions
 ---@field path string
 
 ---@class wiremux.action.SendPreparationContext
----@field selection wiremux.action.TargetSelection
----@field submit? boolean
----@field pre_keys? string|string[]
----@field post_keys? string|string[]
+---@field options wiremux.action.SendOptions Call options resolved and checked one time.
 ---@field compose wiremux.action.ComposeSelection
 ---@field global_compose wiremux.config.ComposeSessionConfig
 ---@field capture_memo table<string, string|false> Resolver results shared by every candidate of this call.
----@field compose_cache table<any, { config?: wiremux.config.ComposeSessionConfig, errors: wiremux.Error[] }> Resolved compose config, keyed on the selected value.
-
----Key for a nil compose selection, since nil cannot index the per-call cache.
-local NO_COMPOSE = {}
 
 ---@param post_keys? string|string[]
 ---@return string[]
@@ -54,8 +42,6 @@ local function append_submit(post_keys)
 end
 
 ---Prepare call-level and global send configuration once for a public send invocation.
----Call-level invariants are validated here, so one invalid option aborts the invocation instead of
----warning once per library item.
 ---@param opts? wiremux.config.ActionConfig
 ---@param config wiremux.config.UserOptions
 ---@return wiremux.action.SendPreparationContext? context
@@ -68,7 +54,8 @@ function M.prepare_context(opts, config)
 	local defaults = vim.tbl_get(config, "actions", "send") or {}
 	local call = opts or {}
 
-	local resolved = {
+	---@type wiremux.action.SendOptions
+	local options = {
 		focus = vim.F.if_nil(call.focus, defaults.focus),
 		behavior = vim.F.if_nil(call.behavior, defaults.behavior, "pick"),
 		mode = vim.F.if_nil(call.mode, defaults.mode, "auto"),
@@ -79,27 +66,17 @@ function M.prepare_context(opts, config)
 		post_keys = vim.F.if_nil(call.post_keys, defaults.post_keys),
 	}
 
-	local errors = validate.send_options(resolved)
+	local errors = validate.send_options(options)
 	if #errors > 0 then
 		return nil, errors
 	end
 
 	return {
-		selection = {
-			focus = resolved.focus,
-			behavior = resolved.behavior,
-			mode = resolved.mode,
-			target = resolved.target,
-			filter = resolved.filter,
-		},
-		submit = resolved.submit,
-		pre_keys = resolved.pre_keys,
-		post_keys = resolved.post_keys,
+		options = options,
 		compose = call.compose ~= nil and { value = call.compose, path = "opts.compose" }
 			or { value = defaults.compose, path = "actions.send.compose" },
 		global_compose = config.ui.compose,
 		capture_memo = {},
-		compose_cache = {},
 	}, {}
 end
 
@@ -115,53 +92,40 @@ local function prepare_compose(item, preparation)
 		path = "item.compose"
 	end
 
-	-- Items sharing one compose value share one resolved config. resolve_compose deepcopies keymaps
-	-- and wo, so this is the larger constant-factor win for a library.
-	local key = selected == nil and NO_COMPOSE or selected
-	local cached = preparation.compose_cache[key]
-	if cached == nil then
-		local config, errors = validate.resolve_compose(preparation.global_compose, selected, path)
-		cached = { config = config, errors = errors }
-		preparation.compose_cache[key] = cached
+	local config, errors = validate.resolve_compose(preparation.global_compose, selected, path)
+	if #errors > 0 then
+		return nil, errors
 	end
-	if #cached.errors > 0 then
-		return nil, cached.errors
-	end
-	return cached.config, {}
+	return config, {}
 end
 
----Combine the validated call-level selection with this item's own delivery overrides.
+---Apply this item's own option overrides to the call options.
 ---@param item wiremux.action.SendItem
 ---@param preparation wiremux.action.SendPreparationContext
----@return wiremux.action.DeliveryOptions? delivery
+---@return wiremux.action.SendOptions? options
 ---@return wiremux.Error[] errors
 local function prepare_delivery(item, preparation)
-	local submit = vim.F.if_nil(item.submit, preparation.submit)
-	local pre_keys = vim.F.if_nil(item.pre_keys, preparation.pre_keys)
-	local post_keys = vim.F.if_nil(item.post_keys, preparation.post_keys)
+	-- Absent keys stay absent, so they do not override the call options. A false value does override.
+	local overrides = {
+		submit = item.submit,
+		pre_keys = item.pre_keys,
+		post_keys = item.post_keys,
+	}
 
-	local errors =
-		validate.send_options({ submit = submit, pre_keys = pre_keys, post_keys = post_keys }, validate.ITEM_OPTIONS)
+	local errors = validate.send_item_options(overrides)
 	if #errors > 0 then
 		return nil, errors
 	end
 
-	local selection = preparation.selection
-	return {
-		focus = selection.focus,
-		behavior = selection.behavior,
-		mode = selection.mode,
-		target = selection.target,
-		filter = selection.filter,
-		pre_keys = pre_keys,
-		post_keys = submit and append_submit(post_keys) or post_keys,
-	}, {}
+	local options = vim.tbl_extend("force", preparation.options, overrides)
+	if options.submit then
+		options.post_keys = append_submit(options.post_keys)
+	end
+	return options, {}
 end
 
----`context.capture` cannot throw: `validate.send_item` guaranteed a string value and every resolver is
----pcall'd inside `context.get`.
 ---@param item wiremux.action.SendItem
----@param memo table<string, string|false>
+---@param memo table<string, string|false> Shared so that `{changes}` runs one git process per call.
 ---@return wiremux.context.PlaceholderCapture capture
 local function prepare_capture(item, memo)
 	if item.placeholders == false then

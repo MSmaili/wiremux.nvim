@@ -57,9 +57,8 @@ describe("send single item", function()
 		assert.is_false(picker_opened)
 	end)
 
-	it("resolves one placeholder and one compose value per call for a whole library", function()
+	it("resolves each placeholder one time for a whole library", function()
 		local resolver_calls = 0
-		local compose_resolutions = 0
 		mocks.context.capture = function(text, memo)
 			local capture = { enabled = true, results = {} }
 			for name in text:gmatch("{([%a_][%w_]*)}") do
@@ -75,23 +74,15 @@ describe("send single item", function()
 			end
 			return capture
 		end
-		local validate = require("wiremux.utils.validate")
-		local resolve_compose = validate.resolve_compose
-		validate.resolve_compose = function(...)
-			compose_resolutions = compose_resolutions + 1
-			return resolve_compose(...)
-		end
 		mocks.picker.select = function() end
 
 		mocks.send.send({
 			{ value = "one {changes}" },
 			{ value = "two {changes}" },
 			{ value = "three {changes}" },
-		}, { compose = true })
+		})
 
-		validate.resolve_compose = resolve_compose
 		assert.are.equal(1, resolver_calls)
-		assert.are.equal(1, compose_resolutions)
 	end)
 
 	it("uses visible field to filter items", function()

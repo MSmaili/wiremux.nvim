@@ -204,9 +204,7 @@ end
 
 function M.setup(user_opts)
 	user_opts = user_opts or {}
-	-- Deepcopy defaults so M.opts owns its whole tree. vim.tbl_deep_extend shares subtables by
-	-- reference whenever only one side has a table at a key, and the normalize_* steps below write
-	-- into opts. Without this copy they would mutate module-level default state.
+	-- Deepcopy: tbl_deep_extend shares subtables, and normalize_* below writes into opts.
 	M.opts = vim.tbl_deep_extend("force", vim.deepcopy(defaults), user_opts)
 	validate_picker_callbacks(M.opts.picker)
 

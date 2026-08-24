@@ -508,7 +508,7 @@ function M.validate(opts)
 	return errors
 end
 
----Accepted value sets, shared with callers that validate the same options. Read-only.
+---Accepted value sets. Read-only.
 M.valid = valid
 
 ---@param expected type
@@ -559,7 +559,7 @@ end
 
 ---@class wiremux.validate.FieldSpec
 ---@field key string
----@field path string
+---@field path? string Error path, when it differs from the key.
 ---@field check fun(value: any): boolean
 ---@field message string
 
@@ -594,43 +594,27 @@ local send_item_fields = {
 	},
 }
 
----Resolved send option fields. Every failure is collected.
+---Resolved send option fields, and the single registry of send option names. Every failure is
+---collected. The option path and the option key are the same, so these entries omit path.
 ---@type wiremux.validate.FieldSpec[]
 local send_option_fields = {
-	{ key = "focus", path = "focus", check = optional_type("boolean"), message = "focus must be a boolean" },
-	{
-		key = "behavior",
-		path = "behavior",
-		check = member_of(valid.behaviors),
-		message = "behavior must be one of: all, last, pick",
-	},
+	{ key = "focus", check = optional_type("boolean"), message = "focus must be a boolean" },
+	{ key = "behavior", check = member_of(valid.behaviors), message = "behavior must be one of: all, last, pick" },
 	{
 		key = "mode",
-		path = "mode",
 		check = member_of(valid.resolve_modes),
 		message = "mode must be one of: all, auto, definitions, instances",
 	},
-	{ key = "target", path = "target", check = optional_type("string"), message = "target must be a string" },
-	{ key = "filter", path = "filter", check = is_filter, message = "filter must contain function callbacks" },
-	{ key = "submit", path = "submit", check = optional_type("boolean"), message = "submit must be a boolean" },
-	{
-		key = "pre_keys",
-		path = "pre_keys",
-		check = is_keys,
-		message = "pre_keys must be a string or list of strings",
-	},
-	{
-		key = "post_keys",
-		path = "post_keys",
-		check = is_keys,
-		message = "post_keys must be a string or list of strings",
-	},
+	{ key = "target", check = optional_type("string"), message = "target must be a string" },
+	{ key = "filter", check = is_filter, message = "filter must contain function callbacks" },
+	{ key = "submit", check = optional_type("boolean"), message = "submit must be a boolean" },
+	{ key = "pre_keys", check = is_keys, message = "pre_keys must be a string or list of strings" },
+	{ key = "post_keys", check = is_keys, message = "post_keys must be a string or list of strings" },
 }
 
----Option names an item may override, and therefore the only ones worth re-checking per item.
-M.ITEM_OPTIONS = { submit = true, pre_keys = true, post_keys = true }
+---Option names that an item can override.
+local item_option_keys = { submit = true, pre_keys = true, post_keys = true }
 
----Validate one send item.
 ---@param item any
 ---@return wiremux.Error[] errors
 function M.send_item(item)
@@ -645,7 +629,7 @@ function M.send_item(item)
 	return {}
 end
 
----Validate resolved send options.
+---Check the resolved send options for a call.
 ---@param options table
 ---@param only? table<string, true> Restrict the check to these option names.
 ---@return wiremux.Error[] errors
@@ -653,10 +637,17 @@ function M.send_options(options, only)
 	local errors = {}
 	for _, field in ipairs(send_option_fields) do
 		if (only == nil or only[field.key]) and not field.check(options[field.key]) then
-			table.insert(errors, validation_error(field.path, field.message))
+			table.insert(errors, validation_error(field.path or field.key, field.message))
 		end
 	end
 	return errors
+end
+
+---Check the send options that one item overrides.
+---@param overrides table
+---@return wiremux.Error[] errors
+function M.send_item_options(overrides)
+	return M.send_options(overrides, item_option_keys)
 end
 
 return M

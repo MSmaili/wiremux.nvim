@@ -7,8 +7,6 @@ local context = require("wiremux.context")
 ---@field origin? wiremux.context.ResolverOrigin
 
 ---Create one prepared payload from a direct request without mutating its capture.
----`context.materialize` cannot throw here: `validate.send_item` guaranteed a string `raw_text` and
----`prepare_capture` guaranteed a `string|false` capture.
 ---@param request wiremux.action.PreparedSendRequest
 ---@return string payload
 function M.direct(request)

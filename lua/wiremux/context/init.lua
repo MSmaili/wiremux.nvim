@@ -20,8 +20,7 @@ local M = {}
 ---@type table<string, wiremux.context.Resolver>
 local resolvers = {}
 
----Cheap shape check. Load-bearing: `M.materialize` passes `results` to `gsub` as a table
----replacement, which throws on any value that is not a string or false. This is the only enforcement.
+---Load-bearing: `M.materialize` passes `results` to `gsub`, which throws on non-string values.
 ---@param capture any
 local function assert_capture(capture)
 	assert(type(capture) == "table", "wiremux placeholder capture must be a table")
@@ -79,8 +78,7 @@ function M.get(name, origin)
 
 	local ok, result
 	if origin then
-		-- The one defensive copy wiremux keeps: origin crosses into third-party resolver code that
-		-- could mutate it, and later pages resolve against the same stored origin.
+		-- Copied because origin crosses into third-party resolver code.
 		ok, result = pcall(resolver, vim.deepcopy(origin))
 	else
 		ok, result = pcall(resolver)
@@ -105,9 +103,7 @@ function M.is_available(name)
 end
 
 ---Create an enabled point-in-time capture for placeholders found in text.
----All candidates of one send invocation capture at the same editor state, so an optional per-call
----memo lets them share one resolver result per name. `{changes}` runs a blocking `git diff`, so
----without it an N-item library runs N subprocesses before the picker appears.
+---`memo` shares one resolver result per name across the candidates of one send invocation.
 ---@param text string
 ---@param memo? table<string, string|false> Per-invocation resolver results, mutated in place.
 ---@return wiremux.context.PlaceholderCapture
