@@ -2,67 +2,32 @@ local M = {}
 
 local context = require("wiremux.context")
 
----@alias wiremux.action.SendMaterializationErrorCode "direct_failed"|"invalid_pages"|"compose_page_failed"|"placeholder_unavailable"
-
----@class wiremux.action.SendMaterializationError
----@field code wiremux.action.SendMaterializationErrorCode
----@field message string
----@field page? integer
-
 ---@class wiremux.action.ComposePageCapture
 ---@field placeholder_capture wiremux.context.PlaceholderCapture
 ---@field origin? wiremux.context.ResolverOrigin
 
----@param code wiremux.action.SendMaterializationErrorCode
----@param message string
----@param page? integer
----@return wiremux.action.SendMaterializationError
-local function materialization_error(code, message, page)
-	return { code = code, message = message, page = page }
-end
-
----@param text string
----@param capture wiremux.context.PlaceholderCapture
----@param origin? wiremux.context.ResolverOrigin
----@return string
-local function materialize_text(text, capture, origin)
-	return context.materialize(text, context.extend(capture, text, origin))
-end
-
 ---Create one prepared payload from a direct request without mutating its capture.
+---`context.materialize` cannot throw here: `validate.send_item` guaranteed a string `raw_text` and
+---`prepare_capture` guaranteed a `string|false` capture.
 ---@param request wiremux.action.PreparedSendRequest
----@return string? payload
----@return wiremux.action.SendMaterializationError? error
+---@return string payload
 function M.direct(request)
-	local ok, payload = pcall(context.materialize, request.raw_text, request.placeholder_capture)
-	if not ok then
-		return nil, materialization_error(
-			"direct_failed",
-			"Failed to prepare direct payload: " .. tostring(payload)
-		)
-	end
-	return payload, nil
+	return context.materialize(request.raw_text, request.placeholder_capture)
 end
 
 ---Resolve one compose placeholder through a temporary capture copy.
 ---@param capture wiremux.action.ComposePageCapture
 ---@param name string
 ---@return string? value
----@return wiremux.action.SendMaterializationError? error
+---@return string? error
 function M.preview_placeholder(capture, name)
 	local working = context.extend(capture.placeholder_capture, "{" .. name .. "}", capture.origin)
 	if not working.enabled then
-		return nil, materialization_error(
-			"placeholder_unavailable",
-			"Placeholder replacement is disabled for this page."
-		)
+		return nil, "Placeholder replacement is disabled for this page."
 	end
 	local value = working.results[name]
 	if type(value) ~= "string" then
-		return nil, materialization_error(
-			"placeholder_unavailable",
-			string.format("No value is available for {%s}.", name)
-		)
+		return nil, string.format("No value is available for {%s}.", name)
 	end
 	return value, nil
 end
@@ -70,29 +35,24 @@ end
 ---Create one prepared payload from ordered raw compose pages and temporary working captures.
 ---@param pages wiremux.ui.ComposePage[]
 ---@return string? payload
----@return wiremux.action.SendMaterializationError? error
+---@return string? error
 function M.compose(pages)
 	if type(pages) ~= "table" or not vim.islist(pages) then
-		return nil, materialization_error(
-			"invalid_pages",
-			"Failed to prepare compose payload: pages must be a list"
-		)
+		return nil, "Failed to prepare compose payload: pages must be a list"
 	end
 
 	local payloads = {}
 	for index, page in ipairs(pages) do
+		local capture = type(page) == "table" and type(page.text) == "string" and page.capture or nil
+		if type(capture) ~= "table" then
+			return nil, string.format("Failed to prepare compose page %d: malformed page", index)
+		end
 		local ok, payload = pcall(function()
-			assert(type(page) == "table", "wiremux compose page must be a table")
-			assert(type(page.text) == "string", "wiremux compose page text must be a string")
-			assert(type(page.capture) == "table", "wiremux compose page capture must be a table")
-			return materialize_text(page.text, page.capture.placeholder_capture, page.capture.origin)
+			local working = context.extend(capture.placeholder_capture, page.text, capture.origin)
+			return context.materialize(page.text, working)
 		end)
 		if not ok then
-			return nil, materialization_error(
-				"compose_page_failed",
-				string.format("Failed to prepare compose page %d: %s", index, tostring(payload)),
-				index
-			)
+			return nil, string.format("Failed to prepare compose page %d: %s", index, tostring(payload))
 		end
 		payloads[index] = payload:gsub("%s+$", "")
 	end

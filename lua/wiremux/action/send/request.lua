@@ -3,12 +3,10 @@ local M = {}
 local context = require("wiremux.context")
 local validate = require("wiremux.utils.validate")
 
----@alias wiremux.action.SendMode "auto"|"instances"|"definitions"|"all"
-
 ---@class wiremux.action.DeliveryOptions Immutable-by-ownership options consumed only by target selection and delivery.
 ---@field focus? boolean
 ---@field behavior wiremux.action.Behavior
----@field mode wiremux.action.SendMode
+---@field mode wiremux.ResolveMode
 ---@field target? string
 ---@field filter? wiremux.config.FilterConfig
 ---@field pre_keys? string|string[]
@@ -23,309 +21,161 @@ local validate = require("wiremux.utils.validate")
 ---@field delivery wiremux.action.DeliveryOptions
 ---@field target_title? string Target creation title, separate from the compose window title.
 
----@alias wiremux.action.SendPreparationErrorCode "invalid_config"|"invalid_item"|"invalid_option"|"invalid_compose"|"capture_failed"
+---@class wiremux.action.TargetSelection Call-level target selection, resolved and validated once per invocation.
+---@field focus? boolean
+---@field behavior wiremux.action.Behavior
+---@field mode wiremux.ResolveMode
+---@field target? string
+---@field filter? wiremux.config.FilterConfig
 
----@class wiremux.action.SendPreparationError
----@field code wiremux.action.SendPreparationErrorCode
+---@class wiremux.action.ComposeSelection Compose value selected once from call options or action defaults.
+---@field value? boolean|wiremux.config.ComposeOptions
 ---@field path string
----@field message string
 
 ---@class wiremux.action.SendPreparationContext
----@field defaults table
----@field call table
+---@field selection wiremux.action.TargetSelection
+---@field submit? boolean
+---@field pre_keys? string|string[]
+---@field post_keys? string|string[]
+---@field compose wiremux.action.ComposeSelection
 ---@field global_compose wiremux.config.ComposeSessionConfig
+---@field capture_memo table<string, string|false> Resolver results shared by every candidate of this call.
+---@field compose_cache table<any, { config?: wiremux.config.ComposeSessionConfig, errors: wiremux.Error[] }> Resolved compose config, keyed on the selected value.
 
----@generic T
----@param first T?
----@param second T?
----@param third T?
----@return T?
-local function first_non_nil(first, second, third)
-	if first ~= nil then
-		return first
-	end
-	if second ~= nil then
-		return second
-	end
-	return third
-end
-
----@param value any
----@return any
-local function copy_mutable(value)
-	if type(value) == "table" then
-		return vim.deepcopy(value)
-	end
-	return value
-end
-
----@param value any
----@return wiremux.config.FilterConfig|any
-local function copy_filter(value)
-	if type(value) ~= "table" then
-		return value
-	end
-	return {
-		instances = value.instances,
-		definitions = value.definitions,
-	}
-end
-
----@param options any
----@return table
-local function copy_action_options(options)
-	options = type(options) == "table" and options or {}
-	return {
-		behavior = options.behavior,
-		focus = options.focus,
-		submit = options.submit,
-		compose = copy_mutable(options.compose),
-		mode = options.mode,
-		target = options.target,
-		filter = copy_filter(options.filter),
-		pre_keys = copy_mutable(options.pre_keys),
-		post_keys = copy_mutable(options.post_keys),
-	}
-end
-
----@param code wiremux.action.SendPreparationErrorCode
----@param path string
----@param message string
----@return wiremux.action.SendPreparationError
-local function preparation_error(code, path, message)
-	return { code = code, path = path, message = message }
-end
-
----@param errors wiremux.action.SendPreparationError[]
----@param err? wiremux.action.SendPreparationError
-local function collect_error(errors, err)
-	if err ~= nil then
-		errors[#errors + 1] = err
-	end
-end
-
----@param errors wiremux.validate.Error[]
----@return wiremux.action.SendPreparationError[]
-local function compose_errors(errors)
-	local result = {}
-	for _, err in ipairs(errors) do
-		table.insert(result, preparation_error("invalid_compose", err.path, err.message))
-	end
-	return result
-end
-
----@param value any
----@return boolean
-local function keys_are_valid(value)
-	if value == nil or type(value) == "string" then
-		return true
-	end
-	if type(value) ~= "table" or not vim.islist(value) then
-		return false
-	end
-	for _, key in ipairs(value) do
-		if type(key) ~= "string" then
-			return false
-		end
-	end
-	return true
-end
-
----@param value any
----@return boolean
-local function valid_filter(value)
-	if value == nil then
-		return true
-	end
-	if type(value) ~= "table" then
-		return false
-	end
-	return (value.instances == nil or type(value.instances) == "function")
-		and (value.definitions == nil or type(value.definitions) == "function")
-end
+---Key for a nil compose selection, since nil cannot index the per-call cache.
+local NO_COMPOSE = {}
 
 ---@param post_keys? string|string[]
 ---@return string[]
 local function append_submit(post_keys)
-	local result
-	if type(post_keys) == "table" then
-		result = vim.list_slice(post_keys)
-	elseif post_keys ~= nil then
-		result = { post_keys }
-	else
-		result = {}
-	end
+	local result = type(post_keys) == "table" and vim.list_slice(post_keys) or { post_keys }
 	table.insert(result, "Enter")
 	return result
 end
 
 ---Prepare call-level and global send configuration once for a public send invocation.
+---Call-level invariants are validated here, so one invalid option aborts the invocation instead of
+---warning once per library item.
 ---@param opts? wiremux.config.ActionConfig
 ---@param config wiremux.config.UserOptions
 ---@return wiremux.action.SendPreparationContext? context
----@return wiremux.action.SendPreparationError[] errors
+---@return wiremux.Error[] errors
 function M.prepare_context(opts, config)
 	if opts ~= nil and type(opts) ~= "table" then
-		return nil, {
-			preparation_error("invalid_option", "opts", "wiremux.send opts must be a table"),
-		}
-	end
-	if type(config) ~= "table" then
-		return nil, {
-			preparation_error("invalid_config", "config", "wiremux send configuration must be a table"),
-		}
+		return nil, { { path = "opts", message = "wiremux.send opts must be a table" } }
 	end
 
-	local global_compose = vim.tbl_get(config, "ui", "compose")
-	if type(global_compose) ~= "table" then
-		return nil, {
-			preparation_error("invalid_config", "ui.compose", "ui.compose must be a table"),
-		}
+	local defaults = vim.tbl_get(config, "actions", "send") or {}
+	local call = opts or {}
+
+	local resolved = {
+		focus = vim.F.if_nil(call.focus, defaults.focus),
+		behavior = vim.F.if_nil(call.behavior, defaults.behavior, "pick"),
+		mode = vim.F.if_nil(call.mode, defaults.mode, "auto"),
+		target = vim.F.if_nil(call.target, defaults.target),
+		filter = vim.F.if_nil(call.filter, defaults.filter),
+		submit = vim.F.if_nil(call.submit, defaults.submit),
+		pre_keys = vim.F.if_nil(call.pre_keys, defaults.pre_keys),
+		post_keys = vim.F.if_nil(call.post_keys, defaults.post_keys),
+	}
+
+	local errors = validate.send_options(resolved)
+	if #errors > 0 then
+		return nil, errors
 	end
 
 	return {
-		defaults = copy_action_options(vim.tbl_get(config, "actions", "send")),
-		call = copy_action_options(opts),
-		global_compose = vim.deepcopy(global_compose),
+		selection = {
+			focus = resolved.focus,
+			behavior = resolved.behavior,
+			mode = resolved.mode,
+			target = resolved.target,
+			filter = resolved.filter,
+		},
+		submit = resolved.submit,
+		pre_keys = resolved.pre_keys,
+		post_keys = resolved.post_keys,
+		compose = call.compose ~= nil and { value = call.compose, path = "opts.compose" }
+			or { value = defaults.compose, path = "actions.send.compose" },
+		global_compose = config.ui.compose,
+		capture_memo = {},
+		compose_cache = {},
 	}, {}
-end
-
----@param path string
----@param value any
----@return wiremux.action.SendPreparationError?
-local function validate_keys(path, value)
-	if keys_are_valid(value) then
-		return nil
-	end
-	return preparation_error("invalid_option", path, path .. " must be a string or list of strings")
-end
-
----@param item any
----@return wiremux.action.SendPreparationError[] errors
-local function validate_item(item)
-	if type(item) ~= "table" then
-		return {
-			preparation_error("invalid_item", "item", "wiremux.send item must be a table"),
-		}
-	end
-	if type(item.value) ~= "string" then
-		return {
-			preparation_error("invalid_item", "item.value", "wiremux.send item.value must be a string"),
-		}
-	end
-	if item.label ~= nil and type(item.label) ~= "string" then
-		return {
-			preparation_error("invalid_item", "item.label", "wiremux.send item.label must be a string"),
-		}
-	end
-	if item.title ~= nil and type(item.title) ~= "string" then
-		return {
-			preparation_error("invalid_item", "item.title", "wiremux.send item.title must be a string"),
-		}
-	end
-	if item.placeholders ~= nil and type(item.placeholders) ~= "boolean" then
-		return {
-			preparation_error("invalid_item", "item.placeholders", "wiremux.send item.placeholders must be a boolean"),
-		}
-	end
-	return {}
 end
 
 ---@param item wiremux.action.SendItem
 ---@param preparation wiremux.action.SendPreparationContext
 ---@return wiremux.config.ComposeSessionConfig? config
----@return wiremux.action.SendPreparationError[] errors
+---@return wiremux.Error[] errors
 local function prepare_compose(item, preparation)
-	local selected
-	local path
+	local selected = preparation.compose.value
+	local path = preparation.compose.path
 	if item.compose ~= nil then
 		selected = item.compose
 		path = "item.compose"
-	elseif preparation.call.compose ~= nil then
-		selected = preparation.call.compose
-		path = "opts.compose"
-	else
-		selected = preparation.defaults.compose
-		path = "actions.send.compose"
 	end
 
-	local config, errors = validate.resolve_compose(preparation.global_compose, selected, path)
-	if #errors > 0 then
-		return nil, compose_errors(errors)
+	-- Items sharing one compose value share one resolved config. resolve_compose deepcopies keymaps
+	-- and wo, so this is the larger constant-factor win for a library.
+	local key = selected == nil and NO_COMPOSE or selected
+	local cached = preparation.compose_cache[key]
+	if cached == nil then
+		local config, errors = validate.resolve_compose(preparation.global_compose, selected, path)
+		cached = { config = config, errors = errors }
+		preparation.compose_cache[key] = cached
 	end
-	return config, {}
+	if #cached.errors > 0 then
+		return nil, cached.errors
+	end
+	return cached.config, {}
 end
 
+---Combine the validated call-level selection with this item's own delivery overrides.
 ---@param item wiremux.action.SendItem
 ---@param preparation wiremux.action.SendPreparationContext
 ---@return wiremux.action.DeliveryOptions? delivery
----@return wiremux.action.SendPreparationError[] errors
+---@return wiremux.Error[] errors
 local function prepare_delivery(item, preparation)
-	local submit = first_non_nil(item.submit, preparation.call.submit, preparation.defaults.submit)
-	local delivery = {
-		focus = first_non_nil(preparation.call.focus, preparation.defaults.focus),
-		behavior = first_non_nil(preparation.call.behavior, preparation.defaults.behavior, "pick"),
-		mode = first_non_nil(preparation.call.mode, preparation.defaults.mode, "auto"),
-		target = first_non_nil(preparation.call.target, preparation.defaults.target),
-		filter = first_non_nil(preparation.call.filter, preparation.defaults.filter),
-		pre_keys = first_non_nil(item.pre_keys, preparation.call.pre_keys, preparation.defaults.pre_keys),
-		post_keys = first_non_nil(item.post_keys, preparation.call.post_keys, preparation.defaults.post_keys),
-	}
+	local submit = vim.F.if_nil(item.submit, preparation.submit)
+	local pre_keys = vim.F.if_nil(item.pre_keys, preparation.pre_keys)
+	local post_keys = vim.F.if_nil(item.post_keys, preparation.post_keys)
 
-	local errors = {}
-	if submit ~= nil and type(submit) ~= "boolean" then
-		table.insert(errors, preparation_error("invalid_option", "submit", "submit must be a boolean"))
-	end
-	if delivery.focus ~= nil and type(delivery.focus) ~= "boolean" then
-		table.insert(errors, preparation_error("invalid_option", "focus", "focus must be a boolean"))
-	end
-	if not ({ all = true, pick = true, last = true })[delivery.behavior] then
-		table.insert(errors, preparation_error("invalid_option", "behavior", "behavior must be one of: all, last, pick"))
-	end
-	if not ({ auto = true, instances = true, definitions = true, all = true })[delivery.mode] then
-		table.insert(errors, preparation_error("invalid_option", "mode", "mode must be one of: all, auto, definitions, instances"))
-	end
-	if delivery.target ~= nil and type(delivery.target) ~= "string" then
-		table.insert(errors, preparation_error("invalid_option", "target", "target must be a string"))
-	end
-	if not valid_filter(delivery.filter) then
-		table.insert(errors, preparation_error("invalid_option", "filter", "filter must contain function callbacks"))
-	end
-	collect_error(errors, validate_keys("pre_keys", delivery.pre_keys))
-	collect_error(errors, validate_keys("post_keys", delivery.post_keys))
+	local errors =
+		validate.send_options({ submit = submit, pre_keys = pre_keys, post_keys = post_keys }, validate.ITEM_OPTIONS)
 	if #errors > 0 then
 		return nil, errors
 	end
 
-	delivery.filter = copy_filter(delivery.filter)
-	delivery.pre_keys = copy_mutable(delivery.pre_keys)
-	delivery.post_keys = submit and append_submit(delivery.post_keys) or copy_mutable(delivery.post_keys)
-	return delivery, {}
+	local selection = preparation.selection
+	return {
+		focus = selection.focus,
+		behavior = selection.behavior,
+		mode = selection.mode,
+		target = selection.target,
+		filter = selection.filter,
+		pre_keys = pre_keys,
+		post_keys = submit and append_submit(post_keys) or post_keys,
+	}, {}
 end
 
+---`context.capture` cannot throw: `validate.send_item` guaranteed a string value and every resolver is
+---pcall'd inside `context.get`.
 ---@param item wiremux.action.SendItem
----@return wiremux.context.PlaceholderCapture? capture
----@return wiremux.action.SendPreparationError[] errors
-local function prepare_capture(item)
+---@param memo table<string, string|false>
+---@return wiremux.context.PlaceholderCapture capture
+local function prepare_capture(item, memo)
 	if item.placeholders == false then
-		return { enabled = false, results = {} }, {}
+		return { enabled = false, results = {} }
 	end
-
-	local ok, capture = pcall(context.capture, item.value)
-	if not ok then
-		return nil, {
-			preparation_error("capture_failed", "item.value", "Failed to capture placeholders: " .. tostring(capture)),
-		}
-	end
-	return capture, {}
+	return context.capture(item.value, memo)
 end
 
 ---@param item wiremux.action.SendItem
 ---@param preparation wiremux.action.SendPreparationContext
 ---@return wiremux.action.PreparedSendRequest? request
----@return wiremux.action.SendPreparationError[] errors
+---@return wiremux.Error[] errors
 function M.prepare(item, preparation)
-	local item_errors = validate_item(item)
+	local item_errors = validate.send_item(item)
 	if #item_errors > 0 then
 		return nil, item_errors
 	end
@@ -341,10 +191,7 @@ function M.prepare(item, preparation)
 	end
 
 	local origin = compose_config and item.placeholders ~= false and context.capture_origin() or nil
-	local capture, capture_errors = prepare_capture(item)
-	if capture == nil then
-		return nil, capture_errors
-	end
+	local capture = prepare_capture(item, preparation.capture_memo)
 
 	return {
 		raw_text = item.value,

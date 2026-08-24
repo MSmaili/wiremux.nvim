@@ -468,6 +468,10 @@ picker.adapter      (string|function|nil)
                     Picker to use. nil = auto-detect (fzf-lua preferred)
                     "fzf-lua" | "vim.ui.select" | custom function
 
+                    A custom adapter receives (items, opts, on_choice).
+                    Wiremux latches on_choice, so an adapter that fires it
+                    more than once is harmless: callers see at most one call.
+
 *wiremux-config-picker-instances*
 picker.instances    (table)
                     Configuration for instance filtering and sorting.
@@ -643,7 +647,9 @@ placeholder during materialization. Older behavior could leave it literal.
 Custom resolver names begin with a letter or underscore and continue with
 letters, digits, or underscores. Custom resolvers belong to the latest
 `setup()` call; repeated setup replaces the previous custom set while retaining
-built-ins. Resolvers should be fast and side-effect-free. A resolver can accept
+built-ins. Resolvers should be fast and side-effect-free. Within one `send()`
+call every candidate captures at the same editor state, so each placeholder name
+resolves once and all candidates share the result. A resolver can accept
 an optional page origin when a placeholder is added in compose. The origin has
 `bufnr`, `path`, `row`, `col`, and `selection` fields. row is one-based; col is
 a zero-based byte index. Existing zero-argument resolvers still work, but they
@@ -750,6 +756,14 @@ wiremux.send({text|items}, {opts})
 
         Items use { value = string, label? = string, ... }. Set
         {placeholders = false} to keep placeholder-shaped text literal.
+
+        Call-level options ({opts.behavior}, {opts.mode}, {opts.focus},
+        {opts.target}, {opts.filter}, {opts.submit}, {opts.pre_keys},
+        {opts.post_keys}) are validated once per call. An invalid value warns
+        once and aborts the call, so no picker opens. Earlier versions warned
+        once per item and then reported "No items available". Item-level fields
+        are still validated per item: an invalid item is skipped with its own
+        warning while the remaining items stay available.
 
                                                      *wiremux.focus()*
 wiremux.focus({opts})
@@ -903,5 +917,13 @@ Compose pages retain raw text and independent captures; at
 confirmation, a temporary working capture may add names typed later. The
 prepared payload then crosses target selection and backend delivery boundaries.
 Compose and backends do not inspect each other's domain objects.
+
+Table ownership ~
+
+The producer copies once at a public boundary; internal consumers treat their
+input as read-only. `wiremux.setup()` owns the merged option tree, and
+`compose.open()` owns the session copy of the compose configuration. Tables you
+pass to `send()` (`filter`, `pre_keys`, `post_keys`, `compose`) are read, not
+copied, so mutating one while a send is still pending is out of contract.
 
 vim:tw=78:ts=8:ft=help:norl:

@@ -18,9 +18,8 @@ local M = {}
 ---@field private win number?
 ---@field private preview_win number?
 ---@field private augroup number?
----@field private config wiremux.config.ComposeSessionConfig
+---@field private config wiremux.config.ComposeSessionConfig Session-owned config, copied by compose.open; treat as read-only.
 ---@field private title string
----@field private footer_keymaps wiremux.config.ComposeKeymaps
 ---@field private owned_mappings table<string, wiremux.ui.ComposeViewMapping>
 ---@field private mappings_initialized boolean
 ---@field private intents wiremux.ui.ComposeViewIntents?
@@ -34,13 +33,7 @@ local ACTION_ORDER = { "send", "close", "discard", "files", "delete_page", "prev
 ---@param max_value number
 ---@return number
 local function clamp(value, min_value, max_value)
-	if value < min_value then
-		return min_value
-	end
-	if value > max_value then
-		return max_value
-	end
-	return value
+	return math.min(math.max(value, min_value), max_value)
 end
 
 ---@param view wiremux.ui.ComposeView
@@ -99,12 +92,13 @@ end
 local function footer_text(view)
 	local current_mode = vim.fn.mode() == "i" and "i" or "n"
 	local parts = {}
+	local footer_keymaps = view.config.keymaps or {}
 	local entries = {
-		{ entry = view.footer_keymaps.send, label = "Send" },
-		{ entry = view.footer_keymaps.close, label = "Close" },
-		{ entry = view.footer_keymaps.discard, label = "Discard" },
-		{ entry = view.footer_keymaps.files, label = "Files" },
-		{ entry = view.footer_keymaps.delete_page, label = "Delete Page" },
+		{ entry = footer_keymaps.send, label = "Send" },
+		{ entry = footer_keymaps.close, label = "Close" },
+		{ entry = footer_keymaps.discard, label = "Discard" },
+		{ entry = footer_keymaps.files, label = "Files" },
+		{ entry = footer_keymaps.delete_page, label = "Delete Page" },
 	}
 	for _, item in ipairs(entries) do
 		local key = keymaps.find_key_for_mode(item.entry, current_mode)
@@ -234,13 +228,10 @@ local function move_cursor_to_end(view)
 	vim.api.nvim_win_set_cursor(view.win, { last_row, #last_line })
 end
 
----@class wiremux.ui.ComposeViewReleaseOptions
----@field delete_buffer boolean
----@field report_wipeout boolean
-
 ---@param view wiremux.ui.ComposeView
----@param options wiremux.ui.ComposeViewReleaseOptions
-local function release(view, options)
+---@param delete_buffer boolean
+---@param report_wipeout boolean
+local function release(view, delete_buffer, report_wipeout)
 	if view.finalized then
 		return
 	end
@@ -248,7 +239,7 @@ local function release(view, options)
 	local buf = view.buf
 	local win = view.win
 	local augroup = view.augroup
-	local on_wipeout = options.report_wipeout and view.intents and view.intents.on_wipeout or nil
+	local on_wipeout = report_wipeout and view.intents and view.intents.on_wipeout or nil
 	close_placeholder_preview(view)
 	view.buf = nil
 	view.win = nil
@@ -262,7 +253,7 @@ local function release(view, options)
 	if win and vim.api.nvim_win_is_valid(win) then
 		pcall(vim.api.nvim_win_close, win, true)
 	end
-	if options.delete_buffer and buf and vim.api.nvim_buf_is_valid(buf) then
+	if delete_buffer and buf and vim.api.nvim_buf_is_valid(buf) then
 		pcall(vim.api.nvim_buf_delete, buf, { force = true })
 	end
 	if on_wipeout then
@@ -287,7 +278,7 @@ local function setup_autocmds(view)
 		group = group,
 		buffer = view.buf,
 		callback = function()
-			release(view, { delete_buffer = false, report_wipeout = true })
+			release(view, false, true)
 		end,
 	})
 
@@ -320,9 +311,8 @@ function M.new(text, config, intents)
 		win = nil,
 		preview_win = nil,
 		augroup = nil,
-		config = vim.deepcopy(config),
+		config = config,
 		title = config.title or " Compose Message ",
-		footer_keymaps = vim.deepcopy(config.keymaps or {}),
 		owned_mappings = {},
 		mappings_initialized = false,
 		intents = intents,
@@ -420,8 +410,7 @@ end
 ---@param config wiremux.config.ComposeSessionConfig
 function M.reconfigure(view, config)
 	close_placeholder_preview(view)
-	view.config = vim.deepcopy(config)
-	view.footer_keymaps = vim.deepcopy(config.keymaps or {})
+	view.config = config
 	apply_window_config(view)
 end
 
@@ -541,7 +530,7 @@ end
 
 ---@param view wiremux.ui.ComposeView
 function M.close(view)
-	release(view, { delete_buffer = true, report_wipeout = false })
+	release(view, true, false)
 end
 
 return M

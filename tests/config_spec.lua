@@ -22,6 +22,19 @@ describe("compose configuration", function()
 		assert.are.equal("K", config.opts.ui.compose.keymaps.preview_placeholder[1])
 	end)
 
+	it("owns its option tree instead of aliasing module defaults", function()
+		package.loaded["wiremux.config"] = nil
+		local config = require("wiremux.config")
+
+		config.setup({ log_level = "off" })
+		config.opts.ui.compose.title = " Mutated "
+		config.opts.actions.send.behavior = "all"
+		config.setup({ log_level = "off" })
+
+		assert.are.equal(" Compose Message ", config.opts.ui.compose.title)
+		assert.are.equal("pick", config.opts.actions.send.behavior)
+	end)
+
 	it("replaces custom resolvers on repeated setup", function()
 		package.loaded["wiremux.config"] = nil
 		local config = require("wiremux.config")
@@ -29,17 +42,21 @@ describe("compose configuration", function()
 
 		config.setup({
 			log_level = "off",
-			context = { resolvers = { first = function()
-				return "first"
-			end } },
+			context = { resolvers = {
+				first = function()
+					return "first"
+				end,
+			} },
 		})
 		assert.are.equal("first", context.get("first"))
 
 		config.setup({
 			log_level = "off",
-			context = { resolvers = { second = function()
-				return "second"
-			end } },
+			context = { resolvers = {
+				second = function()
+					return "second"
+				end,
+			} },
 		})
 		assert.is_nil(context.get("first"))
 		assert.are.equal("second", context.get("second"))
@@ -51,9 +68,11 @@ describe("compose configuration", function()
 	it("validates resolver names with the placeholder grammar", function()
 		local validate = require("wiremux.utils.validate")
 		local errors = validate.validate({
-			context = { resolvers = { ["bad-name"] = function()
-				return "invalid"
-			end } },
+			context = { resolvers = {
+				["bad-name"] = function()
+					return "invalid"
+				end,
+			} },
 		})
 
 		assert.are.equal(1, #errors)

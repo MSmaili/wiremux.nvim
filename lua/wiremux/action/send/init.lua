@@ -23,11 +23,8 @@ local function is_visible(item)
 		return true
 	end
 	local visible = item.visible
-	if visible == nil then
-		return true
-	end
-	if type(visible) == "boolean" then
-		return visible
+	if visible == nil or type(visible) == "boolean" then
+		return visible ~= false
 	end
 	if type(visible) ~= "function" then
 		notify.warn("wiremux.send item.visible must be a boolean or function")
@@ -42,8 +39,8 @@ local function is_visible(item)
 	return result == true
 end
 
----@param errors wiremux.action.SendPreparationError[]
-local function warn_preparation_errors(errors)
+---@param errors wiremux.Error[]
+local function warn_errors(errors)
 	for _, err in ipairs(errors) do
 		notify.warn(err.message)
 	end
@@ -55,8 +52,7 @@ end
 local function deliver_payload(payload, options, target_title)
 	local started, err = delivery.send(payload, options, target_title)
 	if not started then
-		assert(err ~= nil, "wiremux delivery failure requires an error")
-		notify.error(err.message)
+		notify.error(err)
 	end
 end
 
@@ -65,28 +61,22 @@ local function execute_request(request)
 	local delivery_options = request.delivery
 	local target_title = request.target_title
 	if request.compose then
-		local confirmed = false
 		require("wiremux.ui.compose").open(request.raw_text, {
 			config = request.compose,
 			capture = { placeholder_capture = request.placeholder_capture, origin = request.origin },
 			on_preview = function(capture, name)
 				local value, err = materialize.preview_placeholder(capture, name)
 				if value == nil then
-					return assert(err).message, "text"
+					return assert(err), "text"
 				end
 				return value == "" and "(empty)" or value, name == "changes" and "diff" or "text"
 			end,
 			on_confirm = function(pages)
-				if confirmed then
-					return true
-				end
 				local payload, err = materialize.compose(pages)
 				if payload == nil then
-					assert(err ~= nil, "wiremux compose materialization failure requires an error")
-					notify.error(err.message)
+					notify.error(err)
 					return false
 				end
-				confirmed = true
 				vim.schedule(function()
 					deliver_payload(payload, delivery_options, target_title)
 				end)
@@ -96,12 +86,7 @@ local function execute_request(request)
 		return
 	end
 
-	local payload, err = materialize.direct(request)
-	if payload == nil then
-		assert(err ~= nil, "wiremux direct materialization failure requires an error")
-		notify.error(err.message)
-		return
-	end
+	local payload = materialize.direct(request)
 	deliver_payload(payload, delivery_options, target_title)
 end
 
@@ -110,7 +95,7 @@ end
 local function send_single_item(item, preparation)
 	local request, errors = request_builder.prepare(item, preparation)
 	if not request then
-		warn_preparation_errors(errors)
+		warn_errors(errors)
 		return
 	end
 	execute_request(request)
@@ -129,7 +114,7 @@ local function send_from_library(items, preparation)
 					value = request,
 				})
 			else
-				warn_preparation_errors(errors)
+				warn_errors(errors)
 			end
 		end
 	end
@@ -139,17 +124,12 @@ local function send_from_library(items, preparation)
 		return
 	end
 
-	local selected = false
 	require("wiremux.picker").select(picker_items, {
 		prompt = "Select item",
 		format_item = function(picker_item)
 			return picker_item.label
 		end,
 	}, function(choice)
-		if selected then
-			return
-		end
-		selected = true
 		if choice then
 			execute_request(choice.value)
 		end
@@ -180,7 +160,7 @@ function M.send(text, opts)
 	local config = require("wiremux.config").get()
 	local preparation, errors = request_builder.prepare_context(opts, config)
 	if not preparation then
-		warn_preparation_errors(errors)
+		warn_errors(errors)
 		return
 	end
 
@@ -197,11 +177,7 @@ function M.send(text, opts)
 		return send_single_item({ value = text }, preparation)
 	end
 
-	warn_preparation_errors({ {
-		code = "invalid_item",
-		path = "text",
-		message = "wiremux.send text must be a string, item, or list of items",
-	} })
+	notify.warn("wiremux.send text must be a string, item, or list of items")
 end
 
 return M

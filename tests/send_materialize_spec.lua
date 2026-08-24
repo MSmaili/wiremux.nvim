@@ -109,7 +109,7 @@ describe("send materialization", function()
 
 		assert.are.equal("stored", stored)
 		assert.is_nil(missing)
-		assert.are.equal("placeholder_unavailable", missing_error.code)
+		assert.matches("No value is available for {missing}", missing_error)
 		assert.are.equal("late", late)
 		assert.are.same({ bufnr = 1, path = "/source.lua", row = 3, col = 2, selection = "" }, late_origin)
 		assert.are.same({ stored = 1, missing = 1, late = 1 }, calls)
@@ -139,12 +139,8 @@ describe("send materialization", function()
 			{ text = "invalid", capture = { placeholder_capture = { enabled = true } } },
 		})
 
-		assert.are.equal("compose_page_failed", missing.code)
-		assert.are.equal(1, missing.page)
-		assert.matches("page 1", missing.message)
-		assert.are.equal("compose_page_failed", malformed.code)
-		assert.are.equal(2, malformed.page)
-		assert.matches("page 2", malformed.message)
+		assert.matches("page 1", missing)
+		assert.matches("page 2", malformed)
 	end)
 
 	it("returns no partial payload and stops after the first page failure", function()
@@ -164,16 +160,8 @@ describe("send materialization", function()
 
 		context.materialize = context_materialize
 		assert.is_nil(payload)
-		assert.are.equal(2, err.page)
+		assert.matches("page 2", err)
 		assert.are.equal(1, materialize_calls)
-	end)
-
-	it("returns structured direct materialization errors", function()
-		local payload, err = materialize.direct({ raw_text = "draft" })
-
-		assert.is_nil(payload)
-		assert.are.equal("direct_failed", err.code)
-		assert.matches("direct payload", err.message)
 	end)
 end)
 
@@ -212,14 +200,12 @@ describe("send materialization orchestration", function()
 		assert.are.same({ "diff --git a/file b/file", "diff" }, preview)
 	end)
 
-	it("queues exactly one delivery after successful synchronous confirmation", function()
+	it("queues delivery outside synchronous confirmation", function()
 		local confirming = false
-		local confirmation_results = {}
+		local confirmation_result
 		mocks.compose.open = function(_, options)
 			confirming = true
-			local pages = { { text = "edited", capture = options.capture } }
-			table.insert(confirmation_results, options.on_confirm(pages))
-			table.insert(confirmation_results, options.on_confirm(pages))
+			confirmation_result = options.on_confirm({ { text = "edited", capture = options.capture } })
 			confirming = false
 		end
 		local deliveries = 0
@@ -237,7 +223,7 @@ describe("send materialization orchestration", function()
 			return deliveries > 0
 		end)
 
-		assert.are.same({ true, true }, confirmation_results)
+		assert.is_true(confirmation_result)
 		assert.are.equal(1, deliveries)
 	end)
 

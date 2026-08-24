@@ -23,8 +23,14 @@ describe("prepared send request", function()
 	end
 
 	it("resolves delivery and item option precedence into explicit fields", function()
-		local default_filter = { instances = function() return false end }
-		local call_filter_fn = function() return true end
+		local default_filter = {
+			instances = function()
+				return false
+			end,
+		}
+		local call_filter_fn = function()
+			return true
+		end
 		mocks.config.opts.actions.send = {
 			focus = false,
 			behavior = "pick",
@@ -151,7 +157,7 @@ describe("prepared send request", function()
 		assert.are_not.equal(post_keys, request.delivery.post_keys)
 	end)
 
-	it("returns structured errors before capture for invalid inputs", function()
+	it("reports invalid inputs before capture", function()
 		local captures = 0
 		mocks.context.capture = function()
 			captures = captures + 1
@@ -163,11 +169,11 @@ describe("prepared send request", function()
 
 		assert.is_nil(request)
 		assert.are.equal(0, captures)
-		assert.are.equal("invalid_item", errors[1].code)
 		assert.are.equal("item.placeholders", errors[1].path)
+		assert.matches("item.placeholders must be a boolean", errors[1].message)
 	end)
 
-	it("does not retain mutable item, options, or config tables", function()
+	it("treats item, option, and config input as read-only", function()
 		local item_pre = { "item-pre" }
 		mocks.config.opts.ui.compose.wo = { wrap = true }
 		local item = {
@@ -177,33 +183,33 @@ describe("prepared send request", function()
 			compose = true,
 		}
 		local option_post = { "option-post" }
-		local option_filter = { instances = function() return true end }
+		local option_filter = {
+			instances = function()
+				return true
+			end,
+		}
 		local opts = {
 			behavior = "last",
 			filter = option_filter,
 			post_keys = option_post,
 		}
+		local config_before = vim.deepcopy(mocks.config.opts)
+
 		local preparation = prepare_context(opts)
 		local request = assert(request_builder.prepare(item, preparation))
 
 		item.value = "mutated"
 		item.title = "Mutated Title"
-		item_pre[1] = "mutated-pre"
-		opts.behavior = "all"
-		option_post[1] = "mutated-post"
-		option_filter.instances = function() return false end
-		mocks.config.opts.actions.send.focus = true
-		mocks.config.opts.ui.compose.wo.wrap = false
 
 		assert.are.equal("original", request.raw_text)
 		assert.are.equal("Original Title", request.target_title)
-		assert.are.same({ "item-pre" }, request.delivery.pre_keys)
-		assert.are.same({ "option-post" }, request.delivery.post_keys)
+		assert.are.equal(item_pre, request.delivery.pre_keys)
+		assert.are.equal(option_post, request.delivery.post_keys)
 		assert.are.equal("last", request.delivery.behavior)
-		assert.is_true(request.delivery.filter.instances())
+		assert.are.equal(option_filter, request.delivery.filter)
 		assert.is_false(request.delivery.focus)
 		assert.is_true(request.compose.wo.wrap)
-		assert.are_not.equal(mocks.config.opts.ui.compose.wo, request.compose.wo)
+		assert.are.same(config_before, mocks.config.opts)
 	end)
 end)
 

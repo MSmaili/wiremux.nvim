@@ -20,22 +20,13 @@ local M = {}
 ---@type table<string, wiremux.context.Resolver>
 local resolvers = {}
 
+---Cheap shape check. Load-bearing: `M.materialize` passes `results` to `gsub` as a table
+---replacement, which throws on any value that is not a string or false. This is the only enforcement.
 ---@param capture any
 local function assert_capture(capture)
 	assert(type(capture) == "table", "wiremux placeholder capture must be a table")
 	assert(type(capture.enabled) == "boolean", "wiremux placeholder capture.enabled must be a boolean")
 	assert(type(capture.results) == "table", "wiremux placeholder capture.results must be a table")
-	for name, result in pairs(capture.results) do
-		assert(placeholder.is_valid_name(name), "wiremux placeholder capture contains an invalid name")
-		assert(result == false or type(result) == "string", "wiremux placeholder capture results must be strings or false")
-	end
-end
-
----@param capture wiremux.context.PlaceholderCapture
----@return wiremux.context.PlaceholderCapture
-local function clone_capture(capture)
-	assert_capture(capture)
-	return vim.deepcopy(capture)
 end
 
 ---Replace all custom context resolvers while preserving builtins.
@@ -88,6 +79,8 @@ function M.get(name, origin)
 
 	local ok, result
 	if origin then
+		-- The one defensive copy wiremux keeps: origin crosses into third-party resolver code that
+		-- could mutate it, and later pages resolve against the same stored origin.
 		ok, result = pcall(resolver, vim.deepcopy(origin))
 	else
 		ok, result = pcall(resolver)
@@ -112,12 +105,23 @@ function M.is_available(name)
 end
 
 ---Create an enabled point-in-time capture for placeholders found in text.
+---All candidates of one send invocation capture at the same editor state, so an optional per-call
+---memo lets them share one resolver result per name. `{changes}` runs a blocking `git diff`, so
+---without it an N-item library runs N subprocesses before the picker appears.
 ---@param text string
+---@param memo? table<string, string|false> Per-invocation resolver results, mutated in place.
 ---@return wiremux.context.PlaceholderCapture
-function M.capture(text)
+function M.capture(text, memo)
 	local capture = { enabled = true, results = {} }
 	for _, name in ipairs(placeholder.discover(text)) do
-		capture.results[name] = M.get(name) or false
+		local result = memo and memo[name]
+		if result == nil then
+			result = M.get(name) or false
+			if memo then
+				memo[name] = result
+			end
+		end
+		capture.results[name] = result
 	end
 	return capture
 end
@@ -129,7 +133,8 @@ end
 ---@param origin? wiremux.context.ResolverOrigin
 ---@return wiremux.context.PlaceholderCapture
 function M.extend(capture, text, origin)
-	local extended = clone_capture(capture)
+	assert_capture(capture)
+	local extended = vim.deepcopy(capture)
 	assert(type(text) == "string", "wiremux placeholder text must be a string")
 	if not extended.enabled or not text:find("{", 1, true) then
 		return extended

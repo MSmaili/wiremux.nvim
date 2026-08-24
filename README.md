@@ -408,7 +408,7 @@ require("wiremux").setup({
 })
 ```
 
-Each `setup()` call replaces the previous set of custom resolvers. Built-in resolvers remain available. Keep each resolver fast. Do not change editor state from a resolver. A resolver can accept an optional page origin for a placeholder added in compose. The origin contains `bufnr`, `path`, `row`, `col`, and `selection`. The row starts at one. The column is a zero-based byte index. Existing zero-argument resolvers continue to work, but they are not source-aware during deferred resolution. Put a placeholder in the initial page text when its value must be frozen at page creation.
+Each `setup()` call replaces the previous set of custom resolvers. Built-in resolvers remain available. Keep each resolver fast. Do not change editor state from a resolver. Within one `send()` call, every candidate captures at the same editor state, so Wiremux resolves each placeholder name once and shares the result across the call. A resolver can accept an optional page origin for a placeholder added in compose. The origin contains `bufnr`, `path`, `row`, `col`, and `selection`. The row starts at one. The column is a zero-based byte index. Existing zero-argument resolvers continue to work, but they are not source-aware during deferred resolution. Put a placeholder in the initial page text when its value must be frozen at page creation.
 
 ## Advanced configuration
 

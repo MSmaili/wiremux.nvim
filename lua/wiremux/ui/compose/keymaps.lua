@@ -8,7 +8,7 @@ function M.normalize(entry)
 		return {}
 	end
 
-	if type(entry[1]) == "string" and not vim.islist(entry[1]) then
+	if type(entry[1]) == "string" then
 		local modes = entry.mode or "n"
 		if type(modes) == "string" then
 			modes = { modes }

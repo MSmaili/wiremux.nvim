@@ -36,6 +36,64 @@ describe("send single item", function()
 		assert.matches("item.value must be a string", warning)
 	end)
 
+	it("warns once and aborts the call for an invalid call-level option", function()
+		local warnings = {}
+		local picker_opened = false
+		mocks.notify.warn = function(message)
+			table.insert(warnings, message)
+		end
+		mocks.picker.select = function()
+			picker_opened = true
+		end
+
+		mocks.send.send({
+			{ value = "first" },
+			{ value = "second" },
+			{ value = "third" },
+		}, { behavior = "sideways" })
+
+		assert.are.equal(1, #warnings)
+		assert.matches("behavior must be one of", warnings[1])
+		assert.is_false(picker_opened)
+	end)
+
+	it("resolves one placeholder and one compose value per call for a whole library", function()
+		local resolver_calls = 0
+		local compose_resolutions = 0
+		mocks.context.capture = function(text, memo)
+			local capture = { enabled = true, results = {} }
+			for name in text:gmatch("{([%a_][%w_]*)}") do
+				local result = memo and memo[name]
+				if result == nil then
+					resolver_calls = resolver_calls + 1
+					result = "resolved"
+					if memo then
+						memo[name] = result
+					end
+				end
+				capture.results[name] = result
+			end
+			return capture
+		end
+		local validate = require("wiremux.utils.validate")
+		local resolve_compose = validate.resolve_compose
+		validate.resolve_compose = function(...)
+			compose_resolutions = compose_resolutions + 1
+			return resolve_compose(...)
+		end
+		mocks.picker.select = function() end
+
+		mocks.send.send({
+			{ value = "one {changes}" },
+			{ value = "two {changes}" },
+			{ value = "three {changes}" },
+		}, { compose = true })
+
+		validate.resolve_compose = resolve_compose
+		assert.are.equal(1, resolver_calls)
+		assert.are.equal(1, compose_resolutions)
+	end)
+
 	it("uses visible field to filter items", function()
 		local picker_items = {}
 
@@ -595,24 +653,6 @@ describe("send list of items", function()
 
 		assert.are.equal(captured["second {two}"], selected_capture)
 		assert.are_not.equal(captured["first {one}"], selected_capture)
-	end)
-
-	it("ignores duplicate library-picker callbacks", function()
-		local sends = 0
-		mocks.backend.send = function()
-			sends = sends + 1
-		end
-		mocks.action.run = function(_, callbacks)
-			callbacks.on_targets({}, {})
-		end
-		mocks.picker.select = function(items, _, callback)
-			callback(items[1])
-			callback(items[1])
-		end
-
-		mocks.send.send({ { value = "selected" } })
-
-		assert.are.equal(1, sends)
 	end)
 
 	it("handles picker cancellation", function()

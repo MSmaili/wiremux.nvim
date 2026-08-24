@@ -40,12 +40,7 @@ local function window_title(session)
 	if #session.draft.pages == 1 then
 		return title
 	end
-	return string.format(
-		"%s [%d/%d] ",
-		title:gsub("%s+$", ""),
-		session.draft.current_page,
-		#session.draft.pages
-	)
+	return string.format("%s [%d/%d] ", title:gsub("%s+$", ""), session.draft.current_page, #session.draft.pages)
 end
 
 ---@param session wiremux.ui.ComposeSession
@@ -72,9 +67,9 @@ local function finalize_session(session, status)
 	if active_session == session then
 		active_session = nil
 	end
+	-- These releases are load-bearing: the session outlives this local through buffer keymap closures
+	-- and the view's on_wipeout intent, and draft.pages can hold whole-buffer contents and full diffs.
 	session.view = nil
-	session.config = nil
-	session.title = nil
 	session.on_confirm = nil
 	session.on_preview = nil
 	session.on_cancel = nil
@@ -167,16 +162,19 @@ local function insert_file(session)
 	end
 	local originating_view = session.view
 	local was_insert = vim.fn.mode() == "i"
+
+	---Still the same editing session, in the same view, between async hops?
+	---@return boolean
+	local function still_current()
+		return active_session == session and session.status == "editing" and session.view == originating_view
+	end
+
 	require("wiremux.picker").files({ prompt = "Insert file" }, function(path)
-		if not path or active_session ~= session or session.status ~= "editing" or session.view ~= originating_view then
+		if not path or not still_current() then
 			return
 		end
 		vim.schedule(function()
-			if active_session ~= session
-				or session.status ~= "editing"
-				or session.view ~= originating_view
-				or not view.is_visible(originating_view)
-			then
+			if not still_current() or not view.is_visible(originating_view) then
 				return
 			end
 			view.insert_at_cursor(originating_view, path, was_insert)

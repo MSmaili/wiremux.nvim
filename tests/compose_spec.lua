@@ -63,11 +63,8 @@ describe("compose UI", function()
 	local function open(text, opts)
 		opts = opts or {}
 		local selected = opts.compose == nil and true or opts.compose
-		local resolved, errors = require("wiremux.utils.validate").resolve_compose(
-			config.opts.ui.compose,
-			selected,
-			"test.compose"
-		)
+		local resolved, errors =
+			require("wiremux.utils.validate").resolve_compose(config.opts.ui.compose, selected, "test.compose")
 		assert.are.same({}, errors)
 
 		local open_opts = { config = resolved }
@@ -102,6 +99,27 @@ describe("compose UI", function()
 			vim.api.nvim_buf_delete(buf, { force = true })
 		end
 		pcall(vim.api.nvim_del_augroup_by_id, event_group)
+	end)
+
+	it("cannot re-enter confirmation from within on_confirm or after sending", function()
+		local confirms = 0
+		local send_key
+		open("draft", {
+			on_confirm = function()
+				confirms = confirms + 1
+				send_key()
+				return true
+			end,
+		})
+		send_key = mapping("<CR>")
+
+		send_key()
+		if mapping("<CR>") then
+			mapping("<CR>")()
+		end
+
+		assert.are.equal(1, confirms)
+		assert.is_nil(compose.get_buf())
 	end)
 
 	it("appends pages, saves edits, navigates, and confirms captures in order", function()

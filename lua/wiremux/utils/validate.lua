@@ -4,6 +4,7 @@ local M = {}
 
 local valid = {
 	behaviors = { last = true, pick = true, all = true },
+	resolve_modes = { auto = true, instances = true, definitions = true, all = true },
 	kinds = { pane = true, window = true },
 	splits = { horizontal = true, vertical = true },
 	split_modes = { before = true, after = true },
@@ -12,8 +13,29 @@ local valid = {
 	compose_new_payload = { ask = true, keep = true, replace = true, append = true },
 	compose_styles = { minimal = true },
 	compose_borders = { none = true, single = true, double = true, rounded = true, solid = true, shadow = true },
-	keymap_modes = { [""] = true, n = true, v = true, x = true, s = true, o = true, i = true, l = true, c = true, t = true, ["!"] = true },
-	keymap_actions = { send = true, close = true, discard = true, files = true, delete_page = true, preview_placeholder = true, previous = true, next = true },
+	keymap_modes = {
+		[""] = true,
+		n = true,
+		v = true,
+		x = true,
+		s = true,
+		o = true,
+		i = true,
+		l = true,
+		c = true,
+		t = true,
+		["!"] = true,
+	},
+	keymap_actions = {
+		send = true,
+		close = true,
+		discard = true,
+		files = true,
+		delete_page = true,
+		preview_placeholder = true,
+		previous = true,
+		next = true,
+	},
 }
 
 local compose_session_fields = {
@@ -28,44 +50,34 @@ local compose_session_fields = {
 	keymaps = true,
 }
 
----@class wiremux.validate.Error
+---@class wiremux.Error
 ---@field path string
 ---@field message string
 
 ---@param path string
 ---@param message string
----@return wiremux.validate.Error
+---@return wiremux.Error
 local function validation_error(path, message)
 	return { path = path, message = message }
 end
 
+---Check set membership, treating nil as valid, and format the shared "use: ..." message.
 ---@param value any
----@param valid_set table
----@return boolean
-local function is_valid(value, valid_set)
-	return value == nil or valid_set[value] ~= nil
-end
-
----@class ValidateFieldOpts
----@field valid_set table
----@field name string
----@field context? string
-
----@param value any
----@param opts ValidateFieldOpts
+---@param valid_set table<string, true>
+---@param name string
+---@param context? string
 ---@return string? error
-local function validate_field(value, opts)
-	if is_valid(value, opts.valid_set) then
+local function validate_field(value, valid_set, name, context)
+	if value == nil or valid_set[value] ~= nil then
 		return nil
 	end
 
-	local valid_values = table.concat(vim.fn.sort(vim.tbl_keys(opts.valid_set)), ", ")
 	return string.format(
 		"invalid %s '%s'%s, use: %s",
-		opts.name,
+		name,
 		tostring(value),
-		opts.context and " " .. opts.context or "",
-		valid_values
+		context and " " .. context or "",
+		table.concat(vim.fn.sort(vim.tbl_keys(valid_set)), ", ")
 	)
 end
 
@@ -127,7 +139,11 @@ local function validate_resolvers(resolvers)
 		if not placeholder.is_valid_name(name) then
 			table.insert(
 				errors,
-				string.format("context resolver name '%s' must match %s", tostring(name), placeholder.validation_pattern)
+				string.format(
+					"context resolver name '%s' must match %s",
+					tostring(name),
+					placeholder.validation_pattern
+				)
 			)
 		elseif type(resolver) ~= "function" then
 			table.insert(
@@ -202,7 +218,7 @@ end
 
 ---@param keymap any
 ---@param path string
----@return wiremux.validate.Error[]
+---@return wiremux.Error[]
 local function validate_keymap(keymap, path)
 	local errors = {}
 	if type(keymap) ~= "table" then
@@ -214,15 +230,12 @@ local function validate_keymap(keymap, path)
 	if keymap.mode ~= nil and not valid_keymap_mode(keymap.mode) then
 		table.insert(errors, validation_error(path .. ".mode", path .. ".mode contains an invalid mapping mode"))
 	end
-	if keymap.desc ~= nil and type(keymap.desc) ~= "string" then
-		table.insert(errors, validation_error(path .. ".desc", path .. ".desc must be a string"))
-	end
 	return errors
 end
 
 ---@param entry any
 ---@param path string
----@return wiremux.validate.Error[]
+---@return wiremux.Error[]
 local function validate_keymap_entry(entry, path)
 	if type(entry) ~= "table" then
 		return { validation_error(path, string.format("%s must be a keymap table or list, got %s", path, type(entry))) }
@@ -246,7 +259,7 @@ end
 
 ---@param keymaps any
 ---@param path string
----@return wiremux.validate.Error[]
+---@return wiremux.Error[]
 local function validate_keymaps(keymaps, path)
 	if type(keymaps) ~= "table" then
 		return { validation_error(path, string.format("%s must be a table, got %s", path, type(keymaps))) }
@@ -255,11 +268,13 @@ local function validate_keymaps(keymaps, path)
 	local errors = {}
 	for action, entry in pairs(keymaps) do
 		if not valid.keymap_actions[action] then
-			table.insert(errors, validation_error(path .. "." .. tostring(action), string.format(
-				"unknown compose keymap action '%s' for %s",
-				tostring(action),
-				path
-			)))
+			table.insert(
+				errors,
+				validation_error(
+					path .. "." .. tostring(action),
+					string.format("unknown compose keymap action '%s' for %s", tostring(action), path)
+				)
+			)
 		else
 			vim.list_extend(errors, validate_keymap_entry(entry, path .. "." .. action))
 		end
@@ -292,7 +307,7 @@ end
 ---@param options any
 ---@param path? string
 ---@return table normalized
----@return wiremux.validate.Error[] errors
+---@return wiremux.Error[] errors
 function M.compose_options(options, path)
 	path = path or "compose"
 	if type(options) ~= "table" then
@@ -306,7 +321,10 @@ function M.compose_options(options, path)
 	for field, value in pairs(options) do
 		local field_path = path .. "." .. tostring(field)
 		if not compose_session_fields[field] then
-			table.insert(errors, validation_error(field_path, string.format("unknown compose option '%s' for %s", tostring(field), path)))
+			table.insert(
+				errors,
+				validation_error(field_path, string.format("unknown compose option '%s' for %s", tostring(field), path))
+			)
 		elseif field == "width" or field == "height" then
 			if type(value) == "number" and value >= 0.1 and value <= 1 then
 				normalized[field] = value
@@ -323,36 +341,27 @@ function M.compose_options(options, path)
 			if valid_border(value) then
 				normalized.border = vim.deepcopy(value)
 			else
-				table.insert(errors, validation_error(field_path, field_path .. " must be a valid border name or segment list"))
+				table.insert(
+					errors,
+					validation_error(field_path, field_path .. " must be a valid border name or segment list")
+				)
 			end
 		elseif field == "style" then
-			local message = validate_field(value, {
-				valid_set = valid.compose_styles,
-				name = "style",
-				context = "for " .. path,
-			})
+			local message = validate_field(value, valid.compose_styles, "style", "for " .. path)
 			if message then
 				table.insert(errors, validation_error(field_path, message))
 			else
 				normalized.style = value
 			end
 		elseif field == "close_behavior" then
-			local message = validate_field(value, {
-				valid_set = valid.compose_close_behaviors,
-				name = "close_behavior",
-				context = "for " .. path,
-			})
+			local message = validate_field(value, valid.compose_close_behaviors, "close_behavior", "for " .. path)
 			if message then
 				table.insert(errors, validation_error(field_path, message))
 			else
 				normalized.close_behavior = value
 			end
 		elseif field == "on_new_payload" then
-			local message = validate_field(value, {
-				valid_set = valid.compose_new_payload,
-				name = "on_new_payload",
-				context = "for " .. path,
-			})
+			local message = validate_field(value, valid.compose_new_payload, "on_new_payload", "for " .. path)
 			if message then
 				table.insert(errors, validation_error(field_path, message))
 			else
@@ -394,15 +403,16 @@ end
 ---@param options any
 ---@param defaults wiremux.config.ComposeSessionConfig
 ---@return wiremux.config.ComposeSessionConfig normalized
----@return wiremux.validate.Error[] errors
+---@return wiremux.Error[] errors
 function M.normalize_global_compose(options, defaults)
 	if options == nil then
 		return vim.deepcopy(defaults), {}
 	end
 	if type(options) ~= "table" then
-		return vim.deepcopy(defaults), {
-			validation_error("ui.compose", string.format("ui.compose must be a table, got %s", type(options))),
-		}
+		return vim.deepcopy(defaults),
+			{
+				validation_error("ui.compose", string.format("ui.compose must be a table, got %s", type(options))),
+			}
 	end
 
 	local normalized, errors = M.compose_options(options, "ui.compose")
@@ -413,7 +423,7 @@ end
 ---@param value any
 ---@param default boolean|table
 ---@return boolean|table normalized
----@return wiremux.validate.Error[] errors
+---@return wiremux.Error[] errors
 function M.normalize_action_compose(value, default)
 	if value == nil then
 		return vim.deepcopy(default), {}
@@ -422,12 +432,13 @@ function M.normalize_action_compose(value, default)
 		return value, {}
 	end
 	if type(value) ~= "table" then
-		return vim.deepcopy(default), {
-			validation_error(
-				"actions.send.compose",
-				string.format("actions.send.compose must be a boolean or table, got %s", type(value))
-			),
-		}
+		return vim.deepcopy(default),
+			{
+				validation_error(
+					"actions.send.compose",
+					string.format("actions.send.compose must be a boolean or table, got %s", type(value))
+				),
+			}
 	end
 
 	local normalized, errors = M.compose_options(value, "actions.send.compose")
@@ -439,7 +450,7 @@ end
 ---@param value any
 ---@param path string
 ---@return wiremux.config.ComposeSessionConfig? config
----@return wiremux.validate.Error[] errors
+---@return wiremux.Error[] errors
 function M.resolve_compose(global_compose, value, path)
 	if value == nil or value == false then
 		return nil, {}
@@ -447,9 +458,10 @@ function M.resolve_compose(global_compose, value, path)
 	if value == true then
 		value = {}
 	elseif type(value) ~= "table" then
-		return nil, {
-			validation_error(path, string.format("%s must be a boolean or table, got %s", path, type(value))),
-		}
+		return nil,
+			{
+				validation_error(path, string.format("%s must be a boolean or table, got %s", path, type(value))),
+			}
 	end
 
 	local overrides, errors = M.compose_options(value, path)
@@ -459,7 +471,7 @@ function M.resolve_compose(global_compose, value, path)
 	return merge_compose(global_compose, overrides), {}
 end
 
----@param errors wiremux.validate.Error[]
+---@param errors wiremux.Error[]
 ---@return string[]
 function M.error_messages(errors)
 	local messages = {}
@@ -479,35 +491,171 @@ function M.validate(opts)
 		end
 	end
 
-	collect_error(validate_field(opts.log_level, {
-		valid_set = valid.log_levels,
-		name = "log_level",
-	}))
+	collect_error(validate_field(opts.log_level, valid.log_levels, "log_level"))
 
 	for name, def in pairs(vim.tbl_get(opts, "targets", "definitions") or {}) do
 		collect_error(validate_kind(def.kind, name))
-		collect_error(validate_field(def.split, {
-			valid_set = valid.splits,
-			name = "split",
-			context = "for target '" .. name .. "'",
-		}))
-		collect_error(validate_field(def.split_mode, {
-			valid_set = valid.split_modes,
-			name = "split_mode",
-			context = "for target '" .. name .. "'",
-		}))
+		collect_error(validate_field(def.split, valid.splits, "split", "for target '" .. name .. "'"))
+		collect_error(validate_field(def.split_mode, valid.split_modes, "split_mode", "for target '" .. name .. "'"))
 	end
 
 	for action, cfg in pairs(opts.actions or {}) do
-		collect_error(validate_field(cfg.behavior, {
-			valid_set = valid.behaviors,
-			name = "behavior",
-			context = "for action '" .. action .. "'",
-		}))
+		collect_error(validate_field(cfg.behavior, valid.behaviors, "behavior", "for action '" .. action .. "'"))
 	end
 
 	collect_error(validate_picker(opts.picker))
 	vim.list_extend(errors, validate_resolvers(vim.tbl_get(opts, "context", "resolvers")))
+	return errors
+end
+
+---Accepted value sets, shared with callers that validate the same options. Read-only.
+M.valid = valid
+
+---@param expected type
+---@return fun(value: any): boolean
+local function optional_type(expected)
+	return function(value)
+		return value == nil or type(value) == expected
+	end
+end
+
+---@param valid_set table<string, true>
+---@return fun(value: any): boolean
+local function member_of(valid_set)
+	return function(value)
+		return valid_set[value] ~= nil
+	end
+end
+
+---@param value any
+---@return boolean
+local function is_keys(value)
+	if value == nil or type(value) == "string" then
+		return true
+	end
+	if type(value) ~= "table" or not vim.islist(value) then
+		return false
+	end
+	for _, key in ipairs(value) do
+		if type(key) ~= "string" then
+			return false
+		end
+	end
+	return true
+end
+
+---@param value any
+---@return boolean
+local function is_filter(value)
+	if value == nil then
+		return true
+	end
+	if type(value) ~= "table" then
+		return false
+	end
+	return (value.instances == nil or type(value.instances) == "function")
+		and (value.definitions == nil or type(value.definitions) == "function")
+end
+
+---@class wiremux.validate.FieldSpec
+---@field key string
+---@field path string
+---@field check fun(value: any): boolean
+---@field message string
+
+---Item fields, in check order. The first failure stops validation for that item.
+---@type wiremux.validate.FieldSpec[]
+local send_item_fields = {
+	{
+		key = "value",
+		path = "item.value",
+		check = function(value)
+			return type(value) == "string"
+		end,
+		message = "wiremux.send item.value must be a string",
+	},
+	{
+		key = "label",
+		path = "item.label",
+		check = optional_type("string"),
+		message = "wiremux.send item.label must be a string",
+	},
+	{
+		key = "title",
+		path = "item.title",
+		check = optional_type("string"),
+		message = "wiremux.send item.title must be a string",
+	},
+	{
+		key = "placeholders",
+		path = "item.placeholders",
+		check = optional_type("boolean"),
+		message = "wiremux.send item.placeholders must be a boolean",
+	},
+}
+
+---Resolved send option fields. Every failure is collected.
+---@type wiremux.validate.FieldSpec[]
+local send_option_fields = {
+	{ key = "focus", path = "focus", check = optional_type("boolean"), message = "focus must be a boolean" },
+	{
+		key = "behavior",
+		path = "behavior",
+		check = member_of(valid.behaviors),
+		message = "behavior must be one of: all, last, pick",
+	},
+	{
+		key = "mode",
+		path = "mode",
+		check = member_of(valid.resolve_modes),
+		message = "mode must be one of: all, auto, definitions, instances",
+	},
+	{ key = "target", path = "target", check = optional_type("string"), message = "target must be a string" },
+	{ key = "filter", path = "filter", check = is_filter, message = "filter must contain function callbacks" },
+	{ key = "submit", path = "submit", check = optional_type("boolean"), message = "submit must be a boolean" },
+	{
+		key = "pre_keys",
+		path = "pre_keys",
+		check = is_keys,
+		message = "pre_keys must be a string or list of strings",
+	},
+	{
+		key = "post_keys",
+		path = "post_keys",
+		check = is_keys,
+		message = "post_keys must be a string or list of strings",
+	},
+}
+
+---Option names an item may override, and therefore the only ones worth re-checking per item.
+M.ITEM_OPTIONS = { submit = true, pre_keys = true, post_keys = true }
+
+---Validate one send item.
+---@param item any
+---@return wiremux.Error[] errors
+function M.send_item(item)
+	if type(item) ~= "table" then
+		return { validation_error("item", "wiremux.send item must be a table") }
+	end
+	for _, field in ipairs(send_item_fields) do
+		if not field.check(item[field.key]) then
+			return { validation_error(field.path, field.message) }
+		end
+	end
+	return {}
+end
+
+---Validate resolved send options.
+---@param options table
+---@param only? table<string, true> Restrict the check to these option names.
+---@return wiremux.Error[] errors
+function M.send_options(options, only)
+	local errors = {}
+	for _, field in ipairs(send_option_fields) do
+		if (only == nil or only[field.key]) and not field.check(options[field.key]) then
+			table.insert(errors, validation_error(field.path, field.message))
+		end
+	end
 	return errors
 end
 

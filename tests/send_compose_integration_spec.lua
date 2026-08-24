@@ -285,10 +285,7 @@ describe("send compose integration", function()
 		confirm()
 		wait_for_deliveries(1)
 
-		assert.are.equal(
-			"{unknown_result}|{error_result}|{nil_result}|{invalid_result}|",
-			deliveries[1].payload
-		)
+		assert.are.equal("{unknown_result}|{error_result}|{nil_result}|{invalid_result}|", deliveries[1].payload)
 		assert.are.same({ empty = 1, errored = 1, missing = 1, invalid = 1 }, calls)
 	end)
 
@@ -319,25 +316,26 @@ describe("send compose integration", function()
 			{ label = "second", value = "{candidate_value}", compose = true },
 		})
 
-		assert.are.equal(2, resolver_calls)
+		assert.are.equal(1, resolver_calls)
 		assert.is_nil(compose.get_buf())
-		assert.are_not.equal(
-			picker_items[1].value.placeholder_capture,
-			picker_items[2].value.placeholder_capture
-		)
+		assert.are_not.equal(picker_items[1].value.placeholder_capture, picker_items[2].value.placeholder_capture)
 		assert.are.equal("candidate 1", picker_items[1].value.placeholder_capture.results.candidate_value)
-		assert.are.equal("candidate 2", picker_items[2].value.placeholder_capture.results.candidate_value)
+		assert.are.equal("candidate 1", picker_items[2].value.placeholder_capture.results.candidate_value)
 		picker_callback(picker_items[2])
 		confirm()
 		wait_for_deliveries(1)
 
-		assert.are.equal("candidate 2", deliveries[1].payload)
-		assert.are.equal(2, resolver_calls)
+		assert.are.equal("candidate 1", deliveries[1].payload)
+		assert.are.equal(1, resolver_calls)
 	end)
 
 	it("preserves the full draft and sends nothing when one page capture is malformed", function()
 		setup({
-			context = { resolvers = { page_value = function() return "value" end } },
+			context = { resolvers = {
+				page_value = function()
+					return "value"
+				end,
+			} },
 			ui = {
 				compose = {
 					on_new_payload = "append",
@@ -371,7 +369,11 @@ describe("send compose integration", function()
 
 	it("releases captures across replace, discard, and external wipeout", function()
 		setup({
-			context = { resolvers = { release_value = function() return "captured" end } },
+			context = { resolvers = {
+				release_value = function()
+					return "captured"
+				end,
+			} },
 			ui = {
 				compose = {
 					on_new_payload = "replace",
@@ -430,7 +432,11 @@ describe("send compose integration", function()
 			end,
 		})
 		helpers.register({
-			["wiremux.backend"] = { get = function() return backend end },
+			["wiremux.backend"] = {
+				get = function()
+					return backend
+				end,
+			},
 		})
 		setup({
 			targets = { definitions = { first = {}, second = {} } },

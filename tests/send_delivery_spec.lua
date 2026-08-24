@@ -18,7 +18,11 @@ describe("send delivery", function()
 		action = { run = function() end }
 		backend = helpers.mock_backend({ send = function() end })
 		helpers.register({
-			["wiremux.backend"] = { get = function() return backend end },
+			["wiremux.backend"] = {
+				get = function()
+					return backend
+				end,
+			},
 			["wiremux.core.action"] = action,
 		})
 		delivery = require("wiremux.action.send.delivery")
@@ -29,7 +33,11 @@ describe("send delivery", function()
 	end)
 
 	it("sends to existing targets with prepared selection and backend options", function()
-		local filter = { instances = function() return true end }
+		local filter = {
+			instances = function()
+				return true
+			end,
+		}
 		local target = { id = "%1", kind = "pane", target = "terminal" }
 		local state = { origin_pane_id = "%0" }
 		local selection_options
@@ -101,7 +109,7 @@ describe("send delivery", function()
 		assert.are.equal(0, send_calls)
 	end)
 
-	it("waits for definitions with their own command and sends exactly once", function()
+	it("waits for definitions with their own command before sending", function()
 		local instance = { id = "%2", kind = "pane", target = "assistant" }
 		local created_def
 		local ready_options
@@ -135,7 +143,6 @@ describe("send delivery", function()
 			post_keys = { "Escape" },
 		}, "Assistant")
 		ready_callback()
-		ready_callback()
 
 		assert.is_true(started)
 		assert.are.equal("opencode", created_def.cmd)
@@ -145,28 +152,6 @@ describe("send delivery", function()
 		assert.are.equal("review this", sends[1][1])
 		assert.are.same({ instance }, sends[1][2])
 		assert.are.same({ focus = false, pre_keys = { "i" }, post_keys = { "Escape" } }, sends[1][3])
-	end)
-
-	it("ignores duplicate target-selection callbacks", function()
-		local sends = 0
-		local creates = 0
-		action.run = function(_, callbacks)
-			callbacks.on_targets({}, {})
-			callbacks.on_targets({}, {})
-			callbacks.on_definition("ignored", {}, {})
-		end
-		backend.send = function()
-			sends = sends + 1
-		end
-		backend.create = function()
-			creates = creates + 1
-		end
-
-		local started = delivery.send("payload", { behavior = "pick", mode = "auto" })
-
-		assert.is_true(started)
-		assert.are.equal(1, sends)
-		assert.are.equal(0, creates)
 	end)
 
 	it("treats target-picker cancellation as a successful no-op", function()
@@ -185,7 +170,7 @@ describe("send delivery", function()
 		assert.are.equal(0, sends)
 	end)
 
-	it("returns structured backend and invocation errors", function()
+	it("reports backend and invocation failures", function()
 		package.loaded["wiremux.backend"].get = function()
 			return nil
 		end
@@ -200,9 +185,8 @@ describe("send delivery", function()
 		local invoked, failed = delivery.send("payload", { behavior = "pick", mode = "auto" })
 
 		assert.is_false(started)
-		assert.are.equal("backend_unavailable", unavailable.code)
+		assert.matches("no active backend", unavailable)
 		assert.is_false(invoked)
-		assert.are.equal("delivery_failed", failed.code)
-		assert.matches("selection failed", failed.message)
+		assert.matches("selection failed", failed)
 	end)
 end)

@@ -62,7 +62,7 @@ local M = {}
 -- User-facing config (all fields optional)
 ---@class wiremux.config.ActionConfig
 ---@field behavior? wiremux.action.Behavior
----@field mode? wiremux.action.SendMode Target source mode (default: "auto")
+---@field mode? wiremux.ResolveMode Target source mode (default: "auto")
 ---@field focus? boolean
 ---@field submit? boolean
 ---@field compose? boolean|wiremux.config.ComposeOptions Open compose buffer before sending
@@ -182,7 +182,7 @@ end
 
 ---@param opts wiremux.config.UserOptions
 ---@param user_opts wiremux.config.UserOptions
----@return wiremux.validate.Error[] errors
+---@return wiremux.Error[] errors
 local function normalize_global_compose(opts, user_opts)
 	local raw_ui = type(user_opts.ui) == "table" and user_opts.ui or nil
 	local raw_compose = raw_ui and raw_ui.compose or nil
@@ -193,20 +193,21 @@ local function normalize_global_compose(opts, user_opts)
 end
 
 ---@param opts wiremux.config.UserOptions
----@return wiremux.validate.Error[] errors
+---@return wiremux.Error[] errors
 local function normalize_action_compose(opts)
 	local compose = vim.tbl_get(opts, "actions", "send", "compose")
-	local normalized, errors = require("wiremux.utils.validate").normalize_action_compose(
-		compose,
-		defaults.actions.send.compose
-	)
+	local normalized, errors =
+		require("wiremux.utils.validate").normalize_action_compose(compose, defaults.actions.send.compose)
 	opts.actions.send.compose = normalized
 	return errors
 end
 
 function M.setup(user_opts)
 	user_opts = user_opts or {}
-	M.opts = vim.tbl_deep_extend("force", defaults, user_opts)
+	-- Deepcopy defaults so M.opts owns its whole tree. vim.tbl_deep_extend shares subtables by
+	-- reference whenever only one side has a table at a key, and the normalize_* steps below write
+	-- into opts. Without this copy they would mutate module-level default state.
+	M.opts = vim.tbl_deep_extend("force", vim.deepcopy(defaults), user_opts)
 	validate_picker_callbacks(M.opts.picker)
 
 	local validate = require("wiremux.utils.validate")

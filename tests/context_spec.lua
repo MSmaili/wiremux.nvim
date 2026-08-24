@@ -16,24 +16,30 @@ describe("placeholder context", function()
 
 	describe("resolver registry", function()
 		it("replaces custom resolvers while preserving builtins", function()
-			context.configure({ first_custom = function()
-				return "first"
-			end })
+			context.configure({
+				first_custom = function()
+					return "first"
+				end,
+			})
 			assert.are.equal("first", context.get("first_custom"))
 			assert.is_not_nil(context.get("position"))
 
-			context.configure({ second_custom = function()
-				return "second"
-			end })
+			context.configure({
+				second_custom = function()
+					return "second"
+				end,
+			})
 			assert.is_nil(context.get("first_custom"))
 			assert.are.equal("second", context.get("second_custom"))
 			assert.is_not_nil(context.get("position"))
 		end)
 
 		it("allows custom resolvers to override builtins and restores fallback", function()
-			context.configure({ file = function()
-				return "override"
-			end })
+			context.configure({
+				file = function()
+					return "override"
+				end,
+			})
 			assert.are.equal("override", context.get("file"))
 
 			context.configure({})
@@ -112,9 +118,11 @@ describe("placeholder context", function()
 
 	describe("capture", function()
 		it("stores empty strings and materializes them to empty text", function()
-			context.configure({ empty = function()
-				return ""
-			end })
+			context.configure({
+				empty = function()
+					return ""
+				end,
+			})
 
 			local capture = context.capture("before {empty} after")
 
@@ -163,10 +171,12 @@ describe("placeholder context", function()
 
 		it("does no resolver work when no placeholders are requested", function()
 			local calls = 0
-			context.configure({ unused = function()
-				calls = calls + 1
-				return "unused"
-			end })
+			context.configure({
+				unused = function()
+					calls = calls + 1
+					return "unused"
+				end,
+			})
 
 			local capture = context.capture("plain text")
 
@@ -198,18 +208,22 @@ describe("placeholder context", function()
 
 		it("uses a copied page origin for late built-in and custom resolvers", function()
 			local received_origin
-			context.configure({ custom = function(origin)
-				received_origin = origin
-				origin.path = "mutated"
-				return "custom"
-			end })
+			context.configure({
+				custom = function(origin)
+					received_origin = origin
+					origin.path = "mutated"
+					return "custom"
+				end,
+			})
 			local command, system_options
 			local system = vim.system
 			vim.system = function(args, options)
 				command, system_options = args, options
-				return { wait = function()
-					return { code = 0, stdout = "diff" }
-				end }
+				return {
+					wait = function()
+						return { code = 0, stdout = "diff" }
+					end,
+				}
 			end
 			local origin = { bufnr = -1, path = "/project/source.lua", row = 4, col = 2, selection = "" }
 
@@ -256,7 +270,10 @@ describe("placeholder context", function()
 			assert.matches("/tmp/wiremux%-origin.lua", extended.results.diagnostics)
 			assert.matches("origin problem", extended.results.diagnostics_all)
 			vim.api.nvim_buf_delete(bufnr, { force = true })
-			assert.are.same({ line = false, diagnostics = false }, context.extend(context.capture("plain"), "{line} {diagnostics}", origin).results)
+			assert.are.same(
+				{ line = false, diagnostics = false },
+				context.extend(context.capture("plain"), "{line} {diagnostics}", origin).results
+			)
 
 			local reopened = vim.api.nvim_create_buf(false, true)
 			vim.api.nvim_buf_set_name(reopened, origin.path)
@@ -296,9 +313,11 @@ describe("placeholder context", function()
 			local system = vim.system
 			vim.system = function(_, value)
 				options = value
-				return { wait = function()
-					return { code = 0, stdout = "diff" }
-				end }
+				return {
+					wait = function()
+						return { code = 0, stdout = "diff" }
+					end,
+				}
 			end
 
 			context.get("changes")
@@ -312,10 +331,12 @@ describe("placeholder context", function()
 		it("never retries a failed eager capture", function()
 			local calls = 0
 			local available = false
-			context.configure({ eager = function()
-				calls = calls + 1
-				return available and "late" or nil
-			end })
+			context.configure({
+				eager = function()
+					calls = calls + 1
+					return available and "late" or nil
+				end,
+			})
 			local stored = context.capture("{eager}")
 			available = true
 
@@ -342,10 +363,8 @@ describe("placeholder context", function()
 				end,
 			})
 
-			local extended = context.extend(
-				context.capture("plain"),
-				"{empty} {nil_value} {failed} {invalid} {unknown}"
-			)
+			local extended =
+				context.extend(context.capture("plain"), "{empty} {nil_value} {failed} {invalid} {unknown}")
 
 			assert.are.same({
 				empty = "",
@@ -388,10 +407,12 @@ describe("placeholder context", function()
 	describe("materialize", function()
 		it("never invokes a resolver", function()
 			local calls = 0
-			context.configure({ value = function()
-				calls = calls + 1
-				return "resolved"
-			end })
+			context.configure({
+				value = function()
+					calls = calls + 1
+					return "resolved"
+				end,
+			})
 			local capture = context.capture("{value}")
 			calls = 0
 
@@ -404,7 +425,10 @@ describe("placeholder context", function()
 				context.extend(nil, "text")
 			end)
 			assert.has_error(function()
-				context.materialize("text", { enabled = true, results = { value = true } })
+				context.materialize("text", nil)
+			end)
+			assert.has_error(function()
+				context.materialize("{value}", { enabled = true, results = { value = true } })
 			end)
 		end)
 	end)

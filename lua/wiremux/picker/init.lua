@@ -3,6 +3,8 @@
 ---@field format_item? fun(item: any): string Format item for display
 
 ---@class wiremux.picker.Adapter
+---Adapters may invoke on_choice more than once; wiremux latches the callback so callers see at most
+---one call. Callers must not add their own single-fire protection.
 ---@field available fun(): boolean Check if adapter is usable
 ---@field select fun(items: any[], opts: wiremux.picker.Opts, on_choice: fun(item: any?))
 ---@field files? fun(opts: wiremux.picker.Opts, on_choice: fun(path: string?))
@@ -130,7 +132,8 @@ end
 
 ---@return string[]
 local function git_files()
-	local result = vim.system({ "git", "ls-files", "--cached", "--others", "--exclude-standard" }, { text = true }):wait()
+	local result = vim.system({ "git", "ls-files", "--cached", "--others", "--exclude-standard" }, { text = true })
+		:wait()
 	if result.code ~= 0 then
 		return {}
 	end
@@ -211,21 +214,36 @@ local function resolve_files()
 	return cached_files
 end
 
+---Wrap a choice callback so it runs at most once, whatever the adapter does.
+---@generic T
+---@param on_choice fun(choice: T?)
+---@return fun(choice: T?)
+local function once(on_choice)
+	local fired = false
+	return function(choice)
+		if fired then
+			return
+		end
+		fired = true
+		on_choice(choice)
+	end
+end
+
 ---Select a single item from a list
 ---@param items any[]
 ---@param opts wiremux.picker.Opts
----@param on_choice fun(item: any?) Called with selected item or nil if cancelled
+---@param on_choice fun(item: any?) Called at most once, with the selected item or nil if cancelled
 function M.select(items, opts, on_choice)
 	opts = opts or {}
-	resolve()(items, opts, on_choice)
+	resolve()(items, opts, once(on_choice))
 end
 
 ---Pick a file
 ---@param opts wiremux.picker.Opts
----@param on_choice fun(path: string?) Called with selected file path or nil
+---@param on_choice fun(path: string?) Called at most once, with the selected path or nil
 function M.files(opts, on_choice)
 	opts = opts or {}
-	resolve_files()(opts, on_choice)
+	resolve_files()(opts, once(on_choice))
 end
 
 ---Clear cached picker (useful if config changes)

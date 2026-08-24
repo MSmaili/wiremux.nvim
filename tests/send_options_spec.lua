@@ -122,17 +122,20 @@ describe("send with options", function()
 			end
 		end
 
-		local my_filter = { instances = function() return true end }
-		mocks.send.send("test", { 
-			focus = true, 
+		local my_filter = {
+			instances = function()
+				return true
+			end,
+		}
+		mocks.send.send("test", {
+			focus = true,
 			behavior = "last",
-			filter = my_filter 
+			filter = my_filter,
 		})
 
 		assert.is_true(send_opts.focus)
 		assert.are.equal("last", received_behavior)
-		assert.are.same(my_filter, received_filter)
-		assert.are_not.equal(my_filter, received_filter)
+		assert.are.equal(my_filter, received_filter)
 	end)
 
 	it("respects focus=false even when send focus defaults to true", function()
@@ -306,21 +309,5 @@ describe("placeholder materialization", function()
 		mocks.send.send({ value = "{placeholder}" })
 
 		assert.are.equal(materialized, received_text)
-	end)
-
-	it("handles materialization errors gracefully", function()
-		local error_shown = false
-
-		mocks.context.materialize = function()
-			error("invalid placeholder")
-		end
-
-		mocks.notify.error = function()
-			error_shown = true
-		end
-
-		mocks.send.send("{invalid}")
-
-		assert.is_true(error_shown)
 	end)
 end)
