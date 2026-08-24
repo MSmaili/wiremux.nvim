@@ -119,6 +119,9 @@ The following example shows all default values from `config.lua`. Override only 
           { "q", mode = "n", desc = "Close draft" },
           { "<Esc>", mode = "n", desc = "Close draft" },
         },
+        -- discard has no default key. Set one to drop a draft without the
+        -- close_behavior prompt, e.g.:
+        -- discard = { "<C-d>", mode = "n", desc = "Discard draft" },
         files = {
           { "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
         },

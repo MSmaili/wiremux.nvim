@@ -84,6 +84,8 @@ local function resolve()
 	local picker_cfg = get_picker_config()
 
 	if type(picker_cfg) ~= "table" then
+		-- Removed `picker = "name"` form. `validate_picker` already warned at setup; auto-detect is
+		-- the documented replacement behavior, so this fall-through is deliberate.
 		cached_select = auto_detect()
 	else
 		local adapter = picker_cfg.adapter

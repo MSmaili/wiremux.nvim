@@ -275,6 +275,8 @@ You can use a function for `label` to create dynamic display names:
           preview_placeholder = { "K", mode = "n" },
           previous = { "<C-p>", mode = "n" },
           next = { "<C-n>", mode = "n" },
+          -- Opt-in: discards the draft without the close prompt. No default key.
+          discard = { "<C-d>", mode = "n", desc = "Discard draft" },
         },
       },
     },

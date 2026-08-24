@@ -161,13 +161,6 @@ local function current_buffer_mapping(buf, mode, key)
 	return mapping
 end
 
----@param mapping table?
----@param owned wiremux.ui.ComposeViewMapping
----@return boolean
-local function is_owned_mapping(mapping, owned)
-	return mapping ~= nil and mapping.callback == owned.callback
-end
-
 ---@param mode string
 ---@param key string
 ---@return string
@@ -175,6 +168,7 @@ local function mapping_id(mode, key)
 	return mode .. "\0" .. key
 end
 
+---Install this view's mappings, preserving any that the user replaced on the draft buffer.
 ---@param view wiremux.ui.ComposeView
 ---@param desired table<string, wiremux.ui.ComposeViewMapping>
 local function refresh_mappings(view, desired)
@@ -185,19 +179,23 @@ local function refresh_mappings(view, desired)
 	local initial_install = not view.mappings_initialized
 	local next_owned = {}
 
+	---@param mapping table?
+	---@param owned wiremux.ui.ComposeViewMapping?
+	---@return boolean
+	local function still_ours(mapping, owned)
+		return mapping ~= nil and owned ~= nil and mapping.callback == owned.callback
+	end
+
 	for id, owned in pairs(view.owned_mappings) do
 		local current = current_buffer_mapping(buf, owned.mode, owned.key)
-		if desired[id] == nil and is_owned_mapping(current, owned) then
+		if desired[id] == nil and still_ours(current, owned) then
 			pcall(vim.keymap.del, owned.mode, owned.key, { buffer = buf })
 		end
 	end
 
 	for id, mapping in pairs(desired) do
-		local old_owned = view.owned_mappings[id]
 		local current = current_buffer_mapping(buf, mapping.mode, mapping.key)
-		local can_install = initial_install
-			or current == nil
-			or (old_owned ~= nil and is_owned_mapping(current, old_owned))
+		local can_install = initial_install or current == nil or still_ours(current, view.owned_mappings[id])
 		if can_install then
 			vim.keymap.set(mapping.mode, mapping.key, mapping.callback, {
 				buffer = buf,
