@@ -32,6 +32,7 @@ local validate = require("wiremux.utils.validate")
 ---@field options wiremux.action.SendOptions Call options resolved and checked one time.
 ---@field compose wiremux.action.ComposeSelection
 ---@field global_compose wiremux.config.ComposeSessionConfig
+---@field origin wiremux.context.ResolverOrigin Source location captured one time for this call.
 ---@field capture_memo table<string, string|false> Resolver results shared by every candidate of this call.
 
 ---@param post_keys? string|string[]
@@ -77,6 +78,7 @@ function M.prepare_context(opts, config)
 		compose = call.compose ~= nil and { value = call.compose, path = "opts.compose" }
 			or { value = defaults.compose, path = "actions.send.compose" },
 		global_compose = config.ui.compose,
+		origin = context.capture_origin(),
 		capture_memo = {},
 	}, {}
 end
@@ -155,7 +157,7 @@ function M.prepare(item, preparation)
 		return nil, delivery_errors
 	end
 
-	local origin = compose_config and item.placeholders ~= false and context.capture_origin() or nil
+	local origin = compose_config and item.placeholders ~= false and preparation.origin or nil
 	local capture = prepare_capture(item, preparation.capture_memo)
 
 	return {

@@ -81,10 +81,7 @@ describe("prepared send request", function()
 		assert.are.same({ bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "" }, request.origin)
 	end)
 
-	it("skips source capture when placeholders are disabled", function()
-		mocks.context.capture_origin = function()
-			error("origin capture must not run")
-		end
+	it("skips placeholder capture and page origin when placeholders are disabled", function()
 		mocks.context.capture = function()
 			error("placeholder capture must not run")
 		end

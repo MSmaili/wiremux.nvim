@@ -47,11 +47,7 @@ function M.line_for(origin)
 	if not origin then
 		return vim.api.nvim_get_current_line()
 	end
-	local bufnr = M.buffer_for(origin)
-	if not bufnr then
-		return nil
-	end
-	return vim.api.nvim_buf_get_lines(bufnr, origin.row - 1, origin.row, false)[1]
+	return origin.line
 end
 
 ---Format diagnostics for display

@@ -1,17 +1,9 @@
 local builtins = require("wiremux.context.builtins")
 local notify = require("wiremux.utils.notify")
+local origin_module = require("wiremux.context.origin")
 local placeholder = require("wiremux.placeholder")
 
 local M = {}
-
----@class wiremux.context.ResolverOrigin Point-in-time source location for deferred placeholder resolution.
----@field bufnr integer
----@field path string
----@field row integer One-based source row.
----@field col integer Zero-based source byte column.
----@field selection string Point-in-time visual selection, or an empty string.
-
----@alias wiremux.context.Resolver fun(origin?: wiremux.context.ResolverOrigin): string?
 
 ---@class wiremux.context.PlaceholderCapture Point-in-time placeholder capture owned by one prepared request or compose page.
 ---@field enabled boolean Whether extension and materialization are enabled.
@@ -54,15 +46,7 @@ end
 ---Capture the current source location for deferred resolution.
 ---@return wiremux.context.ResolverOrigin
 function M.capture_origin()
-	local bufnr = vim.api.nvim_get_current_buf()
-	local cursor = vim.api.nvim_win_get_cursor(0)
-	return {
-		bufnr = bufnr,
-		path = vim.api.nvim_buf_get_name(bufnr),
-		row = cursor[1],
-		col = cursor[2],
-		selection = builtins.selection(),
-	}
+	return origin_module.capture()
 end
 
 ---Get a context value by name.

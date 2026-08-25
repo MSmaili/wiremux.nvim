@@ -252,6 +252,7 @@ describe("placeholder context", function()
 				row = 2,
 				col = 0,
 				selection = "chosen text",
+				line = "source line",
 			}
 			vim.api.nvim_buf_set_name(bufnr, "/tmp/wiremux-renamed.lua")
 
@@ -270,36 +271,52 @@ describe("placeholder context", function()
 			assert.matches("/tmp/wiremux%-origin.lua", extended.results.diagnostics)
 			assert.matches("origin problem", extended.results.diagnostics_all)
 			vim.api.nvim_buf_delete(bufnr, { force = true })
+
+			-- The line is frozen in the origin, so only buffer-dependent names degrade.
 			assert.are.same(
-				{ line = false, diagnostics = false },
+				{ line = "source line", diagnostics = false },
 				context.extend(context.capture("plain"), "{line} {diagnostics}", origin).results
 			)
 
 			local reopened = vim.api.nvim_create_buf(false, true)
 			vim.api.nvim_buf_set_name(reopened, origin.path)
 			vim.api.nvim_buf_set_lines(reopened, 0, -1, false, { "first", "reopened line" })
-			assert.are.equal("reopened line", context.extend(context.capture("plain"), "{line}", origin).results.line)
+			vim.diagnostic.set(namespace, reopened, {
+				{ lnum = 1, col = 1, message = "reopened problem", severity = vim.diagnostic.severity.ERROR },
+			})
+			assert.matches(
+				"reopened problem",
+				context.extend(context.capture("plain"), "{diagnostics}", origin).results.diagnostics
+			)
 			vim.api.nvim_buf_delete(reopened, { force = true })
 		end)
 
 		it("matches a reopened buffer path literally", function()
+			local namespace = vim.api.nvim_create_namespace("wiremux-literal-path-test")
 			local collision = vim.api.nvim_create_buf(false, true)
 			vim.api.nvim_buf_set_name(collision, "/tmp/wiremux-x.lua")
 			vim.api.nvim_buf_set_lines(collision, 0, -1, false, { "collision" })
+			vim.diagnostic.set(namespace, collision, {
+				{ lnum = 0, col = 0, message = "collision problem", severity = vim.diagnostic.severity.ERROR },
+			})
 			local exact = vim.api.nvim_create_buf(false, true)
 			vim.api.nvim_buf_set_name(exact, "/tmp/wiremux-[x].lua")
 			vim.api.nvim_buf_set_lines(exact, 0, -1, false, { "exact" })
+			vim.diagnostic.set(namespace, exact, {
+				{ lnum = 0, col = 0, message = "exact problem", severity = vim.diagnostic.severity.ERROR },
+			})
 			local origin = {
 				bufnr = -1,
 				path = vim.api.nvim_buf_get_name(exact),
 				row = 1,
 				col = 0,
 				selection = "",
+				line = "exact",
 			}
 
-			local extended = context.extend(context.capture("plain"), "{line}", origin)
+			local extended = context.extend(context.capture("plain"), "{diagnostics}", origin)
 
-			assert.are.equal("exact", extended.results.line)
+			assert.matches("exact problem", extended.results.diagnostics)
 			vim.api.nvim_buf_delete(collision, { force = true })
 			vim.api.nvim_buf_delete(exact, { force = true })
 		end)
