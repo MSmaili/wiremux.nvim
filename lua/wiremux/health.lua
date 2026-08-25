@@ -118,7 +118,7 @@ local function check_config()
 		vim.health.ok("All configuration values are valid")
 	else
 		for _, validation_err in ipairs(validation_errors) do
-			vim.health.warn(validation_err)
+			vim.health.warn(validation_err.message)
 		end
 	end
 

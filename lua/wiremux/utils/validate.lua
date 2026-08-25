@@ -9,45 +9,6 @@ local valid = {
 	splits = { horizontal = true, vertical = true },
 	split_modes = { before = true, after = true },
 	log_levels = { off = true, error = true, warn = true, info = true, debug = true },
-	compose_close_behaviors = { ask = true, hide = true, discard = true },
-	compose_new_payload = { ask = true, keep = true, replace = true, append = true },
-	compose_styles = { minimal = true },
-	compose_borders = { none = true, single = true, double = true, rounded = true, solid = true, shadow = true },
-	keymap_modes = {
-		[""] = true,
-		n = true,
-		v = true,
-		x = true,
-		s = true,
-		o = true,
-		i = true,
-		l = true,
-		c = true,
-		t = true,
-		["!"] = true,
-	},
-	keymap_actions = {
-		send = true,
-		close = true,
-		discard = true,
-		files = true,
-		delete_page = true,
-		preview_placeholder = true,
-		previous = true,
-		next = true,
-	},
-}
-
-local compose_session_fields = {
-	width = true,
-	height = true,
-	title = true,
-	border = true,
-	style = true,
-	close_behavior = true,
-	on_new_payload = true,
-	wo = true,
-	keymaps = true,
 }
 
 ---@class wiremux.Error
@@ -57,8 +18,18 @@ local compose_session_fields = {
 ---@param path string
 ---@param message string
 ---@return wiremux.Error
-local function validation_error(path, message)
+function M.error(path, message)
 	return { path = path, message = message }
+end
+
+local validation_error = M.error
+
+---@param valid_set table<string, true>
+---@return string[]
+local function sorted_keys(valid_set)
+	local keys = vim.tbl_keys(valid_set)
+	table.sort(keys)
+	return keys
 end
 
 ---Check set membership, treating nil as valid, and format the shared "use: ..." message.
@@ -67,7 +38,7 @@ end
 ---@param name string
 ---@param context? string
 ---@return string? error
-local function validate_field(value, valid_set, name, context)
+function M.enum(value, valid_set, name, context)
 	if value == nil or valid_set[value] ~= nil then
 		return nil
 	end
@@ -77,7 +48,7 @@ local function validate_field(value, valid_set, name, context)
 		name,
 		tostring(value),
 		context and " " .. context or "",
-		table.concat(vim.fn.sort(vim.tbl_keys(valid_set)), ", ")
+		table.concat(sorted_keys(valid_set), ", ")
 	)
 end
 
@@ -123,7 +94,7 @@ local function validate_picker(picker)
 end
 
 ---@param resolvers table|nil
----@return string[] errors
+---@return wiremux.Error[] errors
 local function validate_resolvers(resolvers)
 	local errors = {}
 
@@ -131,24 +102,35 @@ local function validate_resolvers(resolvers)
 		return errors
 	end
 	if type(resolvers) ~= "table" then
-		table.insert(errors, string.format("context.resolvers must be table, got %s", type(resolvers)))
-		return errors
+		return {
+			validation_error(
+				"context.resolvers",
+				string.format("context.resolvers must be table, got %s", type(resolvers))
+			),
+		}
 	end
 
 	for name, resolver in pairs(resolvers) do
+		local path = "context.resolvers." .. tostring(name)
 		if not placeholder.is_valid_name(name) then
 			table.insert(
 				errors,
-				string.format(
-					"context resolver name '%s' must match %s",
-					tostring(name),
-					placeholder.validation_pattern
+				validation_error(
+					path,
+					string.format(
+						"context resolver name '%s' must match %s",
+						tostring(name),
+						placeholder.validation_pattern
+					)
 				)
 			)
 		elseif type(resolver) ~= "function" then
 			table.insert(
 				errors,
-				string.format("context resolver '%s' is not a function (got %s)", name, type(resolver))
+				validation_error(
+					path,
+					string.format("context resolver '%s' is not a function (got %s)", name, type(resolver))
+				)
 			)
 		end
 	end
@@ -199,278 +181,6 @@ local function validate_kind(kind, target_name)
 	return string.format("kind for target '%s' must be string or table, got %s", target_name, type(kind))
 end
 
----@param mode any
----@return boolean
-local function valid_keymap_mode(mode)
-	if type(mode) == "string" then
-		return valid.keymap_modes[mode] == true
-	end
-	if type(mode) ~= "table" or not vim.islist(mode) or #mode == 0 then
-		return false
-	end
-	for _, entry in ipairs(mode) do
-		if type(entry) ~= "string" or not valid.keymap_modes[entry] then
-			return false
-		end
-	end
-	return true
-end
-
----@param keymap any
----@param path string
----@return wiremux.Error[]
-local function validate_keymap(keymap, path)
-	local errors = {}
-	if type(keymap) ~= "table" then
-		return { validation_error(path, string.format("%s must be a keymap table, got %s", path, type(keymap))) }
-	end
-	if type(keymap[1]) ~= "string" or keymap[1] == "" then
-		table.insert(errors, validation_error(path .. "[1]", path .. "[1] must be a non-empty key string"))
-	end
-	if keymap.mode ~= nil and not valid_keymap_mode(keymap.mode) then
-		table.insert(errors, validation_error(path .. ".mode", path .. ".mode contains an invalid mapping mode"))
-	end
-	return errors
-end
-
----@param entry any
----@param path string
----@return wiremux.Error[]
-local function validate_keymap_entry(entry, path)
-	if type(entry) ~= "table" then
-		return { validation_error(path, string.format("%s must be a keymap table or list, got %s", path, type(entry))) }
-	end
-	if next(entry) == nil then
-		return {}
-	end
-	if type(entry[1]) == "string" then
-		return validate_keymap(entry, path)
-	end
-	if not vim.islist(entry) then
-		return { validation_error(path, path .. " must be a keymap table or list") }
-	end
-
-	local errors = {}
-	for index, keymap in ipairs(entry) do
-		vim.list_extend(errors, validate_keymap(keymap, string.format("%s[%d]", path, index)))
-	end
-	return errors
-end
-
----@param keymaps any
----@param path string
----@return wiremux.Error[]
-local function validate_keymaps(keymaps, path)
-	if type(keymaps) ~= "table" then
-		return { validation_error(path, string.format("%s must be a table, got %s", path, type(keymaps))) }
-	end
-
-	local errors = {}
-	for action, entry in pairs(keymaps) do
-		if not valid.keymap_actions[action] then
-			table.insert(
-				errors,
-				validation_error(
-					path .. "." .. tostring(action),
-					string.format("unknown compose keymap action '%s' for %s", tostring(action), path)
-				)
-			)
-		else
-			vim.list_extend(errors, validate_keymap_entry(entry, path .. "." .. action))
-		end
-	end
-	return errors
-end
-
----@param border any
----@return boolean
-local function valid_border(border)
-	if type(border) == "string" then
-		return valid.compose_borders[border] == true
-	end
-	if type(border) ~= "table" or not vim.islist(border) then
-		return false
-	end
-	local valid_lengths = { [1] = true, [2] = true, [4] = true, [8] = true }
-	if not valid_lengths[#border] then
-		return false
-	end
-	for _, segment in ipairs(border) do
-		if type(segment) ~= "string" then
-			return false
-		end
-	end
-	return true
-end
-
----Validate and copy a partial compose option table.
----@param options any
----@param path? string
----@return table normalized
----@return wiremux.Error[] errors
-function M.compose_options(options, path)
-	path = path or "compose"
-	if type(options) ~= "table" then
-		return {}, {
-			validation_error(path, string.format("%s must be a boolean or table, got %s", path, type(options))),
-		}
-	end
-
-	local normalized = {}
-	local errors = {}
-	for field, value in pairs(options) do
-		local field_path = path .. "." .. tostring(field)
-		if not compose_session_fields[field] then
-			table.insert(
-				errors,
-				validation_error(field_path, string.format("unknown compose option '%s' for %s", tostring(field), path))
-			)
-		elseif field == "width" or field == "height" then
-			if type(value) == "number" and value >= 0.1 and value <= 1 then
-				normalized[field] = value
-			else
-				table.insert(errors, validation_error(field_path, field_path .. " must be a number between 0.1 and 1"))
-			end
-		elseif field == "title" then
-			if type(value) == "string" then
-				normalized.title = value
-			else
-				table.insert(errors, validation_error(field_path, field_path .. " must be a string"))
-			end
-		elseif field == "border" then
-			if valid_border(value) then
-				normalized.border = vim.deepcopy(value)
-			else
-				table.insert(
-					errors,
-					validation_error(field_path, field_path .. " must be a valid border name or segment list")
-				)
-			end
-		elseif field == "style" then
-			local message = validate_field(value, valid.compose_styles, "style", "for " .. path)
-			if message then
-				table.insert(errors, validation_error(field_path, message))
-			else
-				normalized.style = value
-			end
-		elseif field == "close_behavior" then
-			local message = validate_field(value, valid.compose_close_behaviors, "close_behavior", "for " .. path)
-			if message then
-				table.insert(errors, validation_error(field_path, message))
-			else
-				normalized.close_behavior = value
-			end
-		elseif field == "on_new_payload" then
-			local message = validate_field(value, valid.compose_new_payload, "on_new_payload", "for " .. path)
-			if message then
-				table.insert(errors, validation_error(field_path, message))
-			else
-				normalized.on_new_payload = value
-			end
-		elseif field == "wo" then
-			if type(value) == "table" then
-				normalized.wo = vim.deepcopy(value)
-			else
-				table.insert(errors, validation_error(field_path, field_path .. " must be a table"))
-			end
-		elseif field == "keymaps" then
-			local keymap_errors = validate_keymaps(value, field_path)
-			vim.list_extend(errors, keymap_errors)
-			if #keymap_errors == 0 then
-				normalized.keymaps = vim.deepcopy(value)
-			end
-		end
-	end
-	return normalized, errors
-end
-
----@param base table
----@param overrides table
----@return table
-local function merge_compose(base, overrides)
-	local merged = vim.tbl_deep_extend("force", {}, base, overrides)
-	if type(overrides.keymaps) == "table" and type(merged.keymaps) == "table" then
-		for action, entry in pairs(overrides.keymaps) do
-			if type(entry) == "table" and next(entry) == nil then
-				merged.keymaps[action] = {}
-			end
-		end
-	end
-	return merged
-end
-
----Normalize global ui.compose config, falling back field-by-field to defaults.
----@param options any
----@param defaults wiremux.config.ComposeSessionConfig
----@return wiremux.config.ComposeSessionConfig normalized
----@return wiremux.Error[] errors
-function M.normalize_global_compose(options, defaults)
-	if options == nil then
-		return vim.deepcopy(defaults), {}
-	end
-	if type(options) ~= "table" then
-		return vim.deepcopy(defaults),
-			{
-				validation_error("ui.compose", string.format("ui.compose must be a table, got %s", type(options))),
-			}
-	end
-
-	local normalized, errors = M.compose_options(options, "ui.compose")
-	return merge_compose(defaults, normalized), errors
-end
-
----Normalize the global actions.send.compose default.
----@param value any
----@param default boolean|table
----@return boolean|table normalized
----@return wiremux.Error[] errors
-function M.normalize_action_compose(value, default)
-	if value == nil then
-		return vim.deepcopy(default), {}
-	end
-	if type(value) == "boolean" then
-		return value, {}
-	end
-	if type(value) ~= "table" then
-		return vim.deepcopy(default),
-			{
-				validation_error(
-					"actions.send.compose",
-					string.format("actions.send.compose must be a boolean or table, got %s", type(value))
-				),
-			}
-	end
-
-	local normalized, errors = M.compose_options(value, "actions.send.compose")
-	return normalized, errors
-end
-
----Resolve one selected runtime compose value into a complete session-only config.
----@param global_compose wiremux.config.ComposeSessionConfig
----@param value any
----@param path string
----@return wiremux.config.ComposeSessionConfig? config
----@return wiremux.Error[] errors
-function M.resolve_compose(global_compose, value, path)
-	if value == nil or value == false then
-		return nil, {}
-	end
-	if value == true then
-		value = {}
-	elseif type(value) ~= "table" then
-		return nil,
-			{
-				validation_error(path, string.format("%s must be a boolean or table, got %s", path, type(value))),
-			}
-	end
-
-	local overrides, errors = M.compose_options(value, path)
-	if #errors > 0 then
-		return nil, errors
-	end
-	return merge_compose(global_compose, overrides), {}
-end
-
 ---@param errors wiremux.Error[]
 ---@return string[]
 function M.error_messages(errors)
@@ -481,29 +191,38 @@ function M.error_messages(errors)
 	return messages
 end
 
+---Check the user configuration. Every check collects, so one call reports every problem.
 ---@param opts table
----@return string[] errors List of validation errors (empty if no errors)
+---@return wiremux.Error[] errors
 function M.validate(opts)
 	local errors = {}
-	local function collect_error(err)
-		if err then
-			table.insert(errors, err)
+	---@param path string
+	---@param message string?
+	local function collect(path, message)
+		if message then
+			table.insert(errors, validation_error(path, message))
 		end
 	end
 
-	collect_error(validate_field(opts.log_level, valid.log_levels, "log_level"))
+	collect("log_level", M.enum(opts.log_level, valid.log_levels, "log_level"))
 
 	for name, def in pairs(vim.tbl_get(opts, "targets", "definitions") or {}) do
-		collect_error(validate_kind(def.kind, name))
-		collect_error(validate_field(def.split, valid.splits, "split", "for target '" .. name .. "'"))
-		collect_error(validate_field(def.split_mode, valid.split_modes, "split_mode", "for target '" .. name .. "'"))
+		local path = "targets.definitions." .. tostring(name)
+		local context = "for target '" .. name .. "'"
+		collect(path .. ".kind", validate_kind(def.kind, name))
+		collect(path .. ".split", M.enum(def.split, valid.splits, "split", context))
+		collect(path .. ".split_mode", M.enum(def.split_mode, valid.split_modes, "split_mode", context))
 	end
 
 	for action, cfg in pairs(opts.actions or {}) do
-		collect_error(validate_field(cfg.behavior, valid.behaviors, "behavior", "for action '" .. action .. "'"))
+		local context = "for action '" .. action .. "'"
+		collect(
+			"actions." .. tostring(action) .. ".behavior",
+			M.enum(cfg.behavior, valid.behaviors, "behavior", context)
+		)
 	end
 
-	collect_error(validate_picker(opts.picker))
+	collect("picker", validate_picker(opts.picker))
 	vim.list_extend(errors, validate_resolvers(vim.tbl_get(opts, "context", "resolvers")))
 	return errors
 end

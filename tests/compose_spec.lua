@@ -64,7 +64,7 @@ describe("compose UI", function()
 		opts = opts or {}
 		local selected = opts.compose == nil and true or opts.compose
 		local resolved, errors =
-			require("wiremux.utils.validate").resolve_compose(config.opts.ui.compose, selected, "test.compose")
+			require("wiremux.ui.compose.config").resolve(config.opts.ui.compose, selected, "test.compose")
 		assert.are.same({}, errors)
 
 		local open_opts = { config = resolved }

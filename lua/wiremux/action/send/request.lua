@@ -1,6 +1,7 @@
 local M = {}
 
 local context = require("wiremux.context")
+local compose_config = require("wiremux.ui.compose.config")
 local validate = require("wiremux.utils.validate")
 
 ---@class wiremux.action.SendOptions One resolved option record. `submit` is folded into `post_keys`
@@ -92,7 +93,7 @@ local function prepare_compose(item, preparation)
 		path = "item.compose"
 	end
 
-	local config, errors = validate.resolve_compose(preparation.global_compose, selected, path)
+	local config, errors = compose_config.resolve(preparation.global_compose, selected, path)
 	if #errors > 0 then
 		return nil, errors
 	end

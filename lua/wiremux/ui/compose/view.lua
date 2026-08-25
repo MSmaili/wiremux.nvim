@@ -151,14 +151,13 @@ end
 ---@param key string
 ---@return table?
 local function current_buffer_mapping(buf, mode, key)
-	local mapping
-	local ok = pcall(vim.api.nvim_buf_call, buf, function()
-		mapping = vim.fn.maparg(key, mode, false, true)
-	end)
-	if not ok or type(mapping) ~= "table" or mapping.buffer ~= 1 or next(mapping) == nil then
-		return nil
+	local target = vim.keycode(key)
+	for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
+		if vim.keycode(mapping.lhs) == target then
+			return mapping
+		end
 	end
-	return mapping
+	return nil
 end
 
 ---@param mode string

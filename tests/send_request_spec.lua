@@ -129,9 +129,10 @@ describe("prepared send request", function()
 
 	it("applies compose whole-value precedence exactly once", function()
 		mocks.config.opts.actions.send.compose = { title = " Default " }
-		local resolve_compose = require("wiremux.utils.validate").resolve_compose
+		local compose_config = require("wiremux.ui.compose.config")
+		local resolve_compose = compose_config.resolve
 		local calls = 0
-		require("wiremux.utils.validate").resolve_compose = function(...)
+		compose_config.resolve = function(...)
 			calls = calls + 1
 			return resolve_compose(...)
 		end
@@ -141,7 +142,7 @@ describe("prepared send request", function()
 			value = "payload",
 			compose = { title = " Item " },
 		}, preparation))
-		require("wiremux.utils.validate").resolve_compose = resolve_compose
+		compose_config.resolve = resolve_compose
 
 		assert.are.equal(1, calls)
 		assert.are.equal(" Item ", request.compose.title)

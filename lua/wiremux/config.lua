@@ -186,7 +186,7 @@ end
 local function normalize_global_compose(opts, user_opts)
 	local raw_ui = type(user_opts.ui) == "table" and user_opts.ui or nil
 	local raw_compose = raw_ui and raw_ui.compose or nil
-	local compose, errors = require("wiremux.utils.validate").normalize_global_compose(raw_compose, defaults.ui.compose)
+	local compose, errors = require("wiremux.ui.compose.config").normalize_global(raw_compose, defaults.ui.compose)
 	opts.ui = type(opts.ui) == "table" and opts.ui or {}
 	opts.ui.compose = compose
 	return errors
@@ -197,7 +197,7 @@ end
 local function normalize_action_compose(opts)
 	local compose = vim.tbl_get(opts, "actions", "send", "compose")
 	local normalized, errors =
-		require("wiremux.utils.validate").normalize_action_compose(compose, defaults.actions.send.compose)
+		require("wiremux.ui.compose.config").normalize_action(compose, defaults.actions.send.compose)
 	opts.actions.send.compose = normalized
 	return errors
 end
@@ -209,7 +209,7 @@ function M.setup(user_opts)
 	validate_picker_callbacks(M.opts.picker)
 
 	local validate = require("wiremux.utils.validate")
-	local warning_messages = validate.validate(M.opts)
+	local warning_messages = validate.error_messages(validate.validate(M.opts))
 	configure_resolvers(M.opts)
 
 	local global_errors = normalize_global_compose(M.opts, user_opts)

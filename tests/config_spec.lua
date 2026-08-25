@@ -2,9 +2,9 @@
 
 describe("compose configuration", function()
 	it("accepts append and rejects unknown payload policies", function()
-		local validate = require("wiremux.utils.validate")
-		local _, valid_errors = validate.compose_options({ on_new_payload = "append" })
-		local _, invalid_errors = validate.compose_options({ on_new_payload = "merge" })
+		local compose_config = require("wiremux.ui.compose.config")
+		local _, valid_errors = compose_config.options({ on_new_payload = "append" })
+		local _, invalid_errors = compose_config.options({ on_new_payload = "merge" })
 
 		assert.are.same({}, valid_errors)
 		assert.are.equal(1, #invalid_errors)
@@ -76,7 +76,8 @@ describe("compose configuration", function()
 		})
 
 		assert.are.equal(1, #errors)
-		assert.matches("resolver name", errors[1])
+		assert.are.equal("context.resolvers.bad-name", errors[1].path)
+		assert.matches("resolver name", errors[1].message)
 	end)
 
 	it("falls back from malformed global compose values even when logging is off", function()
@@ -117,8 +118,8 @@ describe("compose configuration", function()
 	end)
 
 	it("returns structured errors for malformed runtime compose options", function()
-		local validate = require("wiremux.utils.validate")
-		local normalized, errors = validate.compose_options({
+		local compose_config = require("wiremux.ui.compose.config")
+		local normalized, errors = compose_config.options({
 			on_new_payload = "merge",
 			capture_placeholders = { "file" },
 			keymaps = { send = { "<CR>", mode = "bad" } },
@@ -137,7 +138,7 @@ describe("compose configuration", function()
 	end)
 
 	it("resolves enabled compose values to session-only config", function()
-		local validate = require("wiremux.utils.validate")
+		local compose_config = require("wiremux.ui.compose.config")
 		local global = {
 			width = 0.6,
 			height = 0.4,
@@ -145,7 +146,7 @@ describe("compose configuration", function()
 			wo = { wrap = true, number = false },
 		}
 
-		local resolved, errors = validate.resolve_compose(global, {
+		local resolved, errors = compose_config.resolve(global, {
 			title = " Runtime ",
 			wo = { number = true },
 		}, "opts.compose")
