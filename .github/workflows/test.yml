@@ -10,6 +10,13 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # v0.11.0 is the minimum version that wiremux supports. Keep it in step with
+        # lua/wiremux/version.lua and the requirements in README.md and doc/wiremux.txt.
+        nvim: [v0.11.0, stable]
+    name: test (${{ matrix.nvim }})
     steps:
       - uses: actions/checkout@v5
 
@@ -18,9 +25,9 @@ jobs:
           # Detect architecture
           ARCH=$(uname -m)
           if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-            NVIM_URL="https://github.com/neovim/neovim/releases/download/stable/nvim-linux-arm64.tar.gz"
+            NVIM_URL="https://github.com/neovim/neovim/releases/download/${{ matrix.nvim }}/nvim-linux-arm64.tar.gz"
           else
-            NVIM_URL="https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.tar.gz"
+            NVIM_URL="https://github.com/neovim/neovim/releases/download/${{ matrix.nvim }}/nvim-linux-x86_64.tar.gz"
           fi
           
           # Download and install
@@ -43,7 +50,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .tests
-          key: ${{ runner.os }}-tests-${{ hashFiles('tests/minit.lua', 'scripts/test') }}
+          key: ${{ runner.os }}-${{ matrix.nvim }}-tests-${{ hashFiles('tests/minit.lua', 'scripts/test') }}
 
       - name: Run tests
         run: ./scripts/test

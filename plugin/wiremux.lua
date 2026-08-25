@@ -6,6 +6,16 @@ if vim.g.loaded_wiremux then
 end
 vim.g.loaded_wiremux = true
 
+local version = require("wiremux.version")
+if not version.supported() then
+	-- Report after startup, when messages are visible, and register no commands.
+	local message = version.requirement()
+	vim.schedule(function()
+		vim.notify(message, vim.log.levels.ERROR)
+	end)
+	return
+end
+
 ---@class wiremux.Subcommand
 ---@field impl fun(args: string[], opts: table): nil Command implementation
 ---@field complete? fun(arg_lead: string): string[] Optional completions

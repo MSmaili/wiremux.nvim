@@ -22,7 +22,7 @@ Wiremux manages tmux panes and windows as **targets**. It sends text to these ta
 
 ## Requirements
 
-- Neovim 0.10 or later
+- Neovim 0.11 or later
 - tmux 3.0 or later (recommended)
 - A Neovim session that runs inside tmux
 

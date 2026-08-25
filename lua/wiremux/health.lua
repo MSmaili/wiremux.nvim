@@ -244,6 +244,13 @@ end
 function M.check()
 	vim.health.start("wiremux")
 
+	local version = require("wiremux.version")
+	if version.supported() then
+		vim.health.ok("Neovim " .. tostring(vim.version()))
+	else
+		vim.health.error(version.requirement(), "Upgrade Neovim to " .. version.MIN_NVIM .. " or later")
+	end
+
 	local env_ok = check_tmux_environment()
 	if env_ok then
 		check_tmux_executable()
