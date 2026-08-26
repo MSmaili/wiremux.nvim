@@ -122,6 +122,7 @@ local function hide_session(session)
 	view.hide(session.view)
 end
 
+---Drop the whole draft. Used by the close paths, which act on the draft and not on one page.
 ---@param session wiremux.ui.ComposeSession
 local function request_discard(session)
 	if session.status == "editing" then
@@ -225,6 +226,23 @@ local function delete_page(session)
 	view.move_cursor_to_end(session.view)
 end
 
+---Discard the current page. The other pages stay. If the draft has one page, drop the
+---whole draft and close the window, without the close_behavior prompt.
+---@param session wiremux.ui.ComposeSession
+local function discard_page(session)
+	if session.status ~= "editing" or not session.view then
+		return
+	end
+	if #session.draft.pages == 1 then
+		request_discard(session)
+		return
+	end
+	draft_model.delete_current(session.draft)
+	view.load_text(session.view, draft_model.current(session.draft).text)
+	view.set_title(session.view, window_title(session))
+	view.move_cursor_to_end(session.view)
+end
+
 ---@param session wiremux.ui.ComposeSession
 local function request_close(session)
 	if session.status ~= "editing" then
@@ -264,7 +282,7 @@ local function session_handlers(session)
 			request_close(session)
 		end,
 		discard = function()
-			request_discard(session)
+			discard_page(session)
 		end,
 		files = function()
 			insert_file(session)

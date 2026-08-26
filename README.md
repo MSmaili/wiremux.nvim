@@ -119,9 +119,7 @@ The following example shows all default values from `config.lua`. Override only 
           { "q", mode = "n", desc = "Close draft" },
           { "<Esc>", mode = "n", desc = "Close draft" },
         },
-        -- discard has no default key. Set one to drop a draft without the
-        -- close_behavior prompt, e.g.:
-        -- discard = { "<C-d>", mode = "n", desc = "Discard draft" },
+        discard = { "Q", mode = "n", desc = "Discard compose page" },
         files = {
           { "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
         },
@@ -283,6 +281,8 @@ vim.keymap.set({ "n", "x" }, "<leader>ar", function()
   })
 end)
 ```
+
+Press `Q` to discard. If the draft has more than one page, `Q` removes only the current page and keeps the others open. If the draft has one page, `Q` drops the draft and closes the window without the close prompt. Use `<C-x>` instead when you want to empty the last page but keep the window open.
 
 Place the cursor on a placeholder and press `K` to preview its value. Press `K` again to focus the preview. Use `q` or `<Esc>` to close it. Wiremux shows `(empty)` for an empty value and a short message for an unavailable value. A `{changes}` preview uses diff syntax. The preview resolves the name once and does not change the page.
 

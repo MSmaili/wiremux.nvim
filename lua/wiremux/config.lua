@@ -120,6 +120,7 @@ local defaults = {
 					{ "q", mode = "n", desc = "Close draft" },
 					{ "<Esc>", mode = "n", desc = "Close draft" },
 				},
+				discard = { "Q", mode = "n", desc = "Discard compose page" },
 				files = {
 					{ "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
 				},

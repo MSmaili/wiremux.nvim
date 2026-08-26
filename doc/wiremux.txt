@@ -177,6 +177,11 @@ one paged draft. Use normal-mode `<C-p>` and `<C-n>` to navigate pages.
 `<C-x>` deletes the current page and moves to the next, wrapping to the first
 when necessary. With only one page, `<C-x>` clears its text instead.
 
+`Q` discards. With more than one page it removes only the current page and keeps
+the others. With one page it drops the draft and closes the window, without the
+close prompt. The close paths always act on the whole draft: `close_behavior =
+"discard"` and the Discard answer in the close prompt remove every page.
+
 Place the cursor on a placeholder and press normal-mode `K` to preview its
 value. Press `K` again to focus the read-only preview; use `q` or `<Esc>` to
 close it. The preview resolves one name and never changes the page. Empty
@@ -269,8 +274,7 @@ You can use a function for `label` to create dynamic display names:
           preview_placeholder = { "K", mode = "n" },
           previous = { "<C-p>", mode = "n" },
           next = { "<C-n>", mode = "n" },
-          -- Opt-in: discards the draft without the close prompt. No default key.
-          discard = { "<C-d>", mode = "n", desc = "Discard draft" },
+          discard = { "Q", mode = "n", desc = "Discard compose page" },
         },
       },
     },

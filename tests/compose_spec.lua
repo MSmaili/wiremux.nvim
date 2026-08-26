@@ -742,6 +742,108 @@ describe("compose UI", function()
 		assert.matches("cancel failed", error_message)
 	end)
 
+	it("discards only the current page and keeps the others", function()
+		local confirmed_pages
+		local cancelled = false
+		local sources = { { page = 1 }, { page = 2 }, { page = 3 } }
+		open("first", { source = sources[1], on_confirm = function() end })
+		open("second", { source = sources[2], on_confirm = function() end })
+		open("third", {
+			source = sources[3],
+			on_confirm = function(pages)
+				confirmed_pages = pages
+				return true
+			end,
+			on_cancel = function()
+				cancelled = true
+			end,
+		})
+		local buf = compose.get_buf()
+
+		mapping("<C-p>")()
+		assert.are.equal("second", vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1])
+		mapping("Q")()
+
+		-- The window stays open on the next page, and the draft loses only page two.
+		assert.are.equal(buf, compose.get_buf())
+		assert.are.equal("third", vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1])
+		assert.matches("%[2/2%]", title())
+		assert.is_false(cancelled)
+
+		mapping("<CR>")()
+
+		assert.are.equal(2, #confirmed_pages)
+		assert.are.equal("first", confirmed_pages[1].text)
+		assert.are.equal("third", confirmed_pages[2].text)
+		assert.are.equal(sources[1], confirmed_pages[1].source)
+		assert.are.equal(sources[3], confirmed_pages[2].source)
+	end)
+
+	it("selects the first page when it discards the last page", function()
+		open("first", { on_confirm = function() end })
+		open("second", { on_confirm = function() end })
+		local buf = compose.get_buf()
+
+		mapping("Q")()
+
+		assert.are.equal(buf, compose.get_buf())
+		assert.are.equal("first", vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1])
+		-- One page remains, so the title drops the page counter.
+		assert.are.equal(" Compose Message ", title())
+	end)
+
+	it("drops the draft and closes when it discards a one-page draft", function()
+		local cancelled = false
+		open("only", {
+			on_confirm = function()
+				error("confirm must not run")
+			end,
+			on_cancel = function()
+				cancelled = true
+			end,
+		})
+
+		mapping("Q")()
+
+		assert.is_nil(compose.get_buf())
+		assert.is_true(cancelled)
+	end)
+
+	it("discards without the close prompt", function()
+		local confirm_calls = 0
+		local vim_confirm = vim.fn.confirm
+		vim.fn.confirm = function()
+			confirm_calls = confirm_calls + 1
+			return 3
+		end
+		open_resolved("draft", { close_behavior = "ask" }, { on_confirm = function() end })
+
+		mapping("Q")()
+		vim.fn.confirm = vim_confirm
+
+		assert.are.equal(0, confirm_calls)
+		assert.is_nil(compose.get_buf())
+	end)
+
+	it("drops every page when close_behavior discards a multi-page draft", function()
+		local cancelled = false
+		open_resolved("first", { close_behavior = "discard" }, { on_confirm = function() end })
+		open_resolved("second", { close_behavior = "discard" }, {
+			on_confirm = function()
+				error("confirm must not run")
+			end,
+			on_cancel = function()
+				cancelled = true
+			end,
+		})
+
+		-- Closing acts on the draft, not on one page, so both pages go.
+		mapping("q")()
+
+		assert.is_nil(compose.get_buf())
+		assert.is_true(cancelled)
+	end)
+
 	it("keeps the draft active after an external window close", function()
 		local events = 0
 		vim.api.nvim_create_autocmd("User", {
