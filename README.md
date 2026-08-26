@@ -284,17 +284,15 @@ vim.keymap.set({ "n", "x" }, "<leader>ar", function()
 end)
 ```
 
-Place the cursor on a placeholder and press `K` to preview its value. Press `K` again to focus the preview. Use `q` or `<Esc>` to close it. Wiremux shows `(empty)` for an empty value and a short message for an unavailable value. A `{changes}` preview uses diff syntax. The preview uses a temporary capture and does not change the page.
+Place the cursor on a placeholder and press `K` to preview its value. Press `K` again to focus the preview. Use `q` or `<Esc>` to close it. Wiremux shows `(empty)` for an empty value and a short message for an unavailable value. A `{changes}` preview uses diff syntax. The preview resolves the name once and does not change the page.
 
-Wiremux keeps the placeholder template unchanged while you edit it. Each page has a separate placeholder capture. Wiremux creates this capture when it adds the page. Later edits do not change the stored values. Thus, identical pages can use different values from different editor locations.
+Wiremux keeps the placeholder template unchanged while you edit it. Each page stores the **origin** that it came from. One rule covers the whole model: **the origin holds frozen state, and everything else resolves when you send the draft.**
 
-When you confirm the draft, Wiremux copies the stored capture for each page. It resolves only valid placeholder names that you added later. It uses the copied values to prepare the page and then discards the copy. Wiremux applies these three rules:
+The origin holds the source path, row, column, visual selection, and the text of the source line. These values never change after Wiremux creates the page, so identical pages can produce different text from different editor locations. Every other value resolves at send time: buffer contents, diagnostics, Git output, `{buffers}`, and `{quickfix}`.
 
-1. Wiremux uses a value that it stored when it created the page.
-2. If the first capture did not produce a value, the placeholder remains literal. Wiremux does not try the name again.
-3. If Wiremux did not try a name before, it resolves the name once when you confirm the page. If no value is available, the placeholder remains literal.
+It does not matter when you type a placeholder. A name in the initial text and a name that you add later follow the same rule. If no value is available for a name, the placeholder remains literal, and Wiremux tries again the next time you send.
 
-For each page, Wiremux captures only names that are already in the text. If you add a new placeholder later, Wiremux resolves it against the page origin. The source path, row, column, and visual selection remain fixed. Buffer contents, diagnostics, and Git output remain live. If the source buffer is unavailable, buffer-dependent names remain literal unless Wiremux finds a loaded buffer with the captured path. `{buffers}` and `{quickfix}` use live global state.
+`{diagnostics}` and `{diagnostics_all}` need the source buffer. They remain literal if you delete that buffer, unless Wiremux finds a loaded buffer with the same path. Every other placeholder survives, because `{line}` and `{selection}` are stored in the origin and `{changes}` reads the file from disk.
 
 When a draft exists, `on_new_payload` accepts `"ask"`, `"keep"`, `"replace"`, or `"append"`. The dialog selects **Keep Draft** by default. A non-empty `send()` call updates the session configuration, callbacks, and delivery options. This update also occurs when you keep the existing pages. A `send()` call without text only reopens a hidden draft.
 
@@ -362,7 +360,7 @@ Item-level `pre_keys` and `post_keys` values override call-level values.
 
 ## Placeholders
 
-Wiremux captures and replaces `{placeholders}` before delivery. Put each placeholder name in one pair of braces. The name must match `[A-Za-z_][A-Za-z0-9_]*`.
+Wiremux replaces `{placeholders}` when it sends the text. Put each placeholder name in one pair of braces. The name must match `[A-Za-z_][A-Za-z0-9_]*`.
 
 | Placeholder         | Replacement                                    |
 | ------------------- | ---------------------------------------------- |
@@ -380,18 +378,18 @@ Wiremux captures and replaces `{placeholders}` before delivery. Put each placeho
 
 Wiremux handles resolver results as follows:
 
-| Resolver outcome  | Stored value | Materialized text            |
-| ----------------- | ------------ | ---------------------------- |
-| Non-empty string  | The string   | Replaces the placeholder     |
-| Empty string `""` | Empty string | Removes the placeholder text |
-| `nil`             | No value     | Placeholder remains literal  |
-| Resolver error    | No value     | Placeholder remains literal  |
-| Non-string value  | No value     | Placeholder remains literal  |
-| Unknown name      | No value     | Placeholder remains literal  |
+| Resolver outcome  | Resulting text               |
+| ----------------- | ---------------------------- |
+| Non-empty string  | Replaces the placeholder     |
+| Empty string `""` | Removes the placeholder text |
+| `nil`             | Placeholder remains literal  |
+| Resolver error    | Placeholder remains literal  |
+| Non-string value  | Placeholder remains literal  |
+| Unknown name      | Placeholder remains literal  |
 
-A capture records each name that Wiremux tries to resolve. It also records names that do not have a value. Wiremux does not try these names again in a later editor state. `context.materialize()` only reads captured values and never calls a resolver. Set `placeholders = false` on an item to send text such as `{file}` without replacement.
+Wiremux resolves each name one time for each send, and only for the item that you send. It does not resolve a placeholder before you choose a target, so a library of ten items that contains `{changes}` starts one `git diff` process instead of ten. Set `placeholders = false` on an item to send text such as `{file}` without replacement; that also keeps names literal if you add them in compose.
 
-Wiremux prepares each send request before it opens a picker or compose window. For compose drafts, Wiremux keeps the original text in each page. When you confirm the draft, Wiremux prepares one payload. It then selects a target and sends the payload.
+Wiremux captures the source origin one time for each `send()` call, before it opens a picker or a compose window. It then resolves the text of the item that you send. For compose drafts, Wiremux keeps the original text in each page and resolves each page against that page's origin when you confirm the draft.
 
 You can add custom placeholders. A resolver name must start with a letter or underscore. The remaining characters must be letters, digits, or underscores:
 
@@ -411,7 +409,11 @@ require("wiremux").setup({
 })
 ```
 
-Each `setup()` call replaces the previous set of custom resolvers. Built-in resolvers remain available. Keep each resolver fast. Do not change editor state from a resolver. Within one `send()` call, every candidate captures at the same editor state, so Wiremux resolves each placeholder name once and shares the result across the call. A resolver can accept an optional page origin for a placeholder added in compose. The origin contains `bufnr`, `path`, `row`, `col`, and `selection`. The row starts at one. The column is a zero-based byte index. Existing zero-argument resolvers continue to work, but they are not source-aware during deferred resolution. Put a placeholder in the initial page text when its value must be frozen at page creation.
+Each `setup()` call replaces the previous set of custom resolvers. Built-in resolvers remain available. Keep each resolver fast. Do not change editor state from a resolver.
+
+Wiremux calls a resolver with the origin of the text that it sends. The origin contains `bufnr`, `path`, `row`, `col`, `selection`, and `line`. The row starts at one. The column is a zero-based byte index. Wiremux passes a copy, so a resolver cannot change the stored origin.
+
+Read the origin when a value must not change after the send starts. A zero-argument resolver still works, but it runs when Wiremux sends the text, so it reads the editor state at that moment. This difference matters only for a compose draft that stays open, because a direct send resolves immediately.
 
 ## Advanced configuration
 

@@ -31,7 +31,7 @@ Features:
 
   - Create/focus/close named tmux targets
   - Send text (or pick from a list of prompts)
-  - Capture and materialize placeholders like {file} and {diagnostics_all}
+  - Resolve placeholders like {file} and {diagnostics_all} when sending
   - Store instance metadata in tmux (survives Neovim restarts)
   - Lazy loaded (near zero startup cost)
 
@@ -179,33 +179,27 @@ when necessary. With only one page, `<C-x>` clears its text instead.
 
 Place the cursor on a placeholder and press normal-mode `K` to preview its
 value. Press `K` again to focus the read-only preview; use `q` or `<Esc>` to
-close it. Preview resolution uses a temporary capture and never changes the
-page. Empty values appear as `(empty)`, unavailable values show a short
-message, and `{changes}` uses diff syntax.
+close it. The preview resolves one name and never changes the page. Empty
+values appear as `(empty)`, unavailable values show a short message, and
+`{changes}` uses diff syntax.
 
-Each page owns an independent placeholder capture created when the page is
-added. Stored results and unavailable attempts form its point-in-time snapshot.
-Editing raw text does not refresh or mutate that snapshot, so identical pages
-added from different editor states can materialize differently.
+Each page stores the origin it was added from. One rule covers the model: the
+origin holds frozen state, and everything else resolves when the draft is sent.
 
-At confirmation, Wiremux clones each page capture into a temporary working
-capture, resolves only newly added valid names, and materializes by lookup.
-The three-tier rule is:
+The origin holds the source path, row, column, visual selection, and the text
+of the source line. These never change after the page is created, so identical
+pages added from different editor states can produce different text. Every
+other value resolves at send time: buffer contents, diagnostics, Git output,
+buffers, and quickfix.
 
-  1. A value captured when the page was created wins.
-  2. A name attempted eagerly but unavailable stays literal and is not retried.
-  3. A previously uncaptured name resolves once for that page at confirmation;
-     unavailable results stay literal.
+Typing order does not matter. A name in the initial text and a name added later
+follow the same rule. An unavailable name stays literal and is retried on the
+next send. Pages are joined with one blank line and delivered as one payload.
 
-The working capture is discarded after preparing the payload; the stored page
-capture remains unchanged. Pages are joined with one blank line and delivered
-as one prepared payload.
-
-Every page captures only names in its initial text. Names added later resolve
-against the page origin. Its path, row, column, and visual selection remain
-fixed; buffer contents, diagnostics, and Git output are live. If the source
-buffer is unavailable, buffer-dependent names remain literal unless a loaded
-buffer has the captured path. buffers and quickfix use live global state.
+{diagnostics} and {diagnostics_all} need the source buffer and stay literal if
+it is deleted, unless a loaded buffer has the same path. Every other
+placeholder survives, because {line} and {selection} are stored in the origin
+and {changes} reads the file from disk.
 
 Supported new-payload policies are "ask", "keep", "replace", and "append".
 The ask dialog defaults to Keep Draft. The latest non-empty invocation supplies
@@ -611,7 +605,7 @@ You can also override filters for specific actions using `opts.filter`:
 ==============================================================================
 5. PLACEHOLDERS (CONTEXT)                                     *wiremux-placeholders*
 
-Wiremux captures and materializes `{placeholders}` before delivery. Names must
+Wiremux replaces `{placeholders}` when it sends the text. Names must
 match `[A-Za-z_][A-Za-z0-9_]*` inside one pair of braces.
 
 Built-ins:
@@ -630,32 +624,32 @@ Built-ins:
 
 Resolver outcomes:
 
-  non-empty string   stored and substituted
-  empty string ""    stored and removes the placeholder text
-  nil                not stored; placeholder remains literal
-  resolver error     not stored; placeholder remains literal
-  non-string value   not stored; placeholder remains literal
-  unknown name       not stored; placeholder remains literal
+  non-empty string   substituted
+  empty string ""    removes the placeholder text
+  nil                placeholder remains literal
+  resolver error     placeholder remains literal
+  non-string value   placeholder remains literal
+  unknown name       placeholder remains literal
 
-A capture records every attempted name in its capture set, including
-unavailable outcomes. Failed eager captures therefore are not retried against a
-later editor state. `context.materialize()` performs lookup only and never
-invokes a resolver. A send item with `placeholders = false` disables capture
-and materialization, preserving all placeholder-shaped text.
+Each name resolves once per send, and only for the item that is sent. Nothing
+resolves before a target is chosen, so a ten-item library containing
+{changes} starts one git process instead of ten. A send item with
+`placeholders = false` disables resolution for that item and for names typed
+into its draft later, preserving all placeholder-shaped text.
 
-Behavior correction: empty strings are successful values and now remove their
-placeholder during materialization. Older behavior could leave it literal.
+Behavior correction: empty strings are successful values and remove their
+placeholder. Older behavior could leave it literal.
 
 Custom resolver names begin with a letter or underscore and continue with
 letters, digits, or underscores. Custom resolvers belong to the latest
 `setup()` call; repeated setup replaces the previous custom set while retaining
-built-ins. Resolvers should be fast and side-effect-free. Within one `send()`
-call every candidate captures at the same editor state, so each placeholder name
-resolves once and all candidates share the result. A resolver can accept
-an optional page origin when a placeholder is added in compose. The origin has
-`bufnr`, `path`, `row`, `col`, and `selection` fields. row is one-based; col is
-a zero-based byte index. Existing zero-argument resolvers still work, but they
-are not source-aware during deferred resolution. Put a placeholder in the
+built-ins. Resolvers should be fast and side-effect-free. A resolver receives
+the origin of the text being sent. The origin has `bufnr`, `path`, `row`,
+`col`, `selection`, and `line` fields. row is one-based; col is a zero-based
+byte index. Wiremux passes a copy, so a resolver cannot mutate the stored
+origin. Read the origin when a value must not change after the send begins.
+Zero-argument resolvers still work, but they run at send time and read the
+editor state at that moment; this matters only for a draft left open. Put a
 initial page text when its value must be frozen at page creation.
 
 Custom resolvers:
@@ -913,12 +907,16 @@ instances share the same targets.
 Send pipeline ~
 
 A public send candidate becomes one prepared request containing raw text,
-delivery options, compose configuration, and a point-in-time placeholder
-capture. Direct sends materialize that stored capture without extending it.
-Compose pages retain raw text and independent captures; at
-confirmation, a temporary working capture may add names typed later. The
-prepared payload then crosses target selection and backend delivery boundaries.
-Compose and backends do not inspect each other's domain objects.
+delivery options, compose configuration, and a frozen source context. The
+source context holds the origin captured once for the call and a flag for
+`placeholders = false`. Nothing resolves during preparation.
+
+A direct send resolves its raw text against the origin at delivery. Compose
+pages retain raw text and their own source context; at confirmation each page
+resolves separately against its own origin. The payload then crosses target
+selection and backend delivery boundaries. Compose and backends do not inspect
+each other's domain objects, and compose treats the page source context as
+opaque.
 
 Table ownership ~
 
