@@ -12,6 +12,11 @@ local M = {}
 
 ---@alias wiremux.context.Resolver fun(origin?: wiremux.context.ResolverOrigin): string?
 
+---@class wiremux.context.Source Frozen source context for one prepared request or compose page.
+---@field origin wiremux.context.ResolverOrigin
+---@field resolve boolean False when the item set `placeholders = false`, which keeps every
+---placeholder literal, including names typed into the draft later.
+
 ---Capture the current source location.
 ---@return wiremux.context.ResolverOrigin
 function M.capture()

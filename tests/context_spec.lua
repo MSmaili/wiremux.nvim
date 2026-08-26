@@ -116,21 +116,18 @@ describe("placeholder context", function()
 		end)
 	end)
 
-	describe("capture", function()
-		it("stores empty strings and materializes them to empty text", function()
+	describe("resolve", function()
+		it("removes a placeholder that resolves to an empty string", function()
 			context.configure({
 				empty = function()
 					return ""
 				end,
 			})
 
-			local capture = context.capture("before {empty} after")
-
-			assert.are.same({ empty = "" }, capture.results)
-			assert.are.equal("before  after", context.materialize("before {empty} after", capture))
+			assert.are.equal("before  after", context.resolve("before {empty} after"))
 		end)
 
-		it("records every attempted name and preserves unresolved tokens", function()
+		it("keeps unknown, failed, nil and non-string names literal", function()
 			context.configure({
 				failed = function()
 					error("failed")
@@ -144,10 +141,7 @@ describe("placeholder context", function()
 			})
 			local text = "{unknown} {failed} {nil_value} {invalid}"
 
-			local capture = context.capture(text)
-
-			assert.are.same({ unknown = false, failed = false, nil_value = false, invalid = false }, capture.results)
-			assert.are.equal(text, context.materialize(text, capture))
+			assert.are.equal(text, context.resolve(text))
 		end)
 
 		it("resolves repeated names once in sorted order", function()
@@ -163,13 +157,11 @@ describe("placeholder context", function()
 				end,
 			})
 
-			local capture = context.capture("{zeta} {alpha} {zeta}")
-
+			assert.are.equal("z a z", context.resolve("{zeta} {alpha} {zeta}"))
 			assert.are.same({ "alpha", "zeta" }, calls)
-			assert.are.same({ alpha = "a", zeta = "z" }, capture.results)
 		end)
 
-		it("does no resolver work when no placeholders are requested", function()
+		it("does no resolver work when the text has no placeholder", function()
 			local calls = 0
 			context.configure({
 				unused = function()
@@ -178,35 +170,24 @@ describe("placeholder context", function()
 				end,
 			})
 
-			local capture = context.capture("plain text")
-
+			assert.are.equal("plain text", context.resolve("plain text"))
 			assert.are.equal(0, calls)
-			assert.are.same({ enabled = true, results = {} }, capture)
 		end)
-	end)
 
-	describe("extend", function()
-		it("adds new names without mutating the stored capture", function()
-			local current = { seeded = "creation", added = "confirmation" }
+		it("retries a name that was unavailable in an earlier resolve", function()
+			local available = false
 			context.configure({
-				seeded = function()
-					return current.seeded
-				end,
-				added = function()
-					return current.added
+				late = function()
+					return available and "ready" or nil
 				end,
 			})
-			local stored = context.capture("{seeded}")
-			current.seeded = "changed"
 
-			local extended = context.extend(stored, "{seeded} {added}")
-
-			assert.are.same({ seeded = "creation" }, stored.results)
-			assert.are.same({ seeded = "creation", added = "confirmation" }, extended.results)
-			assert.are.equal("creation confirmation", context.materialize("{seeded} {added}", extended))
+			assert.are.equal("{late}", context.resolve("{late}"))
+			available = true
+			assert.are.equal("ready", context.resolve("{late}"))
 		end)
 
-		it("uses a copied page origin for late built-in and custom resolvers", function()
+		it("passes a copied origin to built-in and custom resolvers", function()
 			local received_origin
 			context.configure({
 				custom = function(origin)
@@ -225,20 +206,34 @@ describe("placeholder context", function()
 					end,
 				}
 			end
-			local origin = { bufnr = -1, path = "/project/source.lua", row = 4, col = 2, selection = "" }
+			local origin = {
+				bufnr = -1,
+				path = "/project/source.lua",
+				row = 4,
+				col = 2,
+				selection = "",
+				line = "",
+			}
 
-			local ok, extended = pcall(context.extend, context.capture("plain"), "{changes} {custom}", origin)
+			local ok, payload = pcall(context.resolve, "{changes} {custom}", origin)
 			vim.system = system
 
-			assert(ok, extended)
+			assert(ok, payload)
+			assert.are.equal("diff custom", payload)
 			assert.are.same({ "git", "diff", "HEAD", "--", "/project/source.lua" }, command)
 			assert.are.same({ text = true, cwd = "/project" }, system_options)
-			assert.are.equal("diff", extended.results.changes)
-			assert.are.same({ bufnr = -1, path = "mutated", row = 4, col = 2, selection = "" }, received_origin)
+			assert.are.same({
+				bufnr = -1,
+				path = "mutated",
+				row = 4,
+				col = 2,
+				selection = "",
+				line = "",
+			}, received_origin)
 			assert.are.equal("/project/source.lua", origin.path)
 		end)
 
-		it("keeps the captured path while using a live or reopened origin buffer", function()
+		it("keeps frozen values and degrades only buffer-dependent names", function()
 			local bufnr = vim.api.nvim_create_buf(false, true)
 			vim.api.nvim_buf_set_name(bufnr, "/tmp/wiremux-origin.lua")
 			vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "first", "source line" })
@@ -256,27 +251,19 @@ describe("placeholder context", function()
 			}
 			vim.api.nvim_buf_set_name(bufnr, "/tmp/wiremux-renamed.lua")
 
-			local extended = context.extend(
-				context.capture("plain"),
-				"{file} {filename} {position} {line} {selection} {this} {diagnostics} {diagnostics_all}",
-				origin
-			)
+			assert.are.equal(origin.path, context.resolve("{file}", origin))
+			assert.are.equal("wiremux-origin.lua", context.resolve("{filename}", origin))
+			assert.are.equal(origin.path .. ":2:1", context.resolve("{position}", origin))
+			assert.are.equal("source line", context.resolve("{line}", origin))
+			assert.are.equal("chosen text", context.resolve("{selection}", origin))
+			assert.are.equal(origin.path .. ":2:1\nchosen text", context.resolve("{this}", origin))
+			assert.matches("origin problem", context.resolve("{diagnostics}", origin))
+			assert.matches("origin problem", context.resolve("{diagnostics_all}", origin))
 
-			assert.are.equal(origin.path, extended.results.file)
-			assert.are.equal("wiremux-origin.lua", extended.results.filename)
-			assert.are.equal(origin.path .. ":2:1", extended.results.position)
-			assert.are.equal("source line", extended.results.line)
-			assert.are.equal("chosen text", extended.results.selection)
-			assert.are.equal(origin.path .. ":2:1\nchosen text", extended.results.this)
-			assert.matches("/tmp/wiremux%-origin.lua", extended.results.diagnostics)
-			assert.matches("origin problem", extended.results.diagnostics_all)
 			vim.api.nvim_buf_delete(bufnr, { force = true })
 
 			-- The line is frozen in the origin, so only buffer-dependent names degrade.
-			assert.are.same(
-				{ line = "source line", diagnostics = false },
-				context.extend(context.capture("plain"), "{line} {diagnostics}", origin).results
-			)
+			assert.are.equal("source line {diagnostics}", context.resolve("{line} {diagnostics}", origin))
 
 			local reopened = vim.api.nvim_create_buf(false, true)
 			vim.api.nvim_buf_set_name(reopened, origin.path)
@@ -284,10 +271,7 @@ describe("placeholder context", function()
 			vim.diagnostic.set(namespace, reopened, {
 				{ lnum = 1, col = 1, message = "reopened problem", severity = vim.diagnostic.severity.ERROR },
 			})
-			assert.matches(
-				"reopened problem",
-				context.extend(context.capture("plain"), "{diagnostics}", origin).results.diagnostics
-			)
+			assert.matches("reopened problem", context.resolve("{diagnostics}", origin))
 			vim.api.nvim_buf_delete(reopened, { force = true })
 		end)
 
@@ -295,13 +279,11 @@ describe("placeholder context", function()
 			local namespace = vim.api.nvim_create_namespace("wiremux-literal-path-test")
 			local collision = vim.api.nvim_create_buf(false, true)
 			vim.api.nvim_buf_set_name(collision, "/tmp/wiremux-x.lua")
-			vim.api.nvim_buf_set_lines(collision, 0, -1, false, { "collision" })
 			vim.diagnostic.set(namespace, collision, {
 				{ lnum = 0, col = 0, message = "collision problem", severity = vim.diagnostic.severity.ERROR },
 			})
 			local exact = vim.api.nvim_create_buf(false, true)
 			vim.api.nvim_buf_set_name(exact, "/tmp/wiremux-[x].lua")
-			vim.api.nvim_buf_set_lines(exact, 0, -1, false, { "exact" })
 			vim.diagnostic.set(namespace, exact, {
 				{ lnum = 0, col = 0, message = "exact problem", severity = vim.diagnostic.severity.ERROR },
 			})
@@ -314,9 +296,7 @@ describe("placeholder context", function()
 				line = "exact",
 			}
 
-			local extended = context.extend(context.capture("plain"), "{diagnostics}", origin)
-
-			assert.matches("exact problem", extended.results.diagnostics)
+			assert.matches("exact problem", context.resolve("{diagnostics}", origin))
 			vim.api.nvim_buf_delete(collision, { force = true })
 			vim.api.nvim_buf_delete(exact, { force = true })
 		end)
@@ -344,110 +324,6 @@ describe("placeholder context", function()
 
 			assert.are.same({ text = true }, options)
 		end)
-
-		it("never retries a failed eager capture", function()
-			local calls = 0
-			local available = false
-			context.configure({
-				eager = function()
-					calls = calls + 1
-					return available and "late" or nil
-				end,
-			})
-			local stored = context.capture("{eager}")
-			available = true
-
-			local extended = context.extend(stored, "{eager}")
-
-			assert.are.equal(1, calls)
-			assert.are.same({ eager = false }, extended.results)
-			assert.are.equal("{eager}", context.materialize("{eager}", extended))
-		end)
-
-		it("records new attempts as strings or unavailable results", function()
-			context.configure({
-				empty = function()
-					return ""
-				end,
-				nil_value = function()
-					return nil
-				end,
-				failed = function()
-					error("failed")
-				end,
-				invalid = function()
-					return {}
-				end,
-			})
-
-			local extended =
-				context.extend(context.capture("plain"), "{empty} {nil_value} {failed} {invalid} {unknown}")
-
-			assert.are.same({
-				empty = "",
-				nil_value = false,
-				failed = false,
-				invalid = false,
-				unknown = false,
-			}, extended.results)
-		end)
-
-		it("resolves repeated new names once in sorted order", function()
-			local calls = {}
-			context.configure({
-				second = function()
-					table.insert(calls, "second")
-					return "2"
-				end,
-				first = function()
-					table.insert(calls, "first")
-					return "1"
-				end,
-			})
-
-			local extended = context.extend(context.capture("plain"), "{second} {first} {second}")
-
-			assert.are.same({ "first", "second" }, calls)
-			assert.are.same({ first = "1", second = "2" }, extended.results)
-		end)
-
-		it("clones disabled captures and leaves text literal", function()
-			local stored = disabled_capture()
-			local extended = context.extend(stored, "{file}")
-
-			assert.are_not.equal(stored, extended)
-			assert.are_not.equal(stored.results, extended.results)
-			assert.are.equal("{file}", context.materialize("{file}", extended))
-		end)
-	end)
-
-	describe("materialize", function()
-		it("never invokes a resolver", function()
-			local calls = 0
-			context.configure({
-				value = function()
-					calls = calls + 1
-					return "resolved"
-				end,
-			})
-			local capture = context.capture("{value}")
-			calls = 0
-
-			assert.are.equal("resolved resolved", context.materialize("{value} {value}", capture))
-			assert.are.equal(0, calls)
-		end)
-
-		it("rejects malformed captures", function()
-			assert.has_error(function()
-				context.extend(nil, "text")
-			end)
-			assert.has_error(function()
-				context.materialize("text", nil)
-			end)
-			assert.has_error(function()
-				context.materialize("{value}", { enabled = true, results = { value = true } })
-			end)
-		end)
 	end)
 end)
 
@@ -465,18 +341,20 @@ describe("placeholder grammar", function()
 		for _, case in ipairs(cases) do
 			local token = "{" .. case.name .. "}"
 			local discovered = placeholder.discover(token)
-			local capture = {
-				enabled = true,
-				results = case.valid and { [case.name] = "resolved" } or {},
-			}
+			context.configure(case.valid and {
+				[case.name] = function()
+					return "resolved"
+				end,
+			} or {})
 			local regex = vim.regex(placeholder.vim_highlight_pattern)
 			local start_index, end_index = regex:match_str(token)
 			local highlighted = start_index == 0 and end_index == #token
 
 			assert.are.equal(case.valid, placeholder.is_valid_name(case.name))
 			assert.are.same(case.valid and { case.name } or {}, discovered)
-			assert.are.equal(case.valid and "resolved" or token, context.materialize(token, capture))
+			assert.are.equal(case.valid and "resolved" or token, context.resolve(token))
 			assert.are.equal(case.valid, highlighted)
 		end
+		context.configure()
 	end)
 end)

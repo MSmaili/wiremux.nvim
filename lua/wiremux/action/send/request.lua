@@ -16,10 +16,9 @@ local validate = require("wiremux.utils.validate")
 ---@field post_keys? string|string[]
 
 ---@class wiremux.action.PreparedSendRequest Complete execution input fixed before picker or compose interaction.
----@field raw_text string Raw template text; never overwritten with a materialized payload.
+---@field raw_text string Raw template text; never overwritten with a resolved payload.
 ---@field label string
----@field placeholder_capture wiremux.context.PlaceholderCapture Point-in-time capture owned by this request and transferred to its compose page when applicable.
----@field origin? wiremux.context.ResolverOrigin Source location transferred to a compose page for deferred resolution.
+---@field source wiremux.context.Source Frozen source context, transferred to the compose page when applicable.
 ---@field compose? wiremux.config.ComposeSessionConfig
 ---@field delivery wiremux.action.SendOptions
 ---@field target_title? string Target creation title, separate from the compose window title.
@@ -33,7 +32,6 @@ local validate = require("wiremux.utils.validate")
 ---@field compose wiremux.action.ComposeSelection
 ---@field global_compose wiremux.config.ComposeSessionConfig
 ---@field origin wiremux.context.ResolverOrigin Source location captured one time for this call.
----@field capture_memo table<string, string|false> Resolver results shared by every candidate of this call.
 
 ---@param post_keys? string|string[]
 ---@return string[]
@@ -79,7 +77,6 @@ function M.prepare_context(opts, config)
 			or { value = defaults.compose, path = "actions.send.compose" },
 		global_compose = config.ui.compose,
 		origin = context.capture_origin(),
-		capture_memo = {},
 	}, {}
 end
 
@@ -128,16 +125,6 @@ local function prepare_delivery(item, preparation)
 end
 
 ---@param item wiremux.action.SendItem
----@param memo table<string, string|false> Shared so that `{changes}` runs one git process per call.
----@return wiremux.context.PlaceholderCapture capture
-local function prepare_capture(item, memo)
-	if item.placeholders == false then
-		return { enabled = false, results = {} }
-	end
-	return context.capture(item.value, memo)
-end
-
----@param item wiremux.action.SendItem
 ---@param preparation wiremux.action.SendPreparationContext
 ---@return wiremux.action.PreparedSendRequest? request
 ---@return wiremux.Error[] errors
@@ -157,14 +144,10 @@ function M.prepare(item, preparation)
 		return nil, delivery_errors
 	end
 
-	local origin = compose_config and item.placeholders ~= false and preparation.origin or nil
-	local capture = prepare_capture(item, preparation.capture_memo)
-
 	return {
 		raw_text = item.value,
 		label = item.label or item.value,
-		placeholder_capture = capture,
-		origin = origin,
+		source = { origin = preparation.origin, resolve = item.placeholders ~= false },
 		compose = compose_config,
 		delivery = delivery,
 		target_title = item.title,

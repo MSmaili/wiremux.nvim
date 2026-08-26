@@ -6,9 +6,9 @@ local M = {}
 
 ---@class wiremux.ui.ComposeOpenOptions
 ---@field on_confirm fun(pages: wiremux.ui.ComposePage[]): boolean?
----@field on_preview? fun(capture: any, name: string): string?, string?
+---@field on_preview? fun(source: any, name: string): string?, string?
 ---@field on_cancel? fun()
----@field capture? any
+---@field source? any
 ---@field config wiremux.config.ComposeSessionConfig Resolved session configuration
 
 ---@alias wiremux.ui.ComposeLifecycle "editing"|"confirming"|"sent"|"cancelled"
@@ -19,7 +19,7 @@ local M = {}
 ---@field title? string
 ---@field draft wiremux.ui.ComposeDraft
 ---@field on_confirm? fun(pages: wiremux.ui.ComposePage[]): boolean?
----@field on_preview? fun(capture: any, name: string): string?, string?
+---@field on_preview? fun(source: any, name: string): string?, string?
 ---@field on_cancel? fun()
 ---@field status wiremux.ui.ComposeLifecycle
 
@@ -191,7 +191,7 @@ local function preview_placeholder(session)
 	if name == nil then
 		return
 	end
-	local ok, text, syntax = pcall(session.on_preview, draft_model.current(session.draft).capture, name)
+	local ok, text, syntax = pcall(session.on_preview, draft_model.current(session.draft).source, name)
 	if not ok then
 		notify.error("wiremux placeholder preview failed: " .. tostring(text))
 		return
@@ -296,11 +296,11 @@ end
 
 ---@param session wiremux.ui.ComposeSession
 ---@param text string
----@param capture? any
-local function apply_new_payload_policy(session, text, capture)
+---@param source? any
+local function apply_new_payload_policy(session, text, source)
 	save_current_page(session)
 	if draft_model.is_empty(session.draft) then
-		draft_model.replace(session.draft, text, capture)
+		draft_model.replace(session.draft, text, source)
 		if session.view then
 			view.load_text(session.view, text)
 		end
@@ -319,12 +319,12 @@ local function apply_new_payload_policy(session, text, capture)
 	end
 
 	if policy == "replace" then
-		draft_model.replace(session.draft, text, capture)
+		draft_model.replace(session.draft, text, source)
 		if session.view then
 			view.load_text(session.view, text)
 		end
 	elseif policy == "append" then
-		draft_model.append(session.draft, text, capture)
+		draft_model.append(session.draft, text, source)
 		if session.view then
 			view.load_text(session.view, text)
 		end
@@ -353,7 +353,7 @@ local function create_session(text, config, opts)
 		view = nil,
 		config = config,
 		title = config.title or " Compose Message ",
-		draft = draft_model.new(text, opts.capture),
+		draft = draft_model.new(text, opts.source),
 		on_confirm = opts.on_confirm,
 		on_preview = opts.on_preview,
 		on_cancel = opts.on_cancel,
@@ -369,7 +369,7 @@ local function create_session(text, config, opts)
 	return session
 end
 
----Open a compose draft with raw template text and an opaque page capture.
+---Open a compose draft with raw template text and an opaque page source context.
 ---@param text string
 ---@param opts? wiremux.ui.ComposeOpenOptions
 function M.open(text, opts)
@@ -394,7 +394,7 @@ function M.open(text, opts)
 	if active_session and active_session.status == "editing" then
 		local session = active_session
 		refresh_session(session, config, opts)
-		apply_new_payload_policy(session, text, opts.capture)
+		apply_new_payload_policy(session, text, opts.source)
 		if session.view then
 			view.set_title(session.view, window_title(session))
 		end

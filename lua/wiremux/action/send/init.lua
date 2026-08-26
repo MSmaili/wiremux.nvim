@@ -1,6 +1,6 @@
 local M = {}
+local context = require("wiremux.context")
 local delivery = require("wiremux.action.send.delivery")
-local materialize = require("wiremux.action.send.materialize")
 local notify = require("wiremux.utils.notify")
 local request_builder = require("wiremux.action.send.request")
 
@@ -56,23 +56,54 @@ local function deliver_payload(payload, options, target_title)
 	end
 end
 
+---Join ordered compose pages into one payload, resolving each against its own source.
+---@param pages wiremux.ui.ComposePage[]
+---@return string? payload
+---@return string? error
+local function compose_payload(pages)
+	if type(pages) ~= "table" or not vim.islist(pages) then
+		return nil, "Failed to prepare compose payload: pages must be a list"
+	end
+
+	local payloads = {}
+	for index, page in ipairs(pages) do
+		local source = type(page) == "table" and type(page.text) == "string" and page.source or nil
+		if type(source) ~= "table" then
+			return nil, string.format("Failed to prepare compose page %d: malformed page", index)
+		end
+		local text = source.resolve and context.resolve(page.text, source.origin) or page.text
+		payloads[index] = text:gsub("%s+$", "")
+	end
+	return table.concat(payloads, "\n\n"), nil
+end
+
+---@param source wiremux.context.Source
+---@param name string
+---@return string? text
+---@return string? syntax
+local function preview_placeholder(source, name)
+	if not source.resolve then
+		return "Placeholder replacement is disabled for this page.", "text"
+	end
+	local value = context.get(name, source.origin)
+	if value == nil then
+		return string.format("No value is available for {%s}.", name), "text"
+	end
+	return value == "" and "(empty)" or value, name == "changes" and "diff" or "text"
+end
+
 ---@param request wiremux.action.PreparedSendRequest
 local function execute_request(request)
 	local delivery_options = request.delivery
 	local target_title = request.target_title
+	local source = request.source
 	if request.compose then
 		require("wiremux.ui.compose").open(request.raw_text, {
 			config = request.compose,
-			capture = { placeholder_capture = request.placeholder_capture, origin = request.origin },
-			on_preview = function(capture, name)
-				local value, err = materialize.preview_placeholder(capture, name)
-				if value == nil then
-					return assert(err), "text"
-				end
-				return value == "" and "(empty)" or value, name == "changes" and "diff" or "text"
-			end,
+			source = source,
+			on_preview = preview_placeholder,
 			on_confirm = function(pages)
-				local payload, err = materialize.compose(pages)
+				local payload, err = compose_payload(pages)
 				if payload == nil then
 					notify.error(err)
 					return false
@@ -86,7 +117,7 @@ local function execute_request(request)
 		return
 	end
 
-	local payload = materialize.direct(request)
+	local payload = source.resolve and context.resolve(request.raw_text, source.origin) or request.raw_text
 	deliver_payload(payload, delivery_options, target_title)
 end
 

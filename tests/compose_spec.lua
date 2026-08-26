@@ -53,7 +53,7 @@ describe("compose UI", function()
 		opts = opts or {}
 		compose.open(text, {
 			config = session_config(overrides),
-			capture = opts.capture,
+			source = opts.source,
 			on_confirm = opts.on_confirm or function() end,
 			on_preview = opts.on_preview,
 			on_cancel = opts.on_cancel,
@@ -122,13 +122,13 @@ describe("compose UI", function()
 		assert.is_nil(compose.get_buf())
 	end)
 
-	it("appends pages, saves edits, navigates, and confirms captures in order", function()
+	it("appends pages, saves edits, navigates, and confirms sources in order", function()
 		local confirmed_pages
 		local cancelled = false
-		local first_capture = { source = "one" }
-		local second_capture = { source = "two" }
+		local first_source = { marker = "one" }
+		local second_source = { marker = "two" }
 		open("first", {
-			capture = first_capture,
+			source = first_source,
 			on_confirm = function()
 				error("old callback should be replaced")
 			end,
@@ -138,7 +138,7 @@ describe("compose UI", function()
 
 		open("second", {
 			compose = { title = " Review " },
-			capture = second_capture,
+			source = second_source,
 			on_confirm = function(pages)
 				confirmed_pages = pages
 				return true
@@ -158,20 +158,20 @@ describe("compose UI", function()
 		mapping("<CR>")()
 
 		assert.are.equal("edited first", confirmed_pages[1].text)
-		assert.are.equal(first_capture, confirmed_pages[1].capture)
+		assert.are.equal(first_source, confirmed_pages[1].source)
 		assert.are.equal("second", confirmed_pages[2].text)
-		assert.are.equal(second_capture, confirmed_pages[2].capture)
+		assert.are.equal(second_source, confirmed_pages[2].source)
 		assert.is_nil(compose.get_buf())
 		assert.is_false(cancelled)
 	end)
 
 	it("deletes the current page, wraps forward, and clears the only page", function()
-		local captures = { { page = 1 }, { page = 2 }, { page = 3 } }
+		local sources = { { page = 1 }, { page = 2 }, { page = 3 } }
 		local confirmed_pages
-		open("first", { capture = captures[1], on_confirm = function() end })
-		open("second", { capture = captures[2], on_confirm = function() end })
+		open("first", { source = sources[1], on_confirm = function() end })
+		open("second", { source = sources[2], on_confirm = function() end })
 		open("third", {
-			capture = captures[3],
+			source = sources[3],
 			on_confirm = function(pages)
 				confirmed_pages = pages
 				return true
@@ -193,18 +193,18 @@ describe("compose UI", function()
 
 		assert.are.equal(1, #confirmed_pages)
 		assert.are.equal("", confirmed_pages[1].text)
-		assert.are.equal(captures[2], confirmed_pages[1].capture)
+		assert.are.equal(sources[2], confirmed_pages[1].source)
 	end)
 
 	it("previews the placeholder under the cursor without changing its page", function()
-		local capture = { source = "stored" }
+		local source = { marker = "stored" }
 		local preview_calls = 0
-		local preview_capture
+		local preview_source
 		open("Review {changes}", {
-			capture = capture,
-			on_preview = function(page_capture, name)
+			source = source,
+			on_preview = function(page_source, name)
 				preview_calls = preview_calls + 1
-				preview_capture = page_capture
+				preview_source = page_source
 				assert.are.equal("changes", name)
 				return "diff --git a/file b/file", "diff"
 			end,
@@ -223,7 +223,7 @@ describe("compose UI", function()
 		assert.are.same({ "diff --git a/file b/file" }, vim.api.nvim_buf_get_lines(preview_buf, 0, -1, false))
 		assert.are.equal("diff", vim.bo[preview_buf].syntax)
 		assert.are.same({ "Review {changes}" }, vim.api.nvim_buf_get_lines(compose_buf, 0, -1, false))
-		assert.are.equal(capture, preview_capture)
+		assert.are.equal(source, preview_source)
 
 		mapping("K")()
 		assert.are.equal(preview_win, vim.api.nvim_get_current_win())
@@ -258,14 +258,14 @@ describe("compose UI", function()
 		assert.matches("%[2/2%]", title())
 	end)
 
-	it("treats an empty invocation as reopen only without replacing its capture", function()
+	it("treats an empty invocation as reopen only without replacing its source", function()
 		local first_called = false
-		local original_capture = { source = "original" }
+		local original_source = { marker = "original" }
 		open("draft", {
 			compose = { title = " Original " },
-			capture = original_capture,
+			source = original_source,
 			on_confirm = function(pages)
-				first_called = pages[1].text == "draft" and pages[1].capture == original_capture
+				first_called = pages[1].text == "draft" and pages[1].source == original_source
 				return true
 			end,
 		})
@@ -317,17 +317,17 @@ describe("compose UI", function()
 		assert.is_true(latest_called)
 	end)
 
-	it("keeps the existing page capture and rejects the incoming capture", function()
+	it("keeps the existing page source and rejects the incoming source", function()
 		config.opts.ui.compose.on_new_payload = "keep"
-		local original_capture = { source = "original" }
-		local rejected_capture = { source = "rejected" }
+		local original_source = { marker = "original" }
+		local rejected_source = { marker = "rejected" }
 		local pages
 		open("first", {
-			capture = original_capture,
+			source = original_source,
 			on_confirm = function() end,
 		})
 		open("ignored", {
-			capture = rejected_capture,
+			source = rejected_source,
 			on_confirm = function(value)
 				pages = value
 				return false
@@ -338,21 +338,21 @@ describe("compose UI", function()
 
 		assert.are.equal(1, #pages)
 		assert.are.equal("first", pages[1].text)
-		assert.are.equal(original_capture, pages[1].capture)
-		assert.are_not.equal(rejected_capture, pages[1].capture)
+		assert.are.equal(original_source, pages[1].source)
+		assert.are_not.equal(rejected_source, pages[1].source)
 	end)
 
-	it("replaces all old pages and captures", function()
+	it("replaces all old pages and sources", function()
 		config.opts.ui.compose.on_new_payload = "replace"
-		local old_capture = { source = "old" }
-		local replacement_capture = { source = "replacement" }
+		local old_source = { marker = "old" }
+		local replacement_source = { marker = "replacement" }
 		local pages
 		open("old", {
-			capture = old_capture,
+			source = old_source,
 			on_confirm = function() end,
 		})
 		open("replacement", {
-			capture = replacement_capture,
+			source = replacement_source,
 			on_confirm = function(value)
 				pages = value
 				return false
@@ -363,20 +363,20 @@ describe("compose UI", function()
 
 		assert.are.equal(1, #pages)
 		assert.are.equal("replacement", pages[1].text)
-		assert.are.equal(replacement_capture, pages[1].capture)
-		assert.are_not.equal(old_capture, pages[1].capture)
+		assert.are.equal(replacement_source, pages[1].source)
+		assert.are_not.equal(old_source, pages[1].source)
 	end)
 
-	it("keeps distinct opaque captures for identical appended text", function()
-		local first_capture = { future = { source = "first" } }
-		local second_capture = { future = { source = "second" } }
+	it("keeps distinct opaque sources for identical appended text", function()
+		local first_source = { future = { marker = "first" } }
+		local second_source = { future = { marker = "second" } }
 		local pages
 		open("same", {
-			capture = first_capture,
+			source = first_source,
 			on_confirm = function() end,
 		})
 		open("same", {
-			capture = second_capture,
+			source = second_source,
 			on_confirm = function(value)
 				pages = value
 				return false
@@ -386,10 +386,10 @@ describe("compose UI", function()
 		mapping("<CR>")()
 
 		assert.are.equal(2, #pages)
-		assert.are.equal(first_capture, pages[1].capture)
-		assert.are.equal(second_capture, pages[2].capture)
-		assert.are.same({ source = "first" }, pages[1].capture.future)
-		assert.are.same({ source = "second" }, pages[2].capture.future)
+		assert.are.equal(first_source, pages[1].source)
+		assert.are.equal(second_source, pages[2].source)
+		assert.are.same({ marker = "first" }, pages[1].source.future)
+		assert.are.same({ marker = "second" }, pages[2].source.future)
 	end)
 
 	it("merges per-session compose options over global defaults", function()
@@ -815,16 +815,16 @@ describe("compose UI", function()
 		assert.is_nil(compose.get_buf())
 	end)
 
-	it("releases page captures after successful cleanup", function()
-		local capture = { source = "temporary" }
-		local weak = setmetatable({ capture }, { __mode = "v" })
+	it("releases page sources after successful cleanup", function()
+		local source = { marker = "temporary" }
+		local weak = setmetatable({ source }, { __mode = "v" })
 		open("draft", {
-			capture = capture,
+			source = source,
 			on_confirm = function()
 				return true
 			end,
 		})
-		capture = nil
+		source = nil
 
 		mapping("<CR>")()
 		collectgarbage("collect")
@@ -833,11 +833,11 @@ describe("compose UI", function()
 		assert.is_nil(weak[1])
 	end)
 
-	it("creates a brand-new empty page with its incoming capture", function()
-		local capture = { source = "global capture" }
+	it("creates a brand-new empty page with its incoming source", function()
+		local source = { marker = "global source" }
 		local pages
 		open("", {
-			capture = capture,
+			source = source,
 			on_confirm = function(value)
 				pages = value
 				return false
@@ -848,7 +848,7 @@ describe("compose UI", function()
 
 		assert.are.equal(1, #pages)
 		assert.are.equal("", pages[1].text)
-		assert.are.equal(capture, pages[1].capture)
+		assert.are.equal(source, pages[1].source)
 	end)
 
 	it("keeps compose usable when WiremuxComposeOpen fails", function()

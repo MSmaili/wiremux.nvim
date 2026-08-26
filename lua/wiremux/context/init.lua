@@ -5,20 +5,8 @@ local placeholder = require("wiremux.placeholder")
 
 local M = {}
 
----@class wiremux.context.PlaceholderCapture Point-in-time placeholder capture owned by one prepared request or compose page.
----@field enabled boolean Whether extension and materialization are enabled.
----@field results table<string, string|false> Resolved strings, including empty strings, or false for attempted unavailable names.
-
 ---@type table<string, wiremux.context.Resolver>
 local resolvers = {}
-
----Load-bearing: `M.materialize` passes `results` to `gsub`, which throws on non-string values.
----@param capture any
-local function assert_capture(capture)
-	assert(type(capture) == "table", "wiremux placeholder capture must be a table")
-	assert(type(capture.enabled) == "boolean", "wiremux placeholder capture.enabled must be a boolean")
-	assert(type(capture.results) == "table", "wiremux placeholder capture.results must be a table")
-end
 
 ---Replace all custom context resolvers while preserving builtins.
 ---@param custom_resolvers? table<string, wiremux.context.Resolver>
@@ -86,60 +74,22 @@ function M.is_available(name)
 	return value ~= nil and value ~= ""
 end
 
----Create an enabled point-in-time capture for placeholders found in text.
----`memo` shares one resolver result per name across the candidates of one send invocation.
----@param text string
----@param memo? table<string, string|false> Per-invocation resolver results, mutated in place.
----@return wiremux.context.PlaceholderCapture
-function M.capture(text, memo)
-	local capture = { enabled = true, results = {} }
-	for _, name in ipairs(placeholder.discover(text)) do
-		local result = memo and memo[name]
-		if result == nil then
-			result = M.get(name) or false
-			if memo then
-				memo[name] = result
-			end
-		end
-		capture.results[name] = result
-	end
-	return capture
-end
-
----Create a working clone and resolve names in text that were not previously attempted.
----The stored input capture is never mutated.
----@param capture wiremux.context.PlaceholderCapture
+---Resolve every placeholder in text against one origin.
+---A name without a value stays literal, because `gsub` keeps the match when the
+---table lookup gives nil. An empty string removes the placeholder.
 ---@param text string
 ---@param origin? wiremux.context.ResolverOrigin
----@return wiremux.context.PlaceholderCapture
-function M.extend(capture, text, origin)
-	assert_capture(capture)
-	local extended = vim.deepcopy(capture)
-	assert(type(text) == "string", "wiremux placeholder text must be a string")
-	if not extended.enabled or not text:find("{", 1, true) then
-		return extended
-	end
-
-	for _, name in ipairs(placeholder.discover(text)) do
-		if extended.results[name] == nil then
-			extended.results[name] = M.get(name, origin) or false
-		end
-	end
-	return extended
-end
-
----Materialize complete text through capture lookup only, without invoking a resolver.
----@param text string
----@param capture wiremux.context.PlaceholderCapture
 ---@return string
-function M.materialize(text, capture)
-	assert(type(text) == "string", "wiremux placeholder text must be a string")
-	assert_capture(capture)
-	if not capture.enabled or not text:find("{", 1, true) then
+function M.resolve(text, origin)
+	if not text:find("{", 1, true) then
 		return text
 	end
 
-	return (text:gsub(placeholder.discovery_pattern, capture.results))
+	local values = {}
+	for _, name in ipairs(placeholder.discover(text)) do
+		values[name] = M.get(name, origin)
+	end
+	return (text:gsub(placeholder.discovery_pattern, values))
 end
 
 M.configure()

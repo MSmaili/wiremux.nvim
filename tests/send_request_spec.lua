@@ -78,22 +78,25 @@ describe("prepared send request", function()
 		assert.are.same({ "item-post", "Enter" }, request.delivery.post_keys)
 		assert.are.equal(" Item Compose ", request.compose.title)
 		assert.are.equal(0.6, request.compose.width)
-		assert.are.same({ bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "" }, request.origin)
+		assert.is_true(request.source.resolve)
+		assert.are.same(
+			{ bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "", line = "" },
+			request.source.origin
+		)
 	end)
 
-	it("skips placeholder capture and page origin when placeholders are disabled", function()
-		mocks.context.capture = function()
-			error("placeholder capture must not run")
-		end
-
+	it("marks the source literal when placeholders are disabled", function()
 		local request = assert(request_builder.prepare({
 			value = "literal {file}",
 			compose = true,
 			placeholders = false,
 		}, prepare_context()))
 
-		assert.is_nil(request.origin)
-		assert.is_false(request.placeholder_capture.enabled)
+		assert.is_false(request.source.resolve)
+		assert.are.same(
+			{ bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "", line = "" },
+			request.source.origin
+		)
 	end)
 
 	it("uses call then action defaults when item-specific fields are absent", function()
@@ -162,10 +165,11 @@ describe("prepared send request", function()
 		assert.are_not.equal(post_keys, request.delivery.post_keys)
 	end)
 
-	it("reports invalid inputs before capture", function()
-		local captures = 0
-		mocks.context.capture = function()
-			captures = captures + 1
+	it("reports invalid inputs before any resolution", function()
+		local resolves = 0
+		mocks.context.resolve = function(text)
+			resolves = resolves + 1
+			return text
 		end
 		local request, errors = request_builder.prepare({
 			value = "draft",
@@ -173,7 +177,7 @@ describe("prepared send request", function()
 		}, prepare_context())
 
 		assert.is_nil(request)
-		assert.are.equal(0, captures)
+		assert.are.equal(0, resolves)
 		assert.are.equal("item.placeholders", errors[1].path)
 		assert.matches("item.placeholders must be a boolean", errors[1].message)
 	end)
@@ -229,9 +233,9 @@ describe("prepared request orchestration", function()
 		helpers.teardown()
 	end)
 
-	it("bypasses capture and preserves literal placeholder-shaped text", function()
-		mocks.context.capture = function()
-			error("literal payload must bypass capture")
+	it("bypasses resolution and preserves literal placeholder-shaped text", function()
+		mocks.context.resolve = function()
+			error("literal payload must bypass resolution")
 		end
 		local received
 		mocks.backend.send = function(text)
@@ -246,17 +250,13 @@ describe("prepared request orchestration", function()
 		assert.are.equal("local value = '{file}'", received)
 	end)
 
-	it("prepares independent picker requests before selection", function()
-		local captures = {}
+	it("prepares independent picker requests without resolving before selection", function()
+		local resolves = 0
 		local picker_items
 		local choose
-		mocks.context.capture = function(text)
-			local capture = {
-				enabled = true,
-				results = { source = text },
-			}
-			table.insert(captures, capture)
-			return capture
+		mocks.context.resolve = function(text)
+			resolves = resolves + 1
+			return text
 		end
 		mocks.picker.select = function(items, _, callback)
 			picker_items = items
@@ -265,20 +265,19 @@ describe("prepared request orchestration", function()
 
 		mocks.send.send({ { value = "first" }, { value = "second" } })
 
-		assert.are.equal(2, #captures)
-		assert.are.equal(captures[1], picker_items[1].value.placeholder_capture)
-		assert.are.equal(captures[2], picker_items[2].value.placeholder_capture)
-		assert.are_not.equal(captures[1], captures[2])
+		assert.are.equal(0, resolves)
+		assert.are_not.equal(picker_items[1].value.source, picker_items[2].value.source)
+		assert.are.equal(picker_items[1].value.source.origin, picker_items[2].value.source.origin)
 		assert.is_not_nil(choose)
 	end)
 
-	it("executes a selected stored request without reading config or capturing again", function()
+	it("resolves only the selected request, once, without reading config again", function()
 		local picker_items
 		local choose
-		local capture_calls = 0
-		mocks.context.capture = function(text)
-			capture_calls = capture_calls + 1
-			return { enabled = true, results = {} }
+		local resolved = {}
+		mocks.context.resolve = function(text)
+			table.insert(resolved, text)
+			return text
 		end
 		mocks.picker.select = function(items, _, callback)
 			picker_items = items
@@ -293,51 +292,24 @@ describe("prepared request orchestration", function()
 		end
 
 		mocks.send.send({ { value = "first" }, { value = "selected" } })
+		assert.are.equal(0, #resolved)
+
 		mocks.config.get = function()
 			error("config must not be read after preparation")
 		end
-		mocks.context.capture = function()
-			error("capture must not run after preparation")
-		end
 		choose(picker_items[2])
 
-		assert.are.equal(2, capture_calls)
+		assert.are.same({ "selected" }, resolved)
 		assert.are.equal("selected", received)
 	end)
 
-	it("does not retry a failed direct placeholder after preparation", function()
-		local captures = 0
-		local failed_capture = {
-			enabled = true,
-			results = { failed = false },
-		}
-		mocks.context.capture = function()
-			captures = captures + 1
-			return failed_capture
-		end
-		mocks.context.extend = function()
-			error("direct materialization must not extend its capture")
-		end
-		local received
-		mocks.backend.send = function(text)
-			received = text
-		end
-		mocks.action.run = function(_, callbacks)
-			callbacks.on_targets({}, {})
-		end
-
-		mocks.send.send("{failed}")
-
-		assert.are.equal(1, captures)
-		assert.are.equal("{failed}", received)
-	end)
-
-	it("rejects invalid runtime compose before capture or UI", function()
-		local captures = 0
+	it("rejects invalid runtime compose before resolution or UI", function()
+		local resolves = 0
 		local opened = false
 		local warning
-		mocks.context.capture = function()
-			captures = captures + 1
+		mocks.context.resolve = function(text)
+			resolves = resolves + 1
+			return text
 		end
 		mocks.compose.open = function()
 			opened = true
@@ -348,20 +320,20 @@ describe("prepared request orchestration", function()
 
 		mocks.send.send({ value = "draft", compose = { close_behavior = "explode" } })
 
-		assert.are.equal(0, captures)
+		assert.are.equal(0, resolves)
 		assert.is_false(opened)
 		assert.matches("invalid close_behavior", warning)
 	end)
 
-	it("reopens a live empty invocation without reading config or refreshing capture", function()
+	it("reopens a live empty invocation without reading config or resolving", function()
 		mocks.compose.get_buf = function()
 			return 10
 		end
 		mocks.config.get = function()
 			error("empty reopen must not read new config")
 		end
-		mocks.context.capture = function()
-			error("empty reopen must not capture")
+		mocks.context.resolve = function()
+			error("empty reopen must not resolve")
 		end
 		local open_text
 		mocks.compose.open = function(text)

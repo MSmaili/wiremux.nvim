@@ -57,24 +57,21 @@ describe("send single item", function()
 		assert.is_false(picker_opened)
 	end)
 
-	it("resolves each placeholder one time for a whole library", function()
-		local resolver_calls = 0
-		mocks.context.capture = function(text, memo)
-			local capture = { enabled = true, results = {} }
-			for name in text:gmatch("{([%a_][%w_]*)}") do
-				local result = memo and memo[name]
-				if result == nil then
-					resolver_calls = resolver_calls + 1
-					result = "resolved"
-					if memo then
-						memo[name] = result
-					end
-				end
-				capture.results[name] = result
-			end
-			return capture
+	it("resolves nothing for a library until an item is chosen", function()
+		local resolves = {}
+		mocks.context.resolve = function(text)
+			table.insert(resolves, text)
+			return text
 		end
-		mocks.picker.select = function() end
+		local choose
+		local picker_items
+		mocks.picker.select = function(items, _, callback)
+			picker_items = items
+			choose = callback
+		end
+		mocks.action.run = function(_, callbacks)
+			callbacks.on_targets({}, {})
+		end
 
 		mocks.send.send({
 			{ value = "one {changes}" },
@@ -82,7 +79,11 @@ describe("send single item", function()
 			{ value = "three {changes}" },
 		})
 
-		assert.are.equal(1, resolver_calls)
+		assert.are.same({}, resolves)
+
+		choose(picker_items[2])
+
+		assert.are.same({ "two {changes}" }, resolves)
 	end)
 
 	it("uses visible field to filter items", function()
@@ -192,7 +193,7 @@ describe("send single item", function()
 		mocks.compose.open = function(text, compose_opts)
 			compose_opened = true
 			assert.are.equal("draft", text)
-			compose_opts.on_confirm({ { text = "edited draft", capture = compose_opts.capture } })
+			compose_opts.on_confirm({ { text = "edited draft", source = compose_opts.source } })
 		end
 
 		mocks.backend.send = function(text)
@@ -221,7 +222,7 @@ describe("send single item", function()
 		mocks.compose.open = function(text, compose_opts)
 			compose_opened = true
 			assert.are.equal("draft", text)
-			compose_opts.on_confirm({ { text = "edited from opts", capture = compose_opts.capture } })
+			compose_opts.on_confirm({ { text = "edited from opts", source = compose_opts.source } })
 		end
 
 		mocks.backend.send = function(text)
@@ -274,7 +275,7 @@ describe("send single item", function()
 
 		mocks.compose.open = function(text, compose_opts)
 			compose_config = compose_opts.config
-			compose_opts.on_confirm({ { text = text, capture = compose_opts.capture } })
+			compose_opts.on_confirm({ { text = text, source = compose_opts.source } })
 		end
 		mocks.action.run = function(_, callbacks)
 			callbacks.on_definition("test", {}, {})
@@ -320,27 +321,18 @@ describe("send single item", function()
 		assert.is_true(action_called)
 	end)
 
-	it("transfers one failed eager capture into an explicit page capture", function()
-		local placeholder_capture = {
-			enabled = true,
-			results = { failed = false },
-		}
-		mocks.context.capture = function()
-			return placeholder_capture
-		end
-		local page_capture
+	it("hands the call source to the compose page", function()
+		local page_source
 		mocks.compose.open = function(_, compose_opts)
-			page_capture = compose_opts.capture
+			page_source = compose_opts.source
 		end
 
 		mocks.send.send({ value = "{failed}", compose = true })
 
 		assert.are.same({
-			placeholder_capture = placeholder_capture,
-			origin = { bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "" },
-		}, page_capture)
-		assert.are.equal(placeholder_capture, page_capture.placeholder_capture)
-		assert.is_false(page_capture.placeholder_capture.results.failed)
+			origin = { bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "", line = "" },
+			resolve = true,
+		}, page_source)
 	end)
 
 	it("passes a complete compose session config", function()
@@ -366,13 +358,13 @@ describe("send single item", function()
 		assert.are.same({ wrap = true, number = true }, received_config.wo)
 	end)
 
-	it("rejects invalid item compose options before capture or UI", function()
-		local capture_calls = 0
+	it("rejects invalid item compose options before resolution or UI", function()
+		local resolve_calls = 0
 		local compose_opened = false
 		local action_called = false
 		local warning
-		mocks.context.capture = function()
-			capture_calls = capture_calls + 1
+		mocks.context.resolve = function()
+			resolve_calls = resolve_calls + 1
 		end
 		mocks.compose.open = function()
 			compose_opened = true
@@ -386,7 +378,7 @@ describe("send single item", function()
 
 		mocks.send.send({ value = "draft", compose = { on_new_payload = "merge" } })
 
-		assert.are.equal(0, capture_calls)
+		assert.are.equal(0, resolve_calls)
 		assert.is_false(compose_opened)
 		assert.is_false(action_called)
 		assert.matches("invalid on_new_payload", warning)
@@ -405,12 +397,12 @@ describe("send single item", function()
 		assert.is_true(action_called)
 	end)
 
-	it("reopens an existing empty compose invocation without recapturing", function()
+	it("reopens an existing empty compose invocation without resolving", function()
 		mocks.compose.get_buf = function()
 			return 10
 		end
-		mocks.context.capture = function()
-			error("capture should not run for an empty reopen")
+		mocks.context.resolve = function()
+			error("resolve should not run for an empty reopen")
 		end
 		local opened = false
 		mocks.compose.open = function(text)
@@ -422,54 +414,31 @@ describe("send single item", function()
 		assert.is_true(opened)
 	end)
 
-	it("captures a brand-new empty compose draft", function()
-		local captured_text
-		mocks.context.capture = function(text)
-			captured_text = text
-			return { enabled = true, results = {} }
+	it("opens a brand-new empty compose draft with a resolving source", function()
+		local open_text, open_source
+		mocks.compose.open = function(text, compose_opts)
+			open_text = text
+			open_source = compose_opts.source
 		end
 
 		mocks.send.send()
 
-		assert.are.equal("", captured_text)
+		assert.are.equal("", open_text)
+		assert.is_true(assert(open_source).resolve)
 	end)
 
-	it("materializes all compose page captures and preserves empty pages", function()
+	it("resolves every compose page and preserves empty pages", function()
 		local received_text
-		local extend_calls = {}
-		mocks.context.extend = function(capture, text)
-			table.insert(extend_calls, { capture = capture, text = text })
-			return capture
-		end
-		mocks.context.materialize = function(text, capture)
-			return text:gsub("{value}", capture.results.value or "{value}")
+		local resolve_calls = {}
+		mocks.context.resolve = function(text, origin)
+			table.insert(resolve_calls, { text = text, origin = origin })
+			return text:gsub("{value}", origin.marker or "{value}")
 		end
 		mocks.compose.open = function(_, compose_opts)
 			local confirmed = compose_opts.on_confirm({
-				{
-					text = " {value}  ",
-					capture = {
-						placeholder_capture = {
-							enabled = true,
-							results = { value = "first" },
-						},
-					},
-				},
-				{
-					text = "",
-					capture = {
-						placeholder_capture = { enabled = true, results = {} },
-					},
-				},
-				{
-					text = "{value}",
-					capture = {
-						placeholder_capture = {
-							enabled = true,
-							results = { value = "third" },
-						},
-					},
-				},
+				{ text = " {value}  ", source = { origin = { marker = "first" }, resolve = true } },
+				{ text = "", source = { origin = {}, resolve = true } },
+				{ text = "{value}", source = { origin = { marker = "third" }, resolve = true } },
 			})
 			assert.is_true(confirmed)
 		end
@@ -486,17 +455,13 @@ describe("send single item", function()
 		end)
 
 		assert.are.equal(" first\n\n\n\nthird", received_text)
-		assert.are.equal(3, #extend_calls)
-		assert.are.same({}, extend_calls[2].capture.results)
+		assert.are.equal(3, #resolve_calls)
+		assert.are.equal("", resolve_calls[2].text)
 	end)
 
-	it("keeps compose open when a page capture is missing", function()
+	it("keeps compose open when a page source is missing", function()
 		local confirmation_result
 		local action_called = false
-		mocks.context.extend = function(capture)
-			assert(type(capture) == "table", "missing placeholder capture")
-			return capture
-		end
 		mocks.compose.open = function(_, compose_opts)
 			confirmation_result = compose_opts.on_confirm({ { text = "draft" } })
 		end
@@ -510,16 +475,12 @@ describe("send single item", function()
 		assert.is_false(action_called)
 	end)
 
-	it("keeps compose open when a page capture is malformed", function()
+	it("keeps compose open when a page source is malformed", function()
 		local confirmation_result
 		local action_called = false
-		mocks.context.extend = function(capture)
-			assert(type(capture.results) == "table", "malformed placeholder capture")
-			return capture
-		end
 		mocks.compose.open = function(_, compose_opts)
 			confirmation_result = compose_opts.on_confirm({
-				{ text = "draft", capture = { placeholder_capture = { enabled = true } } },
+				{ text = "draft", source = "not a table" },
 			})
 		end
 		mocks.action.run = function()
@@ -559,11 +520,11 @@ describe("send list of items", function()
 
 	it("warns and omits invalid runtime candidates before the picker", function()
 		local picker_items
-		local capture_calls = 0
+		local resolve_calls = 0
 		local warnings = {}
-		mocks.context.capture = function()
-			capture_calls = capture_calls + 1
-			return { enabled = true, results = {} }
+		mocks.context.resolve = function(text)
+			resolve_calls = resolve_calls + 1
+			return text
 		end
 		mocks.notify.warn = function(message)
 			table.insert(warnings, message)
@@ -580,7 +541,7 @@ describe("send list of items", function()
 
 		assert.are.equal(1, #picker_items)
 		assert.are.equal("valid", picker_items[1].value.raw_text)
-		assert.are.equal(1, capture_calls)
+		assert.are.equal(0, resolve_calls)
 		assert.are.equal(2, #warnings)
 	end)
 
@@ -622,15 +583,10 @@ describe("send list of items", function()
 		assert.are.equal("selected", received_text)
 	end)
 
-	it("captures independent placeholder state for each picker item", function()
-		local captured = {}
-		local selected_capture
-		mocks.context.capture = function(text)
-			captured[text] = { enabled = true, results = { source = text } }
-			return captured[text]
-		end
-		mocks.context.materialize = function(_, capture)
-			selected_capture = capture
+	it("resolves only the chosen picker item's own text", function()
+		local resolved = {}
+		mocks.context.resolve = function(text)
+			table.insert(resolved, text)
 			return "expanded"
 		end
 		mocks.picker.select = function(items, _, callback)
@@ -642,8 +598,7 @@ describe("send list of items", function()
 			{ value = "second {two}" },
 		})
 
-		assert.are.equal(captured["second {two}"], selected_capture)
-		assert.are_not.equal(captured["first {one}"], selected_capture)
+		assert.are.same({ "second {two}" }, resolved)
 	end)
 
 	it("handles picker cancellation", function()

@@ -5,7 +5,6 @@ local M = {}
 local MODULES = {
 	"wiremux.action.send",
 	"wiremux.action.send.delivery",
-	"wiremux.action.send.materialize",
 	"wiremux.action.send.request",
 	"wiremux.backend",
 	"wiremux.core.action",
@@ -40,16 +39,13 @@ function M.setup()
 		notify = helpers.mock_notify(),
 		context = {
 			capture_origin = function()
-				return { bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "" }
+				return { bufnr = 1, path = "/source.lua", row = 1, col = 0, selection = "", line = "" }
 			end,
-			capture = function()
-				return { enabled = true, results = {} }
-			end,
-			extend = function(capture)
-				return capture
-			end,
-			materialize = function(text)
+			resolve = function(text)
 				return text
+			end,
+			get = function(name)
+				return name
 			end,
 		},
 		compose = {

@@ -5,7 +5,6 @@ local helpers = require("tests.helpers")
 local MODULES = {
 	"wiremux.action.send",
 	"wiremux.action.send.delivery",
-	"wiremux.action.send.materialize",
 	"wiremux.action.send.request",
 	"wiremux.backend",
 	"wiremux.config",
@@ -110,14 +109,14 @@ describe("send compose integration", function()
 		helpers.clear(MODULES)
 	end)
 
-	it("keeps independent point-in-time captures and uses the latest delivery options", function()
+	it("resolves each page against its own origin and uses the latest delivery options", function()
 		local resolver_calls = 0
 		setup({
 			context = {
 				resolvers = {
-					page_state = function()
+					page_state = function(origin)
 						resolver_calls = resolver_calls + 1
-						return vim.api.nvim_get_current_line()
+						return origin and origin.line or vim.api.nvim_get_current_line()
 					end,
 				},
 			},
@@ -145,7 +144,8 @@ describe("send compose integration", function()
 			post_keys = { "latest" },
 		})
 
-		assert.are.equal(2, resolver_calls)
+		-- Nothing resolves until the draft is confirmed.
+		assert.are.equal(0, resolver_calls)
 		confirm()
 		wait_for_deliveries(1)
 
@@ -154,6 +154,30 @@ describe("send compose integration", function()
 		assert.is_true(deliveries[1].options.focus)
 		assert.are.same({ "second" }, deliveries[1].options.pre_keys)
 		assert.are.same({ "latest" }, deliveries[1].options.post_keys)
+	end)
+
+	it("resolves a zero-argument resolver at confirmation time", function()
+		local live_value = "before"
+		setup({
+			context = {
+				resolvers = {
+					live_state = function()
+						return live_value
+					end,
+				},
+			},
+			ui = { compose = { close_behavior = "hide" } },
+		})
+		new_source("/tmp/wiremux-live-state.lua", { "source" })
+
+		send.send("{live_state}", { compose = true })
+		live_value = "after"
+
+		confirm()
+		wait_for_deliveries(1)
+
+		-- A resolver that ignores the origin is not frozen; it resolves when the draft is sent.
+		assert.are.equal("after", deliveries[1].payload)
 	end)
 
 	it("resolves names typed later against each page source origin", function()
@@ -179,51 +203,37 @@ describe("send compose integration", function()
 		assert.are.equal("page one source one\n\npage two source two", deliveries[1].payload)
 	end)
 
-	it("combines captured and confirmation-time values without mutating the page capture", function()
-		local calls = { captured = 0, live = 0 }
-		local captured_state = "page snapshot"
-		local live_state = "confirmation value"
+	it("resolves initial and later-typed names once each, leaving the page text unchanged", function()
+		local calls = { initial = 0, live = 0 }
 		setup({
 			context = {
 				resolvers = {
 					initial_value = function()
-						calls.captured = calls.captured + 1
-						return captured_state
+						calls.initial = calls.initial + 1
+						return "page snapshot"
 					end,
 					live_later = function()
 						calls.live = calls.live + 1
-						return live_state
+						return "confirmation value"
 					end,
 				},
 			},
+			ui = { compose = { close_behavior = "hide" } },
 		})
-		new_source("/tmp/wiremux-working-capture.lua", { "source" })
+		new_source("/tmp/wiremux-working-source.lua", { "source" })
 		send.send("{initial_value}", { compose = true })
-		assert.are.same({ captured = 1, live = 0 }, calls)
-		set_compose_text("{initial_value}|{live_later}")
 
-		local stored_capture
-		local stored_before
-		local working_capture
-		local extend = context.extend
-		context.extend = function(capture, text, origin)
-			stored_capture = capture
-			stored_before = vim.deepcopy(capture)
-			local working = extend(capture, text, origin)
-			working_capture = vim.deepcopy(working)
-			return working
-		end
+		-- Preparing the draft resolves nothing.
+		assert.are.same({ initial = 0, live = 0 }, calls)
+		set_compose_text("{initial_value}|{live_later}")
+		local text_before = table.concat(vim.api.nvim_buf_get_lines(compose.get_buf(), 0, -1, false), "\n")
+
 		confirm()
-		context.extend = extend
 		wait_for_deliveries(1)
 
 		assert.are.equal("page snapshot|confirmation value", deliveries[1].payload)
-		assert.are.same({ captured = 1, live = 1 }, calls)
-		assert.are.same(stored_before, stored_capture)
-		assert.are.equal("page snapshot", stored_capture.results.initial_value)
-		assert.is_nil(stored_capture.results.live_later)
-		assert.are.equal("page snapshot", working_capture.results.initial_value)
-		assert.are.equal("confirmation value", working_capture.results.live_later)
+		assert.are.same({ initial = 1, live = 1 }, calls)
+		assert.are.equal("{initial_value}|{live_later}", text_before)
 	end)
 
 	it("resolves buffers and quickfix from confirmation-time editor state", function()
@@ -289,7 +299,7 @@ describe("send compose integration", function()
 		assert.are.same({ empty = 1, errored = 1, missing = 1, invalid = 1 }, calls)
 	end)
 
-	it("captures every library candidate before selection and keeps captures independent", function()
+	it("resolves no library candidate before selection and only the chosen one after", function()
 		local resolver_calls = 0
 		local picker_items
 		local picker_callback
@@ -309,18 +319,18 @@ describe("send compose integration", function()
 				end,
 			},
 		})
-		new_source("/tmp/wiremux-library-capture.lua", { "source" })
+		new_source("/tmp/wiremux-library-source.lua", { "source" })
 
 		send.send({
 			{ label = "first", value = "{candidate_value}", compose = true },
 			{ label = "second", value = "{candidate_value}", compose = true },
 		})
 
-		assert.are.equal(1, resolver_calls)
+		assert.are.equal(0, resolver_calls)
 		assert.is_nil(compose.get_buf())
-		assert.are_not.equal(picker_items[1].value.placeholder_capture, picker_items[2].value.placeholder_capture)
-		assert.are.equal("candidate 1", picker_items[1].value.placeholder_capture.results.candidate_value)
-		assert.are.equal("candidate 1", picker_items[2].value.placeholder_capture.results.candidate_value)
+		assert.are_not.equal(picker_items[1].value.source, picker_items[2].value.source)
+		assert.are.equal(picker_items[1].value.source.origin, picker_items[2].value.source.origin)
+
 		picker_callback(picker_items[2])
 		confirm()
 		wait_for_deliveries(1)
@@ -329,7 +339,7 @@ describe("send compose integration", function()
 		assert.are.equal(1, resolver_calls)
 	end)
 
-	it("preserves the full draft and sends nothing when one page capture is malformed", function()
+	it("preserves the full draft and sends nothing when one page source is malformed", function()
 		setup({
 			context = { resolvers = {
 				page_value = function()
@@ -343,35 +353,30 @@ describe("send compose integration", function()
 				},
 			},
 		})
-		local capture_calls = 0
-		local second_capture
-		local capture = context.capture
-		context.capture = function(...)
-			capture_calls = capture_calls + 1
-			local result = capture(...)
-			if capture_calls == 2 then
-				second_capture = result
-			end
-			return result
+		local draft_model = require("wiremux.ui.compose.draft")
+		local append = draft_model.append
+		draft_model.append = function(draft, text, source)
+			append(draft, text, source)
+			draft.pages[#draft.pages].source = nil
 		end
+
 		send.send("first {page_value}", { compose = true })
 		hide()
 		send.send("second {page_value}", { compose = true })
-		second_capture.results = nil
 
 		confirm()
-		context.capture = capture
+		draft_model.append = append
 
 		assert.are.equal(0, #deliveries)
 		assert.is_true(vim.api.nvim_buf_is_valid(compose.get_buf()))
 		assert.matches("%[2/2%]", window_title())
 	end)
 
-	it("releases captures across replace, discard, and external wipeout", function()
+	it("releases page sources across replace, discard, and external wipeout", function()
 		setup({
 			context = { resolvers = {
 				release_value = function()
-					return "captured"
+					return "resolved"
 				end,
 			} },
 			ui = {
@@ -381,35 +386,40 @@ describe("send compose integration", function()
 				},
 			},
 		})
-		local captures = setmetatable({}, { __mode = "v" })
-		local capture_count = 0
-		local capture = context.capture
-		context.capture = function(...)
-			capture_count = capture_count + 1
-			local result = capture(...)
-			captures[capture_count] = result
-			return result
+		local draft_model = require("wiremux.ui.compose.draft")
+		local sources = setmetatable({}, { __mode = "v" })
+		local count = 0
+		local new, replace = draft_model.new, draft_model.replace
+		draft_model.new = function(text, source)
+			count = count + 1
+			sources[count] = source
+			return new(text, source)
+		end
+		draft_model.replace = function(draft, text, source)
+			count = count + 1
+			sources[count] = source
+			return replace(draft, text, source)
 		end
 
 		send.send("{release_value}", { compose = true })
 		send.send("{release_value}", { compose = true })
 		collectgarbage("collect")
 		collectgarbage("collect")
-		assert.is_nil(captures[1])
-		assert.is_not_nil(captures[2])
+		assert.is_nil(sources[1])
+		assert.is_not_nil(sources[2])
 
 		mapping("q")()
 		collectgarbage("collect")
 		collectgarbage("collect")
-		assert.is_nil(captures[2])
+		assert.is_nil(sources[2])
 
 		send.send("{release_value}", { compose = true })
 		vim.api.nvim_buf_delete(compose.get_buf(), { force = true })
 		collectgarbage("collect")
 		collectgarbage("collect")
-		context.capture = capture
+		draft_model.new, draft_model.replace = new, replace
 
-		assert.is_nil(captures[3])
+		assert.is_nil(sources[3])
 		assert.is_nil(compose.get_buf())
 	end)
 

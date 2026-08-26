@@ -1,19 +1,19 @@
 local M = {}
 
 ---@class wiremux.ui.ComposePage
----@field text string Raw template text edited without refreshing the page capture.
----@field capture any Opaque page-owned capture passed unchanged to confirmation.
+---@field text string Raw template text edited without refreshing the page source.
+---@field source any Opaque page-owned source context passed unchanged to confirmation.
 
 ---@class wiremux.ui.ComposeDraft
 ---@field pages wiremux.ui.ComposePage[]
 ---@field current_page number
 
 ---@param text? string
----@param capture? any
+---@param source? any
 ---@return wiremux.ui.ComposeDraft
-function M.new(text, capture)
+function M.new(text, source)
 	return {
-		pages = { { text = text or "", capture = capture } },
+		pages = { { text = text or "", source = source } },
 		current_page = 1,
 	}
 end
@@ -32,17 +32,17 @@ end
 
 ---@param draft wiremux.ui.ComposeDraft
 ---@param text string
----@param capture? any
-function M.append(draft, text, capture)
-	table.insert(draft.pages, { text = text, capture = capture })
+---@param source? any
+function M.append(draft, text, source)
+	table.insert(draft.pages, { text = text, source = source })
 	draft.current_page = #draft.pages
 end
 
 ---@param draft wiremux.ui.ComposeDraft
 ---@param text string
----@param capture? any
-function M.replace(draft, text, capture)
-	draft.pages = { { text = text, capture = capture } }
+---@param source? any
+function M.replace(draft, text, source)
+	draft.pages = { { text = text, source = source } }
 	draft.current_page = 1
 end
 

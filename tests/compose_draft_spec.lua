@@ -8,78 +8,76 @@ describe("compose draft", function()
 		draft = require("wiremux.ui.compose.draft")
 	end)
 
-	it("saves edits without changing capture identity or results", function()
-		local capture = {
-			placeholder_capture = {
-				enabled = true,
-				results = { selection = "captured" },
-			},
+	it("saves edits without changing source identity or contents", function()
+		local source = {
+			origin = { bufnr = 7, path = "/a.lua", row = 1, col = 0, selection = "chosen", line = "text" },
+			resolve = true,
 		}
-		local state = draft.new("first", capture)
+		local state = draft.new("first", source)
 
 		draft.save(state, "edited")
 
 		assert.are.equal(1, state.current_page)
 		assert.are.equal("edited", draft.current(state).text)
-		assert.are.equal(capture, draft.current(state).capture)
-		assert.are.equal("captured", draft.current(state).capture.placeholder_capture.results.selection)
+		assert.are.equal(source, draft.current(state).source)
+		assert.are.equal("chosen", draft.current(state).source.origin.selection)
 	end)
 
-	it("keeps distinct captures for identical raw text", function()
-		local first_capture = { source = "first" }
-		local second_capture = { source = "second" }
-		local state = draft.new("same", first_capture)
-		draft.append(state, "same", second_capture)
+	it("keeps distinct sources for identical raw text", function()
+		local first_source = { marker = "first" }
+		local second_source = { marker = "second" }
+		local state = draft.new("same", first_source)
+		draft.append(state, "same", second_source)
 
-		assert.are.equal(first_capture, state.pages[1].capture)
-		assert.are.equal(second_capture, state.pages[2].capture)
-		assert.are_not.equal(state.pages[1].capture, state.pages[2].capture)
+		assert.are.equal(first_source, state.pages[1].source)
+		assert.are.equal(second_source, state.pages[2].source)
+		assert.are_not.equal(state.pages[1].source, state.pages[2].source)
 	end)
 
-	it("appends and selects a page with only its incoming capture", function()
-		local first_capture = { value = "one" }
-		local second_capture = { value = "two" }
-		local state = draft.new("first", first_capture)
-		draft.append(state, "second", second_capture)
+	it("appends and selects a page with only its incoming source", function()
+		local first_source = { value = "one" }
+		local second_source = { value = "two" }
+		local state = draft.new("first", first_source)
+		draft.append(state, "second", second_source)
 
 		assert.are.equal(2, state.current_page)
 		assert.are.equal("second", draft.current(state).text)
-		assert.are.equal(second_capture, draft.current(state).capture)
-		assert.are.equal(first_capture, state.pages[1].capture)
+		assert.are.equal(second_source, draft.current(state).source)
+		assert.are.equal(first_source, state.pages[1].source)
 	end)
 
-	it("replaces the complete draft and drops old capture references", function()
-		local first_capture = { value = "one" }
-		local second_capture = { value = "two" }
-		local replacement_capture = { value = "replacement" }
-		local state = draft.new("first", first_capture)
-		draft.append(state, "second", second_capture)
+	it("replaces the complete draft and drops old source references", function()
+		local first_source = { value = "one" }
+		local second_source = { value = "two" }
+		local replacement_source = { value = "replacement" }
+		local state = draft.new("first", first_source)
+		draft.append(state, "second", second_source)
 		local old_pages = state.pages
 
-		draft.replace(state, "replacement", replacement_capture)
+		draft.replace(state, "replacement", replacement_source)
 
 		assert.are.equal(1, #state.pages)
 		assert.are.equal(1, state.current_page)
 		assert.are_not.equal(old_pages, state.pages)
-		assert.are.same({ text = "replacement", capture = replacement_capture }, state.pages[1])
-		assert.are_not.equal(first_capture, state.pages[1].capture)
-		assert.are_not.equal(second_capture, state.pages[1].capture)
+		assert.are.same({ text = "replacement", source = replacement_source }, state.pages[1])
+		assert.are_not.equal(first_source, state.pages[1].source)
+		assert.are_not.equal(second_source, state.pages[1].source)
 	end)
 
-	it("wraps navigation without swapping page captures", function()
-		local captures = { { page = 1 }, { page = 2 }, { page = 3 } }
-		local state = draft.new("first", captures[1])
-		draft.append(state, "second", captures[2])
-		draft.append(state, "third", captures[3])
+	it("wraps navigation without swapping page sources", function()
+		local sources = { { page = 1 }, { page = 2 }, { page = 3 } }
+		local state = draft.new("first", sources[1])
+		draft.append(state, "second", sources[2])
+		draft.append(state, "third", sources[3])
 
 		assert.are.equal(1, draft.next(state))
-		assert.are.equal(captures[1], draft.current(state).capture)
+		assert.are.equal(sources[1], draft.current(state).source)
 		assert.are.equal(3, draft.previous(state))
-		assert.are.equal(captures[3], draft.current(state).capture)
+		assert.are.equal(sources[3], draft.current(state).source)
 		assert.are.equal(2, draft.previous(state))
-		assert.are.equal(captures[2], draft.current(state).capture)
-		for index, capture in ipairs(captures) do
-			assert.are.equal(capture, state.pages[index].capture)
+		assert.are.equal(sources[2], draft.current(state).source)
+		for index, source in ipairs(sources) do
+			assert.are.equal(source, state.pages[index].source)
 		end
 	end)
 

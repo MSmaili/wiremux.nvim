@@ -255,19 +255,19 @@ describe("send with pre_keys/post_keys", function()
 	end)
 end)
 
-describe("placeholder materialization", function()
+describe("placeholder resolution", function()
 	local mocks
 
 	before_each(function()
 		mocks = helpers.setup()
 	end)
 
-	it("materializes placeholders in text", function()
-		local materialized = "expanded text"
+	it("resolves placeholders in text", function()
+		local resolved_text = "expanded text"
 
-		mocks.context.materialize = function(text)
+		mocks.context.resolve = function(text)
 			assert.are.equal("{file}", text)
-			return materialized
+			return resolved_text
 		end
 
 		local received_text
@@ -284,14 +284,14 @@ describe("placeholder materialization", function()
 
 		mocks.send.send("{file}")
 
-		assert.are.equal(materialized, received_text)
+		assert.are.equal(resolved_text, received_text)
 	end)
 
-	it("materializes placeholders in SendItem value", function()
-		local materialized = "expanded"
+	it("resolves placeholders in SendItem value", function()
+		local resolved_text = "expanded"
 
-		mocks.context.materialize = function()
-			return materialized
+		mocks.context.resolve = function()
+			return resolved_text
 		end
 
 		local received_text
@@ -308,6 +308,6 @@ describe("placeholder materialization", function()
 
 		mocks.send.send({ value = "{placeholder}" })
 
-		assert.are.equal(materialized, received_text)
+		assert.are.equal(resolved_text, received_text)
 	end)
 end)
