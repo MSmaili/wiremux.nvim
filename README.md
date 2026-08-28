@@ -119,6 +119,7 @@ The following example shows all default values from `config.lua`. Override only 
           { "q", mode = "n", desc = "Close draft" },
           { "<Esc>", mode = "n", desc = "Close draft" },
         },
+        append_next = { "A", mode = "n", desc = "Hide and append next payload" },
         discard = { "Q", mode = "n", desc = "Discard compose page" },
         files = {
           { "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
@@ -281,6 +282,8 @@ vim.keymap.set({ "n", "x" }, "<leader>ar", function()
   })
 end)
 ```
+
+Press `A` to save and hide the draft, then append the next non-empty compose payload. This one-time action bypasses `on_new_payload`; reopening the draft without text does not consume it.
 
 Press `Q` to discard. If the draft has more than one page, `Q` removes only the current page and keeps the others open. If the draft has one page, `Q` drops the draft and closes the window without the close prompt. Use `<C-x>` instead when you want to empty the last page but keep the window open.
 

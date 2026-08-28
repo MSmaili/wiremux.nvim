@@ -42,6 +42,7 @@ local M = {}
 ---@class wiremux.config.ComposeKeymaps
 ---@field send? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field close? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
+---@field append_next? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field discard? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field files? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
 ---@field delete_page? wiremux.config.ComposeKeymap|wiremux.config.ComposeKeymap[]
@@ -120,6 +121,7 @@ local defaults = {
 					{ "q", mode = "n", desc = "Close draft" },
 					{ "<Esc>", mode = "n", desc = "Close draft" },
 				},
+				append_next = { "A", mode = "n", desc = "Hide and append next payload" },
 				discard = { "Q", mode = "n", desc = "Discard compose page" },
 				files = {
 					{ "<C-f>", mode = { "n", "i" }, desc = "Insert file" },

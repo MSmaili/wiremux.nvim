@@ -21,6 +21,7 @@ local M = {}
 ---@field on_confirm? fun(pages: wiremux.ui.ComposePage[]): boolean?
 ---@field on_preview? fun(source: any, name: string): string?, string?
 ---@field on_cancel? fun()
+---@field append_next? boolean
 ---@field status wiremux.ui.ComposeLifecycle
 
 ---@type wiremux.ui.ComposeSession?
@@ -120,6 +121,15 @@ local function hide_session(session)
 	end
 	save_current_page(session)
 	view.hide(session.view)
+end
+
+---@param session wiremux.ui.ComposeSession
+local function append_next(session)
+	if session.status ~= "editing" then
+		return
+	end
+	session.append_next = true
+	hide_session(session)
 end
 
 ---Drop the whole draft. Used by the close paths, which act on the draft and not on one page.
@@ -281,6 +291,9 @@ local function session_handlers(session)
 		close = function()
 			request_close(session)
 		end,
+		append_next = function()
+			append_next(session)
+		end,
 		discard = function()
 			discard_page(session)
 		end,
@@ -316,6 +329,8 @@ end
 ---@param text string
 ---@param source? any
 local function apply_new_payload_policy(session, text, source)
+	local force_append = session.append_next == true
+	session.append_next = false
 	save_current_page(session)
 	if draft_model.is_empty(session.draft) then
 		draft_model.replace(session.draft, text, source)
@@ -326,7 +341,7 @@ local function apply_new_payload_policy(session, text, source)
 	end
 
 	local config = session.config or {}
-	local policy = config.on_new_payload or "ask"
+	local policy = force_append and "append" or config.on_new_payload or "ask"
 	if policy == "ask" then
 		local choice = vim.fn.confirm(
 			"An unsent draft already exists. What should happen to the new payload?",

@@ -27,6 +27,7 @@ local valid = {
 	keymap_actions = {
 		send = true,
 		close = true,
+		append_next = true,
 		discard = true,
 		files = true,
 		delete_page = true,

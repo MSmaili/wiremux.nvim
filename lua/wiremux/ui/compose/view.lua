@@ -26,7 +26,17 @@ local M = {}
 ---@field private finalized boolean
 ---@field private applied_window_options table<string, true>
 
-local ACTION_ORDER = { "send", "close", "discard", "files", "delete_page", "preview_placeholder", "previous", "next" }
+local ACTION_ORDER = {
+	"send",
+	"close",
+	"append_next",
+	"discard",
+	"files",
+	"delete_page",
+	"preview_placeholder",
+	"previous",
+	"next",
+}
 
 ---@param value number
 ---@param min_value number
@@ -96,6 +106,7 @@ local function footer_text(view)
 	local entries = {
 		{ entry = footer_keymaps.send, label = "Send" },
 		{ entry = footer_keymaps.close, label = "Close" },
+		{ entry = footer_keymaps.append_next, label = "Append Next" },
 		{ entry = footer_keymaps.discard, label = "Discard" },
 		{ entry = footer_keymaps.files, label = "Files" },
 		{ entry = footer_keymaps.delete_page, label = "Delete Page" },
