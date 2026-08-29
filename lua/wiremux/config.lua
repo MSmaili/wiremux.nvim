@@ -52,13 +52,16 @@ local M = {}
 
 ---@class wiremux.config.ComposeOptions: wiremux.config.ComposeSessionConfig
 
+---@class wiremux.config.GlobalComposeConfig: wiremux.config.ComposeSessionConfig
+---@field history_limit? integer Number of resolved compose sends retained on disk; 0 disables history (default: 4)
+
 ---@class wiremux.config.UserOptions
 ---@field log_level? wiremux.config.LogLevel
 ---@field targets? { definitions?: table<string, wiremux.target.definition> }
 ---@field actions? { send?: wiremux.config.ActionConfig, focus?: wiremux.config.ActionConfig, close?: wiremux.config.ActionConfig }
 ---@field picker? wiremux.config.PickerConfig
 ---@field context? { resolvers?: table<string, wiremux.context.Resolver> }
----@field ui? { compose?: wiremux.config.ComposeSessionConfig }
+---@field ui? { compose?: wiremux.config.GlobalComposeConfig }
 
 -- User-facing config (all fields optional)
 ---@class wiremux.config.ActionConfig
@@ -107,6 +110,7 @@ local defaults = {
 			style = "minimal",
 			close_behavior = "ask",
 			on_new_payload = "ask",
+			history_limit = 4,
 			wo = {
 				wrap = true,
 				number = false,

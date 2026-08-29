@@ -11,11 +11,27 @@ describe("compose configuration", function()
 		assert.matches("invalid on_new_payload", invalid_errors[1].message)
 	end)
 
+	it("accepts only global non-negative compose history limits", function()
+		local compose_config = require("wiremux.ui.compose.config")
+		local defaults = { history_limit = 4 }
+		local normalized, valid_errors = compose_config.normalize_global({ history_limit = 0 }, defaults)
+		local _, negative_errors = compose_config.normalize_global({ history_limit = -1 }, defaults)
+		local _, fraction_errors = compose_config.normalize_global({ history_limit = 1.5 }, defaults)
+		local _, override_errors = compose_config.resolve(defaults, { history_limit = 0 }, "item.compose")
+
+		assert.are.equal(0, normalized.history_limit)
+		assert.are.same({}, valid_errors)
+		assert.are.equal(1, #negative_errors)
+		assert.are.equal(1, #fraction_errors)
+		assert.matches("unknown compose option", override_errors[1].message)
+	end)
+
 	it("provides compose page keymap defaults", function()
 		package.loaded["wiremux.config"] = nil
 		local config = require("wiremux.config")
 		config.setup()
 
+		assert.are.equal(4, config.opts.ui.compose.history_limit)
 		assert.are.equal("<C-p>", config.opts.ui.compose.keymaps.previous[1])
 		assert.are.equal("<C-n>", config.opts.ui.compose.keymaps.next[1])
 		assert.are.equal("<C-x>", config.opts.ui.compose.keymaps.delete_page[1])

@@ -30,7 +30,7 @@ local validate = require("wiremux.utils.validate")
 ---@class wiremux.action.SendPreparationContext
 ---@field options wiremux.action.SendOptions Call options resolved and checked one time.
 ---@field compose wiremux.action.ComposeSelection
----@field global_compose wiremux.config.ComposeSessionConfig
+---@field global_compose wiremux.config.GlobalComposeConfig
 ---@field origin wiremux.context.ResolverOrigin Source location captured one time for this call.
 
 ---@param post_keys? string|string[]

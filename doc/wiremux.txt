@@ -220,6 +220,23 @@ Compose precedence is whole-value precedence: item `compose`, call options
 `compose`, then `actions.send.compose`. Tables are not merged across those
 levels. The selected table is merged over global session defaults.
 
+Compose history ~
+                                             *wiremux-compose-history*
+
+Wiremux keeps four confirmed compose sends by default. `:Wiremux history`
+opens a picker whose rows show the time, payload size, and first non-empty
+line. An enabled fzf-lua or Snacks preview window lazily loads only the
+highlighted payload. Selecting one opens the final resolved payload as one
+literal compose page. Multi-page drafts are therefore flattened, and
+placeholder-shaped text is not resolved again. Direct sends are not stored.
+
+Metadata is stored in `stdpath("state")/wiremux/history/index.json`; each
+payload uses its own `.txt` file, so listing reads only the small index and an
+enabled preview loads only the highlighted payload. The files can contain
+sensitive source context. Set `ui.compose.history_limit`
+to change the retained count. Lowering it prunes older entries on the next
+history access; 0 removes stored entries and disables history.
+
 Customize compose on open ~
                                          *wiremux-compose-open-event*
 
@@ -273,6 +290,7 @@ You can use a function for `label` to create dynamic display names:
       compose = {
         close_behavior = "hide", -- "ask" | "hide" | "discard"
         on_new_payload = "append", -- "ask" | "keep" | "replace" | "append"
+        history_limit = 4, -- resolved compose sends retained on disk; 0 disables
         keymaps = {
           append_next = { "A", mode = "n" },
           delete_page = { "<C-x>", mode = "n" },
@@ -722,6 +740,11 @@ Subcommands:
         `require("wiremux").send_motion()` with `{ expr = true }` is the
         intended usage. See |wiremux-howto-send-motion|.
 
+                                                        *:Wiremux-history*
+:Wiremux history
+        Pick a recent confirmed compose send and reopen its final resolved
+        payload as one literal compose page. See |wiremux-compose-history|.
+
                                                           *:Wiremux-focus*
 :Wiremux focus
         Focus a target.
@@ -909,9 +932,10 @@ If things do not work:
 ==============================================================================
 10. EXPLANATION / DESIGN NOTES                                  *wiremux-explanation*
 
-State is stored in tmux (pane variables like `@wiremux_*`), not in Neovim.
-That makes instances survive Neovim restarts and lets multiple Neovim
-instances share the same targets.
+Target state is stored in tmux (pane variables like `@wiremux_*`). That makes
+instances survive Neovim restarts and lets multiple Neovim instances share the
+same targets. Compose history is separate Neovim state; see
+|wiremux-compose-history|.
 
 Send pipeline ~
 

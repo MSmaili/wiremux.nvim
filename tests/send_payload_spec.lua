@@ -17,6 +17,11 @@ describe("send payload assembly", function()
 
 	it("resolves a direct send one time against the call origin", function()
 		local calls = {}
+		local history_calls = 0
+		mocks.history.add = function()
+			history_calls = history_calls + 1
+			return true
+		end
 		mocks.context.resolve = function(text, origin)
 			table.insert(calls, { text = text, origin = origin })
 			return "resolved"
@@ -32,6 +37,7 @@ describe("send payload assembly", function()
 		assert.are.equal("\n  {value}  \n", calls[1].text)
 		assert.are.same(ORIGIN, calls[1].origin)
 		assert.are.equal("resolved", delivered)
+		assert.are.equal(0, history_calls)
 	end)
 
 	it("keeps text literal for a direct send with placeholders disabled", function()
@@ -75,6 +81,59 @@ describe("send payload assembly", function()
 		assert.are.same(ORIGIN, calls[1].origin)
 		assert.are.same(second, calls[2].origin)
 		assert.are.equal("FIRST\n\nSECOND", delivered)
+	end)
+
+	it("records the resolved compose payload before delivery", function()
+		mocks.context.resolve = function(text)
+			return text:upper()
+		end
+		local calls = {}
+		mocks.history.add = function(payload)
+			table.insert(calls, { "history", payload })
+			return true
+		end
+		mocks.backend.send = function(payload)
+			table.insert(calls, { "delivery", payload })
+		end
+		mocks.compose.open = function(_, options)
+			options.on_confirm({
+				{ text = "first", source = options.source },
+				{ text = "second", source = options.source },
+			})
+		end
+
+		mocks.send.send({ value = "draft", compose = true })
+		vim.wait(100, function()
+			return #calls == 2
+		end)
+
+		assert.are.same({ "history", "FIRST\n\nSECOND" }, calls[1])
+		assert.are.same({ "delivery", "FIRST\n\nSECOND" }, calls[2])
+	end)
+
+	it("still delivers when compose history cannot be saved", function()
+		mocks.history.add = function()
+			error("disk full")
+		end
+		local warning
+		mocks.notify.warn = function(message)
+			warning = message
+		end
+		local delivered
+		mocks.backend.send = function(payload)
+			delivered = payload
+		end
+		mocks.compose.open = function(_, options)
+			options.on_confirm({ { text = "draft", source = options.source } })
+		end
+
+		mocks.send.send({ value = "draft", compose = true })
+		vim.wait(100, function()
+			return delivered ~= nil
+		end)
+
+		assert.are.equal("draft", delivered)
+		assert.matches("disk full", warning)
 	end)
 
 	it("keeps a page literal when its source disables resolution", function()

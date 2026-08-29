@@ -251,8 +251,8 @@ end
 
 ---Normalize global ui.compose config, falling back field-by-field to defaults.
 ---@param options any
----@param defaults wiremux.config.ComposeSessionConfig
----@return wiremux.config.ComposeSessionConfig normalized
+---@param defaults wiremux.config.GlobalComposeConfig
+---@return wiremux.config.GlobalComposeConfig normalized
 ---@return wiremux.Error[] errors
 function M.normalize_global(options, defaults)
 	if options == nil then
@@ -265,7 +265,20 @@ function M.normalize_global(options, defaults)
 			}
 	end
 
-	local normalized, errors = M.options(options, "ui.compose")
+	local session_options = vim.deepcopy(options)
+	local limit = session_options.history_limit
+	session_options.history_limit = nil
+	local normalized, errors = M.options(session_options, "ui.compose")
+	if limit ~= nil then
+		if type(limit) == "number" and limit >= 0 and limit % 1 == 0 then
+			normalized.history_limit = limit
+		else
+			table.insert(
+				errors,
+				validate.error("ui.compose.history_limit", "ui.compose.history_limit must be a non-negative integer")
+			)
+		end
+	end
 	return merge(defaults, normalized), errors
 end
 
@@ -295,7 +308,7 @@ function M.normalize_action(value, default)
 end
 
 ---Resolve one selected runtime compose value into a complete session-only config.
----@param global_compose wiremux.config.ComposeSessionConfig
+---@param global_compose wiremux.config.GlobalComposeConfig
 ---@param value any
 ---@param path string
 ---@return wiremux.config.ComposeSessionConfig? config
@@ -317,7 +330,9 @@ function M.resolve(global_compose, value, path)
 	if #errors > 0 then
 		return nil, errors
 	end
-	return merge(global_compose, overrides), {}
+	local session = vim.deepcopy(global_compose)
+	session.history_limit = nil
+	return merge(session, overrides), {}
 end
 
 return M

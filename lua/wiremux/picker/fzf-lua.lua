@@ -11,17 +11,25 @@ end
 function M.select(items, opts, on_choice)
 	local fzf = require("fzf-lua")
 
-	-- Build display lines with index prefix for reliable matching
+	-- Prefix each row with its index for reliable selection. A preview path goes
+	-- after fzf-lua's metadata separator so its configured file previewer can
+	-- parse the path while fzf only displays and searches the label.
 	local lines = {}
+	local nbsp = opts.preview_file and require("fzf-lua.utils").nbsp or nil
 	for i, item in ipairs(items) do
 		local text = opts.format_item and opts.format_item(item) or tostring(item)
-		lines[i] = string.format("%d\t%s", i, text)
+		local path = opts.preview_file and opts.preview_file(item) or nil
+		lines[i] = path and string.format("%d\t%s\t%s%s", i, text, nbsp, path) or string.format("%d\t%s", i, text)
 	end
+
+	local previewer = opts.preview_file and require("fzf-lua.config").globals.files.previewer or nil
 
 	fzf.fzf_exec(lines, {
 		prompt = (opts.prompt or "Select") .. "> ",
+		previewer = previewer,
 		fzf_opts = {
-			["--with-nth"] = "2..", -- Hide index, show only text
+			["--with-nth"] = opts.preview_file and "2..-2" or "2..", -- Hide index and preview path
+			["--nth"] = "1..", -- Search only the transformed display label
 			["--delimiter"] = "\t",
 		},
 		actions = {

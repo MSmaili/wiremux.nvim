@@ -277,8 +277,8 @@ describe("action", function()
 				assert.are.equal(2, #items)
 				assert.are.equal("%1", items[1].id)
 				assert.are.equal("%3", items[2].id)
-				assert.matches("server%s+%%1%s+1:1%s+zsh", opts.format_item(items[1]))
-				assert.matches("%(unmanaged%)%s+%%3%s+2:0%s+fish", opts.format_item(items[2]))
+				assert.matches("server%s+1:1%s+%%1%s+zsh", opts.format_item(items[1]))
+				assert.matches("%(unmanaged%)%s+2:0%s+%%3%s+fish", opts.format_item(items[2]))
 				callback(items[1])
 			end
 
@@ -354,7 +354,7 @@ describe("action", function()
 				assert.are.equal("%1", items[1].id)
 				assert.are.equal("%2", items[2].id)
 				assert.are.equal("%3", items[3].id)
-				assert.matches("%(unmanaged%)%s+%%3%s+%-%s+zsh", opts.format_item(items[3]))
+				assert.matches("%(unmanaged%)%s+%-%s+%%3%s+zsh", opts.format_item(items[3]))
 				callback(items[3])
 			end
 

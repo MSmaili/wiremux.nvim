@@ -56,6 +56,22 @@ local function deliver_payload(payload, options, target_title)
 	end
 end
 
+---@param payload string
+local function record_history(payload)
+	local ok, saved, err = pcall(function()
+		return require("wiremux.history").add(payload)
+	end)
+	if not ok then
+		notify.warn("Failed to save compose history: " .. tostring(saved))
+		return
+	end
+	if not saved then
+		notify.warn("Failed to save compose history: " .. tostring(err))
+	elseif err then
+		notify.warn("Failed to prune stale compose history files: " .. tostring(err))
+	end
+end
+
 ---Join ordered compose pages into one payload, resolving each against its own source.
 ---@param pages wiremux.ui.ComposePage[]
 ---@return string? payload
@@ -109,6 +125,7 @@ local function execute_request(request)
 					return false
 				end
 				vim.schedule(function()
+					record_history(payload)
 					deliver_payload(payload, delivery_options, target_title)
 				end)
 				return true

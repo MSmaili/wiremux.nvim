@@ -109,6 +109,7 @@ The following example shows all default values from `config.lua`. Override only 
       style = "minimal",
       close_behavior = "ask",  -- "ask" | "hide" | "discard"
       on_new_payload = "ask",  -- "ask" | "keep" | "replace" | "append"
+      history_limit = 4,        -- resolved compose sends retained on disk; 0 disables
       wo = { wrap = true, number = false, relativenumber = false },
       keymaps = {
         send = {
@@ -298,6 +299,14 @@ It does not matter when you type a placeholder. A name in the initial text and a
 `{diagnostics}` and `{diagnostics_all}` need the source buffer. They remain literal if you delete that buffer, unless Wiremux finds a loaded buffer with the same path. Every other placeholder survives, because `{line}` and `{selection}` are stored in the origin and `{changes}` reads the file from disk.
 
 When a draft exists, `on_new_payload` accepts `"ask"`, `"keep"`, `"replace"`, or `"append"`. The dialog selects **Keep Draft** by default. A non-empty `send()` call updates the session configuration, callbacks, and delivery options. This update also occurs when you keep the existing pages. A `send()` call without text only reopens a hidden draft.
+
+#### Recover a compose send
+
+Wiremux keeps the four most recent confirmed compose sends by default. Run `:Wiremux history` to pick one, reopen it as a single compose page, edit it, and send it again. Picker rows show the time, payload size, and first non-empty line. When the fzf-lua or Snacks preview window is enabled, it lazily loads only the highlighted payload. Direct sends are not stored.
+
+History stores the final resolved payload—the same text prepared for delivery—so multi-page drafts reopen as one page and placeholder-shaped text stays literal. This makes retries stable even if buffers, diagnostics, or `{changes}` have changed since the original send.
+
+Metadata lives in `stdpath("state")/wiremux/history/index.json`. Each payload has its own `.txt` file in that directory, so listing history reads only the small index; an enabled preview loads only the highlighted payload. These files can contain source code and other sensitive context. Set `ui.compose.history_limit` to change the retained count. Lowering it prunes older entries on the next history access; `0` removes stored entries and disables history.
 
 Wiremux selects the compose value in this order:
 
@@ -540,6 +549,7 @@ Use Lua functions in keymaps and Lua code. Use Vim commands on the command line:
 | --------------- | ---------------------- | ----------------------------------------- | ---------------------------------------------------------- |
 | `send()`        | `:Wiremux send <text>` | Sends text to a target                    | Send code, prompts, or commands to an AI or terminal       |
 | `send_motion()` | `:Wiremux send-motion` | Sends text covered by a motion (operator) | Works like `y`: map to `ga`, then `gaip` sends a paragraph |
+| —               | `:Wiremux history`     | Reopens a confirmed compose send          | Recover, edit, and resend a recent payload                 |
 | `create()`      | `:Wiremux create`      | Creates a new target from a definition    | Start a new AI assistant or terminal pane                  |
 | `toggle()`      | `:Wiremux toggle`      | Shows or hides the last used target       | Show or hide an AI assistant or terminal                   |
 | `focus()`       | `:Wiremux focus`       | Moves focus to a target                   | Move to your terminal or AI assistant                      |

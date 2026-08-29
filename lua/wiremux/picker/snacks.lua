@@ -10,13 +10,35 @@ end
 ---@param opts wiremux.picker.Opts
 ---@param on_choice fun(item: any?)
 function M.select(items, opts, on_choice)
-	local snacks = require("snacks")
+	local picker_items = items
+	local format_item = opts.format_item
+	local unwrap = function(item)
+		return item
+	end
 
-	snacks.picker.select(items, {
+	if opts.preview_file then
+		picker_items = vim.iter(items)
+			:map(function(item)
+				return { item = item, file = opts.preview_file(item) }
+			end)
+			:totable()
+		format_item = function(item)
+			return opts.format_item and opts.format_item(item.item) or tostring(item.item)
+		end
+		unwrap = function(item)
+			if item == nil then
+				return nil
+			end
+			return item.item
+		end
+	end
+
+	require("snacks").picker.select(picker_items, {
 		prompt = opts.prompt,
-		format_item = opts.format_item,
+		format_item = format_item,
+		snacks = opts.preview_file and { preview = "file" } or nil,
 	}, function(item)
-		on_choice(item)
+		on_choice(unwrap(item))
 	end)
 end
 

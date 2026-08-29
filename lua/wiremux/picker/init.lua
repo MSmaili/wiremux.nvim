@@ -1,6 +1,7 @@
 ---@class wiremux.picker.Opts
 ---@field prompt? string Picker prompt text
 ---@field format_item? fun(item: any): string Format item for display
+---@field preview_file? fun(item: any): string? Provide an item's preview path without reading it
 
 ---@class wiremux.picker.Adapter
 ---Adapters may fire on_choice more than once; wiremux latches it so callers see at most one call.

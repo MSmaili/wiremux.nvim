@@ -30,6 +30,12 @@ local subcommand_tbl = {
 		end,
 		desc = "Send text to tmux target",
 	},
+	history = {
+		impl = function(_, _)
+			require("wiremux.action.history").history()
+		end,
+		desc = "Open compose send history",
+	},
 	["send-motion"] = {
 		impl = function(_, _)
 			require("wiremux.action.send_motion").send_motion()

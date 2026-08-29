@@ -6,6 +6,7 @@ local MODULES = {
 	"wiremux.action.send",
 	"wiremux.action.send.delivery",
 	"wiremux.action.send.request",
+	"wiremux.history",
 	"wiremux.backend",
 	"wiremux.core.action",
 	"wiremux.config",
@@ -54,6 +55,11 @@ function M.setup()
 			end,
 			open = function() end,
 		},
+		history = {
+			add = function()
+				return true
+			end,
+		},
 	}
 
 	helpers.register({
@@ -68,6 +74,7 @@ function M.setup()
 		["wiremux.utils.notify"] = mocks.notify,
 		["wiremux.context"] = mocks.context,
 		["wiremux.ui.compose"] = mocks.compose,
+		["wiremux.history"] = mocks.history,
 	})
 
 	mocks.send = require("wiremux.action.send")
