@@ -45,7 +45,7 @@ end
 ---@param inst wiremux.Pane
 ---@return string
 local function default_format_item(inst)
-	local label = string.format(DEFAULT_LABEL_FORMAT, inst.target or "(unmanaged)", inst.id or "?", pane_location(inst))
+	local label = string.format(DEFAULT_LABEL_FORMAT, inst.target or "(unmanaged)", pane_location(inst), inst.id or "?")
 	if inst.running_command and inst.running_command ~= "" then
 		label = label .. " " .. inst.running_command
 	end
