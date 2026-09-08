@@ -87,7 +87,10 @@ The following example shows all default values from `config.lua`. Override only 
   picker = {
     adapter = nil,  -- "fzf-lua" | "snacks" | custom function
     instances = {
-      filter = function(inst, state)        -- default: filter by origin pane
+      filter = function(inst, state)        -- managed by origin; unmanaged by session
+        if not inst.managed then
+          return inst.session_id == state.session_id
+        end
         return inst.origin == state.origin_pane_id
       end,
       sort = function(a, b)                 -- default: most recently used first
@@ -120,7 +123,7 @@ The following example shows all default values from `config.lua`. Override only 
           { "q", mode = "n", desc = "Close draft" },
           { "<Esc>", mode = "n", desc = "Close draft" },
         },
-        append_next = { "A", mode = "n", desc = "Hide and append next payload" },
+        append_next = { "<C-s>", mode = "n", desc = "Hide and append next payload" },
         discard = { "Q", mode = "n", desc = "Discard compose page" },
         files = {
           { "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
@@ -203,10 +206,10 @@ Wiremux uses two main terms:
 
 | Concept        | What it is                                              | Example                             |
 | -------------- | ------------------------------------------------------- | ----------------------------------- |
-| **Definition** | Configuration that tells Wiremux how to create a target | `{ cmd = "claude", kind = "pane" }` |
-| **Instance**   | A running tmux pane or window created from a definition | A Claude pane that is open in tmux  |
+| **Definition** | Configuration that tells Wiremux how to create a target      | `{ cmd = "claude", kind = "pane" }` |
+| **Instance**   | A running tmux pane or window, managed by Wiremux or not     | A Claude pane that is open in tmux     |
 
-Wiremux stores definitions in your configuration. It creates instances when necessary. Instances remain available in tmux.
+Wiremux stores definitions in your configuration. A managed instance has Wiremux target metadata; an unmanaged instance can be adopted. Instances remain available in tmux.
 
 ## Sending text
 
@@ -284,7 +287,7 @@ vim.keymap.set({ "n", "x" }, "<leader>ar", function()
 end)
 ```
 
-Press `A` to save and hide the draft, then append the next non-empty compose payload. This one-time action bypasses `on_new_payload`; reopening the draft without text does not consume it.
+Press `<C-s>` in normal mode to save and hide the draft, then append the next non-empty compose payload. This one-time action bypasses `on_new_payload`; reopening the draft without text does not consume it. `A` keeps its native append-at-end-of-line behavior. In insert mode, `<C-s>` still sends the draft.
 
 Press `Q` to discard. If the draft has more than one page, `Q` removes only the current page and keeps the others open. If the draft has one page, `Q` drops the draft and closes the window without the close prompt. Use `<C-x>` instead when you want to empty the last page but keep the window open.
 
@@ -454,20 +457,51 @@ Wiremux uses matching instances when they exist. If no instance matches, Wiremux
 
 | Mode          | Result                            | Use it when                         |
 | ------------- | --------------------------------- | ----------------------------------- |
-| `auto`        | Shows instances, then definitions | You want the default selection      |
-| `instances`   | Shows only existing instances     | You manage existing targets         |
-| `definitions` | Shows only target definitions     | You want Wiremux to create a target |
-| `all`         | Shows instances and definitions   | You want all available targets      |
+| `auto`        | Managed instances; otherwise unmanaged instances and definitions | You want the prioritized default |
+| `instances`   | Shows only managed instances                           | You want existing Wiremux targets   |
+| `definitions` | Shows only target definitions                           | You want Wiremux to create a target |
+| `all`         | Shows managed/unmanaged instances and definitions       | You want to send, adopt, or create  |
 
-**4. Filters:** Control which targets Wiremux shows:
+For `send()`, `auto` keeps the picker quiet once managed instances exist: unmanaged instances and definitions are offered only when no managed instance passes the filter. `mode = "all"` with `behavior = "pick"` shows every supported candidate. `toggle()` does not offer unmanaged instances because it cannot adopt them. Send picker rows indicate what selection will do:
 
-By default, Wiremux shows only targets created from your current tmux pane. You can replace this filter:
+```text
+[m] 1:2 claude [opencode]  managed instance: send
+[~] 1:3 opencode           unmanaged instance: adopt, then send
+[+] claude                 definition: create, then send
+```
+
+`1:2` is the tmux `window_index:pane_index`. Other sessions include their session ID, for example `$2:1:2`, so identical positions remain distinct. Adopting an unmanaged instance assigns internal metadata such as `pane-5`, but generated names are hidden from picker labels in favor of the location and running command. It does not create a tmux pane. `behavior = "all"` still sends only to managed instances; it never adopts or creates targets implicitly.
+
+A function-valued `targets.definitions.*.label` overrides the entire managed row, with no added marker, location, or command. String labels replace only the target name.
+
+**4. Filters:** Control which instances and definitions Wiremux shows:
+
+The same instance filter receives managed and unmanaged candidates. `inst.managed` distinguishes them. By default, Wiremux includes managed targets created from the current tmux pane and unmanaged instances from the current tmux session. Unmanaged candidates are used by `send()` as the `auto` fallback and by `mode = "all"`:
+
+> **Migration note:** During the `auto` fallback and in `mode = "all"`, `filter.instances` can receive an unmanaged instance with `target = nil`. This intentionally broadens the callback contract. Check `inst.managed` before using `target` as a string.
+
+Managed instances are sorted with `picker.instances.sort`. Unmanaged instances remain grouped after them in backend query order, followed by definitions.
 
 ```lua
--- Show all targets regardless of which pane created them
 picker = {
   instances = {
-    filter = nil,
+    filter = function(inst, state)
+      if not inst.managed then
+        return inst.session_id == state.session_id
+      end
+      return inst.origin == state.origin_pane_id
+    end,
+  },
+}
+```
+
+You can replace this filter. Use an always-true function to include every candidate; `filter = nil` in `setup()` retains the default filter. The current pane is always excluded.
+
+```lua
+-- Show all managed and unmanaged instances returned by the backend
+picker = {
+  instances = {
+    filter = function() return true end,
   },
 }
 
@@ -475,7 +509,7 @@ picker = {
 picker = {
   instances = {
     filter = function(inst, state)
-      return inst.origin_cwd == vim.fn.getcwd()
+      return inst.managed and inst.origin_cwd == vim.fn.getcwd()
     end,
   },
 }

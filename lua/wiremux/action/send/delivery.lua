@@ -27,6 +27,12 @@ function M.send(payload, options, target_title)
 		on_targets = function(targets, state)
 			backend.send(payload, targets, backend_options, state)
 		end,
+		on_adopt = function(instance, state)
+			if backend.adopt(instance, state) then
+				---@cast instance wiremux.ManagedInstance
+				backend.send(payload, { instance }, backend_options, state)
+			end
+		end,
 		on_definition = function(name, def, state)
 			local has_own_cmd = def.cmd ~= nil
 			local create_def = vim.tbl_extend("force", {}, def, {

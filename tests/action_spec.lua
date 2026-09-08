@@ -98,6 +98,32 @@ describe("action", function()
 			assert.is_true(executed)
 		end)
 
+		it("dispatches an unmanaged instance for adoption", function()
+			local adopted
+			local instance = { id = "%7", kind = "pane", managed = false }
+
+			mocks.resolver.resolve = function()
+				return {
+					kind = "pick",
+					items = {
+						{ type = "adopt", instance = instance, label = "[~] %7" },
+					},
+				}
+			end
+
+			mocks.picker.select = function(items, _, callback)
+				callback(items[1])
+			end
+
+			mocks.action.run({ prompt = "Test", behavior = "pick" }, {
+				on_adopt = function(received)
+					adopted = received
+				end,
+			})
+
+			assert.are.equal(instance, adopted)
+		end)
+
 		it("creates target when definition is picked", function()
 			local create_called = false
 			local executed = false
@@ -230,6 +256,103 @@ describe("action", function()
 		end)
 	end)
 
+	describe("real resolver integration", function()
+		before_each(function()
+			package.loaded["wiremux.core.resolver"] = nil
+		end)
+
+		it("never feeds unmanaged panes into a toggle filter", function()
+			mocks.config.opts.actions.toggle = { focus = false }
+			mocks.config.opts.targets.definitions = { terminal = { kind = "pane" } }
+			mocks.backend.state.get = function()
+				return {
+					instances = { { id = "%1", managed = true, target = "other", kind = "pane" } },
+					panes = { { id = "%2", managed = false, kind = "pane" } },
+				}
+			end
+			mocks.backend.create = function()
+				error("must wait for selection")
+			end
+			local picks, filtered = 0, 0
+			mocks.picker.select = function(items, _, callback)
+				picks = picks + 1
+				assert.are.equal(1, #items)
+				assert.are.equal("definition", items[1].type)
+				callback(nil)
+			end
+			for _, mode in ipairs({ "auto", "all" }) do
+				require("wiremux.action.toggle").toggle({
+					mode = mode,
+					filter = {
+						instances = function(inst)
+							filtered = filtered + 1
+							return inst.target:match("^terminal$") ~= nil
+						end,
+					},
+				})
+			end
+			assert.are.equal(2, picks)
+			assert.are.equal(2, filtered)
+		end)
+
+		it("cancels, adopts and sends a prepared payload, then uses the managed target", function()
+			local pane = { id = "%7", managed = false, kind = "pane" }
+			local state = {
+				origin_pane_id = "%0",
+				instances = {},
+				panes = {
+					{ id = "%0", managed = false, kind = "pane" },
+					pane,
+				},
+			}
+			mocks.backend.state.get = function()
+				return state
+			end
+			mocks.config.opts.targets.definitions = { terminal = { kind = "pane" } }
+			mocks.backend.create = function()
+				error("must not create")
+			end
+			local picks, adoptions, sends = 0, 0, 0
+			mocks.picker.select = function(items, _, callback)
+				picks = picks + 1
+				assert.are.equal(2, #items)
+				assert.are.equal("adopt", items[1].type)
+				assert.are.equal("definition", items[2].type)
+				callback(picks == 2 and items[1] or nil)
+			end
+			mocks.backend.adopt = function(inst, received_state)
+				adoptions = adoptions + 1
+				assert.are.equal(pane, inst)
+				assert.are.equal(state, received_state)
+				inst.managed, inst.target = true, "pane-7"
+				state.instances = { inst }
+				return true
+			end
+			mocks.backend.send = function(payload, targets, opts, received_state)
+				sends = sends + 1
+				assert.are.equal(1, adoptions)
+				assert.are.equal("prepared\n{literal}", payload)
+				assert.are.same({ pane }, targets)
+				assert.is_true(targets[1].managed)
+				assert.are.equal(state, received_state)
+				assert.are.same({ focus = false, pre_keys = { "C-c" }, post_keys = { "Enter" } }, opts)
+			end
+			local options =
+				{ behavior = "pick", mode = "all", focus = false, pre_keys = { "C-c" }, post_keys = { "Enter" } }
+			local delivery = require("wiremux.action.send.delivery")
+			assert.is_true(delivery.send("prepared\n{literal}", options))
+			assert.are.equal(0, adoptions)
+			assert.are.equal(0, sends)
+			assert.is_true(delivery.send("prepared\n{literal}", options))
+			assert.are.equal(1, sends)
+			options.mode = "auto"
+			assert.is_true(delivery.send("prepared\n{literal}", options))
+			assert.are.equal(2, sends)
+			assert.are.equal(2, picks)
+			assert.are.equal(1, adoptions)
+		end)
+	end)
+
 	describe("adopt", function()
 		it("shows all current-session panes", function()
 			local adopted
@@ -244,7 +367,14 @@ describe("action", function()
 						{ session_id = "$2", id = "%2", target = "other", kind = "pane" },
 					},
 					panes = {
-						{ session_id = "$1", id = "%0", target = "current", kind = "pane", window_index = 1, pane_index = 0 },
+						{
+							session_id = "$1",
+							id = "%0",
+							target = "current",
+							kind = "pane",
+							window_index = 1,
+							pane_index = 0,
+						},
 						{
 							session_id = "$1",
 							id = "%1",
@@ -262,7 +392,14 @@ describe("action", function()
 							pane_index = 0,
 							running_command = "fish",
 						},
-						{ session_id = "$2", id = "%2", target = "other", kind = "pane", window_index = 1, pane_index = 0 },
+						{
+							session_id = "$2",
+							id = "%2",
+							target = "other",
+							kind = "pane",
+							window_index = 1,
+							pane_index = 0,
+						},
 					},
 				}
 			end
@@ -354,7 +491,7 @@ describe("action", function()
 				assert.are.equal("%1", items[1].id)
 				assert.are.equal("%2", items[2].id)
 				assert.are.equal("%3", items[3].id)
-				assert.matches("%(unmanaged%)%s+%-%s+%%3%s+zsh", opts.format_item(items[3]))
+				assert.matches("%(unmanaged%)%s+%$2:3%s+%%3%s+zsh", opts.format_item(items[3]))
 				callback(items[3])
 			end
 
@@ -399,7 +536,7 @@ describe("action", function()
 			})
 		end)
 
-		it("generates a target name when adopting unmanaged panes", function()
+		it("leaves default target naming to the backend", function()
 			local adopted
 			local adopt_opts
 
@@ -427,7 +564,7 @@ describe("action", function()
 			require("wiremux.action.adopt").adopt()
 
 			assert.are.equal("%1", adopted.id)
-			assert.are.equal("pane-1", adopt_opts.target)
+			assert.is_nil(adopt_opts.target)
 		end)
 
 		it("warns when no current-session targets can be adopted", function()

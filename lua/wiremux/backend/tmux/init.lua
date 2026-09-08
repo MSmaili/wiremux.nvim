@@ -22,13 +22,13 @@ end
 ---@param target_name string
 ---@param def wiremux.target.definition
 ---@param s wiremux.State
----@return wiremux.Instance?
+---@return wiremux.ManagedInstance?
 function M.create(target_name, def, s)
 	return require("wiremux.backend.tmux.operation").create(target_name, def, s)
 end
 
 ---Focus on a target
----@param target wiremux.Instance
+---@param target wiremux.ManagedInstance
 function M.focus(target)
 	return require("wiremux.backend.tmux.operation").focus(target)
 end
@@ -40,13 +40,13 @@ function M.toggle_visibility(s)
 end
 
 ---Close a target pane/window
----@param targets wiremux.Instance
+---@param targets wiremux.ManagedInstance[]
 ---@param s wiremux.State
 function M.close(targets, s)
 	return require("wiremux.backend.tmux.operation").close(targets, s)
 end
 
----@param target wiremux.Pane
+---@param target wiremux.Instance
 ---@param s wiremux.State
 ---@param opts? { target?: string }
 function M.adopt(target, s, opts)
@@ -55,7 +55,7 @@ end
 
 ---Wait until a newly created pane has rendered its TUI and is ready for input.
 ---Polls pane content asynchronously; calls callback when stable or timed out.
----@param inst wiremux.Instance
+---@param inst wiremux.ManagedInstance
 ---@param opts? { timeout_ms?: number }
 ---@param callback fun()
 function M.wait_for_ready(inst, opts, callback)

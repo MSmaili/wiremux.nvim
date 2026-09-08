@@ -1,11 +1,12 @@
 local M = {}
+local instance = require("wiremux.core.instance")
 
 local DEFAULT_LABEL_FORMAT = "%-18s %-6s %-5s"
 
 ---@class wiremux.action.AdoptOpts
 ---@field target? string Target name to assign when adopting unmanaged panes. Defaults to pane-<id>.
----@field filter? { instances?: fun(inst: wiremux.Pane, state: wiremux.State): boolean }
----@field format_item? fun(inst: wiremux.Pane, state: wiremux.State): string Format pane for picker display.
+---@field filter? { instances?: fun(inst: wiremux.Instance, state: wiremux.State): boolean }
+---@field format_item? fun(inst: wiremux.Instance, state: wiremux.State): string Format pane for picker display.
 
 ---@param state wiremux.State
 local function update_statusline(state)
@@ -15,44 +16,19 @@ local function update_statusline(state)
 	end
 end
 
----@param id string?
+---@param inst wiremux.Instance
+---@param state wiremux.State
 ---@return string
-local function pane_id(id)
-	return (id and id:match("%d+")) or id or "?"
-end
-
----@param inst wiremux.Pane
----@return string
-local function default_target_name(inst)
-	return "pane-" .. pane_id(inst.id)
-end
-
----@param inst wiremux.Pane
----@return string
-local function pane_location(inst)
-	if inst.window_index and inst.pane_index then
-		return string.format("%s:%s", inst.window_index, inst.pane_index)
-	end
-	if inst.window_index then
-		return tostring(inst.window_index)
-	end
-	if inst.window_name and inst.window_name ~= "" then
-		return inst.window_name
-	end
-	return "-"
-end
-
----@param inst wiremux.Pane
----@return string
-local function default_format_item(inst)
-	local label = string.format(DEFAULT_LABEL_FORMAT, inst.target or "(unmanaged)", pane_location(inst), inst.id or "?")
+local function default_format_item(inst, state)
+	local label =
+		string.format(DEFAULT_LABEL_FORMAT, inst.target or "(unmanaged)", instance.location(inst, state), inst.id)
 	if inst.running_command and inst.running_command ~= "" then
 		label = label .. " " .. inst.running_command
 	end
 	return label
 end
 
----@param inst wiremux.Pane
+---@param inst wiremux.Instance
 ---@param st wiremux.State
 ---@return boolean
 local function default_filter(inst, st)
@@ -62,10 +38,10 @@ local function default_filter(inst, st)
 	return true
 end
 
----@param panes wiremux.Pane[]
+---@param panes wiremux.Instance[]
 ---@param st wiremux.State
----@param action_filter? { instances?: fun(inst: wiremux.Pane, state: wiremux.State): boolean }
----@return wiremux.Pane[]
+---@param action_filter? { instances?: fun(inst: wiremux.Instance, state: wiremux.State): boolean }
+---@return wiremux.Instance[]
 local function get_adoptable_panes(panes, st, action_filter)
 	local filter_fn = (action_filter and action_filter.instances) or default_filter
 
@@ -96,26 +72,18 @@ function M.adopt(opts)
 		return
 	end
 
-	local format_item = default_format_item
-	if opts.format_item then
-		format_item = function(inst)
-			return opts.format_item(inst, st)
-		end
-	end
-
+	local format_item = opts.format_item or default_format_item
 	local picker = require("wiremux.picker")
 	picker.select(panes, {
 		prompt = "Adopt target",
-		format_item = format_item,
+		format_item = function(inst)
+			return format_item(inst, st)
+		end,
 	}, function(choice)
 		if not choice then
 			return
 		end
-		local target_name = opts.target
-		if not choice.target and (not target_name or target_name == "") then
-			target_name = default_target_name(choice)
-		end
-		if backend.adopt(choice, st, { target = target_name }) then
+		if backend.adopt(choice, st, { target = opts.target }) then
 			update_statusline(st)
 		end
 	end)

@@ -1,11 +1,25 @@
 local M = {}
 
-local PANE_FORMAT =
-	"#{session_id}:#{pane_id}:#{window_id}:#{@wiremux_target}:#{@wiremux_origin}:#{@wiremux_origin_cwd}:#{@wiremux_kind}:#{@wiremux_last_used_at}:#{window_name}:#{window_index}:#{pane_index}:#{pane_current_command}"
+M.FIELD_SEPARATOR = "\31"
+
+local PANE_FORMAT = table.concat({
+	"#{session_id}",
+	"#{pane_id}",
+	"#{window_id}",
+	"#{@wiremux_target}",
+	"#{@wiremux_origin}",
+	"#{@wiremux_origin_cwd}",
+	"#{@wiremux_kind}",
+	"#{@wiremux_last_used_at}",
+	"#{window_name}",
+	"#{window_index}",
+	"#{pane_index}",
+	"#{pane_current_command}",
+}, M.FIELD_SEPARATOR)
 
 ---@return string[]
 function M.current_pane()
-	return { "display", "-p", "#{pane_id}:#{session_id}" }
+	return { "display", "-p", "#{pane_id}" .. M.FIELD_SEPARATOR .. "#{session_id}" }
 end
 
 ---@return string[]

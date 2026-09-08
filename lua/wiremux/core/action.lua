@@ -17,7 +17,8 @@ end
 ---@field target? string
 
 ---@class wiremux.action.Callbacks
----@field on_targets? fun(targets: wiremux.Instance[], state: wiremux.State)
+---@field on_targets? fun(targets: wiremux.ManagedInstance[], state: wiremux.State)
+---@field on_adopt? fun(instance: wiremux.Instance, state: wiremux.State)
 ---@field on_definition? fun(name: string, def: wiremux.target.definition, state: wiremux.State)
 
 ---Resolve kind when definition has multiple kinds (table).
@@ -64,6 +65,8 @@ local function filter_items_by_callbacks(items, callbacks)
 		:filter(function(item)
 			if item.type == "instance" then
 				return callbacks.on_targets ~= nil
+			elseif item.type == "adopt" then
+				return callbacks.on_adopt ~= nil
 			elseif item.type == "definition" then
 				return callbacks.on_definition ~= nil
 			end
@@ -80,6 +83,11 @@ local function dispatch_choice(choice, callbacks, state)
 	if choice.type == "instance" then
 		if callbacks.on_targets then
 			callbacks.on_targets({ choice.instance }, state)
+			update_statusline(state)
+		end
+	elseif choice.type == "adopt" then
+		if callbacks.on_adopt then
+			callbacks.on_adopt(choice.instance, state)
 			update_statusline(state)
 		end
 	elseif choice.type == "definition" then
@@ -109,6 +117,7 @@ function M.run(opts, callbacks)
 	local state = backend.state.get()
 
 	local result = resolver.resolve(state, config.opts.targets.definitions, {
+		allow_adopt = callbacks.on_adopt ~= nil,
 		behavior = opts.behavior,
 		mode = opts.mode,
 		filter = opts.filter,

@@ -12,7 +12,7 @@ local M = {}
 
 ---@class wiremux.config.InstanceConfig
 ---@field filter? fun(inst: wiremux.Instance, state: wiremux.State): boolean
----@field sort? fun(a: wiremux.Instance, b: wiremux.Instance): boolean
+---@field sort? fun(a: wiremux.ManagedInstance, b: wiremux.ManagedInstance): boolean
 
 ---@class wiremux.config.TargetConfig
 ---@field filter? fun(name: string, def: wiremux.target.definition): boolean
@@ -81,7 +81,7 @@ local M = {}
 ---@field split? "horizontal"|"vertical" Split direction for panes (default: "horizontal")
 ---@field split_mode? "before"|"after" Split placement for panes (default: "after")
 ---@field shell? boolean Run command through shell (default: true)
----@field label? string|fun(inst: wiremux.Instance, index: number): string Custom display label for picker
+---@field label? string|fun(inst: wiremux.ManagedInstance, index: number): string Target name override; functions return the entire picker row.
 ---@field title? string Custom tmux window / zellij tab name
 ---@field size? string Custom tmux pane size
 ---@field startup_timeout? number Max milliseconds to wait for TUI to render before sending (default: 3500)
@@ -125,7 +125,7 @@ local defaults = {
 					{ "q", mode = "n", desc = "Close draft" },
 					{ "<Esc>", mode = "n", desc = "Close draft" },
 				},
-				append_next = { "A", mode = "n", desc = "Hide and append next payload" },
+				append_next = { "<C-s>", mode = "n", desc = "Hide and append next payload" },
 				discard = { "Q", mode = "n", desc = "Discard compose page" },
 				files = {
 					{ "<C-f>", mode = { "n", "i" }, desc = "Insert file" },
@@ -141,6 +141,9 @@ local defaults = {
 		adapter = nil,
 		instances = {
 			filter = function(inst, state)
+				if not inst.managed then
+					return inst.session_id == state.session_id
+				end
 				return inst.origin == state.origin_pane_id
 			end,
 			sort = function(a, b)

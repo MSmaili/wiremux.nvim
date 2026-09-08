@@ -80,6 +80,60 @@ describe("send delivery", function()
 		assert.are.equal(state, sent.state)
 	end)
 
+	it("adopts an unmanaged instance before sending", function()
+		local instance = { id = "%7", kind = "pane", managed = false }
+		local state = { origin_pane_id = "%0", instances = {} }
+		local adopted
+		local sent
+
+		action.run = function(_, callbacks)
+			callbacks.on_adopt(instance, state)
+		end
+		backend.adopt = function(received, received_state, opts)
+			assert.is_nil(opts) -- Naming belongs to the backend, not delivery.
+			adopted = { instance = received, state = received_state }
+			received.managed = true
+			received.target = "pane-7"
+			return true
+		end
+		backend.send = function(payload, targets, options, received_state)
+			sent = { payload = payload, targets = targets, options = options, state = received_state }
+		end
+
+		local started = delivery.send("payload", {
+			focus = false,
+			behavior = "pick",
+			mode = "all",
+		})
+
+		assert.is_true(started)
+		assert.are.equal(instance, adopted.instance)
+		assert.are.equal(state, adopted.state)
+		assert.is_true(sent.targets[1].managed)
+		assert.are.equal("pane-7", sent.targets[1].target)
+		assert.are.equal("payload", sent.payload)
+		assert.are.same({ instance }, sent.targets)
+		assert.are.equal(state, sent.state)
+	end)
+
+	it("does not send when adoption fails", function()
+		local sends = 0
+		action.run = function(_, callbacks)
+			callbacks.on_adopt({ id = "%7", kind = "pane", managed = false }, { instances = {} })
+		end
+		backend.adopt = function()
+			return nil
+		end
+		backend.send = function()
+			sends = sends + 1
+		end
+
+		local started = delivery.send("payload", { behavior = "pick", mode = "all" })
+
+		assert.is_true(started)
+		assert.are.equal(0, sends)
+	end)
+
 	it("uses the payload as the command for definitions without a command", function()
 		local created
 		local send_calls = 0

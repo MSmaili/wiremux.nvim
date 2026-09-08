@@ -8,13 +8,13 @@ local M = {}
 ---@class wiremux.backend.Adapter
 ---@field name string
 ---@field state wiremux.backend.StateApi
----@field send fun(text: string, targets: wiremux.Instance[], opts: table?, state: wiremux.State)
----@field create fun(target_name: string, def: wiremux.target.definition, state: wiremux.State): wiremux.Instance?
----@field focus fun(target: wiremux.Instance)
+---@field send fun(text: string, targets: wiremux.ManagedInstance[], opts: table?, state: wiremux.State)
+---@field create fun(target_name: string, def: wiremux.target.definition, state: wiremux.State): wiremux.ManagedInstance?
+---@field focus fun(target: wiremux.ManagedInstance)
 ---@field toggle_visibility fun(state: wiremux.State)
----@field close fun(targets: wiremux.Instance[], state: wiremux.State)
----@field adopt fun(target: wiremux.Pane, state: wiremux.State, opts?: table): boolean?
----@field wait_for_ready fun(inst: wiremux.Instance, opts: table?, callback: fun())
+---@field close fun(targets: wiremux.ManagedInstance[], state: wiremux.State)
+---@field adopt fun(target: wiremux.Instance, state: wiremux.State, opts?: table): boolean?
+---@field wait_for_ready fun(inst: wiremux.ManagedInstance, opts: table?, callback: fun())
 
 local backend_names = { "tmux" }
 

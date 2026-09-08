@@ -177,9 +177,10 @@ one paged draft. Use normal-mode `<C-p>` and `<C-n>` to navigate pages.
 `<C-x>` deletes the current page and moves to the next, wrapping to the first
 when necessary. With only one page, `<C-x>` clears its text instead.
 
-`A` saves and hides the draft, then appends the next non-empty compose payload.
-This one-time action bypasses `on_new_payload`. Reopening the draft without text
-does not consume it.
+Normal-mode `<C-s>` saves and hides the draft, then appends the next non-empty
+compose payload. This one-time action bypasses `on_new_payload`. Reopening the
+draft without text does not consume it. `A` keeps its native append-at-end-of-line
+behavior. In insert mode, `<C-s>` still sends the draft.
 
 `Q` discards. With more than one page it removes only the current page and keeps
 the others. With one page it drops the draft and closes the window, without the
@@ -269,7 +270,9 @@ Register the autocmd before opening compose.
 
 Dynamic labels for targets ~
 
-You can use a function for `label` to create dynamic display names:
+A function-valued `label` returns the entire managed picker row, without an
+added marker, location, or command. String labels replace only the target name:
+
 >lua
   require("wiremux").setup({
     targets = {
@@ -292,7 +295,7 @@ You can use a function for `label` to create dynamic display names:
         on_new_payload = "append", -- "ask" | "keep" | "replace" | "append"
         history_limit = 4, -- resolved compose sends retained on disk; 0 disables
         keymaps = {
-          append_next = { "A", mode = "n" },
+          append_next = { "<C-s>", mode = "n" },
           delete_page = { "<C-x>", mode = "n" },
           preview_placeholder = { "K", mode = "n" },
           previous = { "<C-p>", mode = "n" },
@@ -372,7 +375,10 @@ Complete example:
     picker = {
       adapter = "fzf-lua", -- "fzf-lua" | "snacks" | custom function
       instances = {
-        filter = function(inst, state)  -- optional, default: filter by origin
+        filter = function(inst, state)  -- managed by origin; unmanaged by session
+          if not inst.managed then
+            return inst.session_id == state.session_id
+          end
           return inst.origin == state.origin_pane_id
         end,
         sort = function(a, b)  -- optional, default: sort by recency
@@ -476,6 +482,27 @@ actions.*.behavior  (string)
 actions.send.submit (boolean)
                     Send Enter after pasting text.
 
+*wiremux-config-action-mode*
+actions.send.mode   (string, default: "auto")
+                    "auto" - managed instances; when none pass the filter,
+                    offer unmanaged instances and definitions
+                    "instances" - managed instances only
+                    "definitions" - target definitions only
+                    "all" - managed and unmanaged instances plus definitions
+
+                    For send(), auto hides unmanaged instances and definitions
+                    while a managed instance is available. mode="all" with
+                    behavior="pick" can select every kind. A managed `[m]` row
+                    sends directly, an unmanaged `[~]` row adopts then sends,
+                    and a `[+]` definition creates
+                    then sends. Labels use tmux window_index:pane_index instead
+                    of the server-global pane ID. Other sessions include the
+                    session ID, e.g. $2:1:2, to distinguish identical positions.
+                    Generated pane-N target names are hidden in favor of the
+                    running command. toggle() never
+                    offers unmanaged instances. behavior="all" never adopts or
+                    creates targets implicitly.
+
 *wiremux-config-action-focus*
 actions.*.focus     (boolean)
                     Focus target after action.
@@ -500,11 +527,20 @@ picker.instances    (table)
                     Configuration for instance filtering and sorting.
 
 *wiremux-config-picker-instances-filter*
-picker.instances.filter (string|function)
-                    "origin" - show targets from current Neovim instance
-                    "cwd" - show targets from current working directory  
-                    "global" - show all targets
-                    function - custom filter function
+picker.instances.filter (function|nil)
+                    Receives (inst, state). `inst.managed` distinguishes managed
+                    targets from unmanaged backend instances. The default shows
+                    managed targets from the current Neovim pane and unmanaged
+                    instances from the current tmux session. Unmanaged instances
+                    are candidates for send() as the auto fallback and in
+                    mode="all".
+
+                    MIGRATION: During the auto fallback and in mode="all", this
+                    callback can receive an unmanaged instance with target=nil.
+                    Check `inst.managed`
+                    before calling string methods on `inst.target`. Managed
+                    instances use picker.instances.sort; unmanaged instances
+                    follow them in backend query order.
 
 *wiremux-config-picker-instances-sort*
 picker.instances.sort (string|function, default: "recency")
@@ -535,26 +571,37 @@ context.resolvers   (table<string, function>)
 ==============================================================================
 4.1 FILTERS                                                    *wiremux-filters*
 
-Filters control which targets appear in pickers. Configure them in the picker
-section. This is useful when you have multiple Neovim instances or want to
-share AI assistants across projects.
+Filters control which live instances and definitions appear in pickers.
+Configure them in the picker section. The same instance filter receives managed
+and unmanaged candidates; use `inst.managed` to distinguish them.
 
 Filter functions receive:
-- `inst` (Instance): { id, target, origin, origin_cwd, kind, last_used }
-- `state` (State): { origin_pane_id, last_used_target_id, instances }
+- `inst` (Instance): { id, managed, target?, origin, origin_cwd, kind, session_id }
+- `state` (State): { origin_pane_id, session_id, last_used_target_id, instances }
 
-Three common strategies:
+The default includes managed targets from the current Neovim pane and unmanaged
+instances from the current tmux session:
+>lua
+  filter = function(inst, state)
+    if not inst.managed then
+      return inst.session_id == state.session_id
+    end
+    return inst.origin == state.origin_pane_id
+  end
+<
 
-1. BY ORIGIN (default) - isolated per Neovim instance ~
+Three common alternatives:
 
-Only show targets created from the current Neovim pane. This keeps your AI
-assistant private to your current editor instance.
+1. MANAGED BY ORIGIN - isolated per Neovim instance ~
+
+Only show managed targets created from the current Neovim pane. This keeps your
+AI assistant private to your current editor instance.
 >lua
   require("wiremux").setup({
     picker = {
       instances = {
         filter = function(inst, state)
-          return inst.origin == state.origin_pane_id
+          return inst.managed and inst.origin == state.origin_pane_id
         end,
       },
     },
@@ -571,22 +618,24 @@ same project.
     picker = {
       instances = {
         filter = function(inst, state)
-          return inst.origin_cwd == vim.fn.getcwd()
+          return inst.managed and inst.origin_cwd == vim.fn.getcwd()
         end,
       },
     },
   })
 <
 
-3. NO FILTER - global shared targets ~
+3. NO FILTER - every queried instance ~
 
-Show all targets regardless of where they were created. Useful if you want
-one global AI assistant for everything.
+Show managed targets and, during the send auto fallback or with mode="all",
+unmanaged instances across tmux sessions. Use an always-true function:
+filter=nil in setup() retains the default filter. The current pane is always
+excluded.
 >lua
   require("wiremux").setup({
     picker = {
       instances = {
-        filter = nil,  -- no filter, show all
+        filter = function() return true end,  -- include all candidates
       },
     },
   })
@@ -619,11 +668,13 @@ Per-action filters ~
 
 You can also override filters for specific actions using `opts.filter`:
 >lua
-  -- For send: only show pane targets (not windows)
+  -- Prefer managed instances from this session. If none exist, auto offers
+  -- current-session unmanaged instances beside definitions.
   require("wiremux").send("text", {
+    mode = "auto",
     filter = {
       instances = function(inst, state)
-        return inst.kind == "pane"
+        return inst.session_id == state.session_id
       end,
     },
   })
@@ -792,6 +843,14 @@ wiremux.send({text|items}, {opts})
         once per item and then reported "No items available". Item-level fields
         are still validated per item: an invalid item is skipped with its own
         warning while the remaining items stay available.
+
+        With {opts.mode}="auto", unmanaged backend instances appear as `[~]`
+        only when no managed instance is available. {opts.mode}="all" shows them
+        beside managed instances. Selecting one adopts it with a generated
+        target name and then sends the prepared payload. Definitions remain
+        `[+]` and create a target when selected. In either mode,
+        {opts.filter.instances} can receive target=nil; branch on `inst.managed`
+        before treating `inst.target` as a string.
 
                                                      *wiremux.focus()*
 wiremux.focus({opts})

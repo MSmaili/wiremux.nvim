@@ -22,13 +22,13 @@ local function has_submit_key(opts)
 	return false
 end
 
----@param target wiremux.Instance
+---@param target wiremux.ManagedInstance
 ---@return string[], string[]
 local function get_focus_cmds(target)
 	return action.select_window(target.window_id), action.select_pane(target.id)
 end
 
----@param targets wiremux.Instance[]
+---@param targets wiremux.ManagedInstance[]
 ---@param opts { post_keys: string|string[] }
 local function _send_deferred(targets, opts)
 	vim.defer_fn(function()
@@ -41,7 +41,7 @@ local function _send_deferred(targets, opts)
 end
 
 ---@param text string
----@param targets wiremux.Instance[]
+---@param targets wiremux.ManagedInstance[]
 ---@param opts? { focus?: boolean, pre_keys?: string|string[], post_keys?: string|string[] }
 ---@param st wiremux.State
 function M.send(text, targets, opts, st)
@@ -91,7 +91,7 @@ function M.send(text, targets, opts, st)
 	end
 end
 
----@param target wiremux.Instance
+---@param target wiremux.ManagedInstance
 function M.focus(target)
 	local st = state.get()
 	local win_cmd, pane_cmd = get_focus_cmds(target)
@@ -111,7 +111,7 @@ function M.focus(target)
 	-- Statusline is updated by core/action after callback completes
 end
 
----@param targets wiremux.Instance[]
+---@param targets wiremux.ManagedInstance[]
 ---@param st wiremux.State
 function M.close(targets, st)
 	local batch = {}
@@ -201,6 +201,7 @@ function M.create(target_name, def, st)
 		session_id = st.session_id,
 		id = id,
 		window_id = kind == "window" and id or "",
+		managed = true,
 		target = target_name,
 		origin = st.origin_pane_id,
 		origin_cwd = vim.fn.getcwd(),
@@ -218,7 +219,7 @@ function M.toggle_zoom()
 	client.execute({ action.resize_pane_zoom() })
 end
 
----@param target wiremux.Pane
+---@param target wiremux.Instance
 ---@param st wiremux.State
 ---@param opts? { target?: string }
 function M.adopt(target, st, opts)

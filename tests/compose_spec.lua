@@ -523,7 +523,7 @@ describe("compose UI", function()
 		assert.are.equal(2, #pages)
 	end)
 
-	it("hides and appends the next payload once", function()
+	it("preserves native A and uses normal-mode C-s to append the next payload once", function()
 		local confirm = vim.fn.confirm
 		local prompts = 0
 		vim.fn.confirm = function(_, _, default)
@@ -535,10 +535,14 @@ describe("compose UI", function()
 
 		open_resolved("first", compose_config)
 		local buf = compose.get_buf()
-		mapping("A")()
+		assert.are.same({}, buffer_mapping(buf, "A"))
+		vim.api.nvim_win_set_cursor(0, { 1, 0 })
+		vim.api.nvim_feedkeys(vim.keycode("A edited<Esc>"), "xt", false)
+		assert.are.same({ "first edited" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+		mapping("<C-s>")()
 		local hidden = vim.fn.bufwinid(buf)
 		compose.open("")
-		mapping("A")()
+		mapping("<C-s>")()
 		open_resolved("second", compose_config)
 		local prompts_after_append = prompts
 		local appended_title = title()
@@ -548,7 +552,7 @@ describe("compose UI", function()
 				return false
 			end,
 		})
-		mapping("<CR>")()
+		mapping("<C-s>", "i")()
 		vim.fn.confirm = confirm
 
 		assert.are.equal(-1, hidden)
@@ -556,7 +560,7 @@ describe("compose UI", function()
 		assert.matches("%[2/2%]", appended_title)
 		assert.are.equal(1, prompts)
 		assert.are.equal(2, #pages)
-		assert.are.equal("first", pages[1].text)
+		assert.are.equal("first edited", pages[1].text)
 		assert.are.equal("second", pages[2].text)
 	end)
 

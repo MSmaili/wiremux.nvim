@@ -3,12 +3,14 @@ local M = {}
 local query = require("wiremux.backend.tmux.query")
 local action = require("wiremux.backend.tmux.action")
 local client = require("wiremux.backend.tmux.client")
+local instance = require("wiremux.core.instance")
 
----@class wiremux.Pane
+---@class wiremux.Instance A running backend object, whether managed by Wiremux or not.
 ---@field session_id string?
 ---@field id string
 ---@field window_id string
 ---@field kind "pane"|"window"
+---@field managed boolean
 ---@field target string?
 ---@field origin string?
 ---@field origin_cwd string?
@@ -18,33 +20,46 @@ local client = require("wiremux.backend.tmux.client")
 ---@field pane_index number?
 ---@field running_command string?
 
----@class wiremux.Instance : wiremux.Pane
+---@class wiremux.ManagedInstance : wiremux.Instance
+---@field managed true
 ---@field target string
 
 ---@class wiremux.State
 ---@field origin_pane_id string?
 ---@field session_id string?
 ---@field last_used_target_id string?
----@field instances wiremux.Instance[]
----@field panes wiremux.Pane[] All panes from the query, including unmanaged panes.
+---@field instances wiremux.ManagedInstance[] Managed subset retained for target operations.
+---@field panes wiremux.Instance[] All panes from the query, including unmanaged instances.
 
 ---@param line string
----@return wiremux.Pane?
+---@return wiremux.Instance?
 local function parse_pane_line(line)
-	local parts = vim.split(line, ":", { plain = true })
-	if #parts < 12 then
+	local parts = vim.split(line, query.FIELD_SEPARATOR, { plain = true, trimempty = false })
+	-- ponytail: unescaped control separators/newlines are unsupported; use escaping if needed.
+	if #parts ~= 12 then
 		return nil
 	end
 
-	local session_id, id, window_id, target, origin, origin_cwd, kind, last_used_at, window_name, window_index, pane_index =
-		unpack(parts, 1, 11)
-	local running_command = table.concat(parts, ":", 12)
+	local session_id, id, window_id, target, origin, origin_cwd, kind, last_used_at, window_name, window_index, pane_index, running_command =
+		unpack(parts)
+	if
+		not session_id:match("^%$%d+$")
+		or not id:match("^%%%d+$")
+		or not window_id:match("^@%d+$")
+		or (origin ~= "" and not origin:match("^%%%d+$"))
+		or (window_index ~= "" and not window_index:match("^%d+$"))
+		or (pane_index ~= "" and not pane_index:match("^%d+$"))
+	then
+		return nil
+	end
+	local managed = target ~= ""
 
 	return {
 		session_id = session_id,
 		id = id,
 		window_id = window_id,
-		target = target ~= "" and target or nil,
+		managed = managed,
+		target = managed and target or nil,
 		origin = origin ~= "" and origin or nil,
 		origin_cwd = origin_cwd ~= "" and origin_cwd or nil,
 		kind = kind == "window" and "window" or "pane",
@@ -60,9 +75,11 @@ end
 ---@param results string[]
 ---@return wiremux.State
 local function parse_state_results(results)
-	local current = vim.split(vim.trim(results[1] or ""), ":", { plain = true })
-	local origin_pane_id = current[1]
-	local session_id = current[2]
+	local current = vim.split(vim.trim(results[1] or ""), query.FIELD_SEPARATOR, { plain = true, trimempty = false })
+	local origin_pane_id, session_id
+	if #current == 2 and current[1]:match("^%%%d+$") and current[2]:match("^%$%d+$") then
+		origin_pane_id, session_id = current[1], current[2]
+	end
 	local panes_output = results[2] or ""
 
 	local panes = {}
@@ -139,14 +156,14 @@ function M.update_last_used(batch, new_id)
 	table.insert(batch, action.set_pane_option(new_id, "@wiremux_last_used_at", tostring(os.time())))
 end
 
----@param target wiremux.Pane
+---@param target wiremux.Instance
 ---@param st wiremux.State
----@param target_name? string Target name to assign when adopting an unmanaged pane.
+---@param target_name? string Unmanaged target name; defaults to pane-<numeric id>.
 ---@return boolean?
 function M.adopt(target, st, target_name)
-	target_name = target.target or target_name
+	target_name = (target.target ~= "" and target.target) or target_name
 	if not target_name or target_name == "" then
-		return nil
+		target_name = instance.default_target_name(target)
 	end
 
 	local origin = st.origin_pane_id or ""
@@ -169,6 +186,7 @@ function M.adopt(target, st, target_name)
 		return nil
 	end
 
+	target.managed = true
 	target.target = target_name
 	target.origin = origin ~= "" and origin or nil
 	target.origin_cwd = origin_cwd
