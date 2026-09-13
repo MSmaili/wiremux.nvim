@@ -28,8 +28,14 @@ describe("send compose integration", function()
 	local test_buffers
 
 	local function setup(options)
-		options = options or {}
-		options.log_level = "off"
+		-- Delivery behavior uses fixed bindings, not the shipping key defaults.
+		options = vim.tbl_deep_extend("force", {
+			log_level = "off",
+			ui = { compose = { keymaps = {
+				send = { "<CR>", mode = "n" },
+				close = { "q", mode = "n" },
+			} } },
+		}, options or {})
 		config = require("wiremux.config")
 		config.setup(options)
 		context = require("wiremux.context")

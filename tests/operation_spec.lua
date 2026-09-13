@@ -31,10 +31,16 @@ describe("action.split_pane", function()
 end)
 
 describe("tmux operations", function()
-	local mocks
+	local mocks, original_defer_fn
 
 	before_each(function()
+		original_defer_fn = vim.defer_fn
 		mocks = helpers.setup()
+	end)
+
+	after_each(function()
+		vim.defer_fn = original_defer_fn
+		helpers.teardown()
 	end)
 
 	describe("send", function()
@@ -201,7 +207,6 @@ describe("tmux operations", function()
 			end
 
 			local deferred_fn
-			local original_defer_fn = vim.defer_fn
 			vim.defer_fn = function(fn, _)
 				deferred_fn = fn
 			end
@@ -225,8 +230,6 @@ describe("tmux operations", function()
 			assert.are.equal(2, #executed_batches)
 			assert.are.equal("send-keys", executed_batches[2][1][1])
 			assert.is_true(vim.tbl_contains(executed_batches[2][1], "Escape"))
-
-			vim.defer_fn = original_defer_fn
 		end)
 
 		it("sends pre_keys in main batch, post_keys in deferred batch", function()
@@ -237,7 +240,6 @@ describe("tmux operations", function()
 			end
 
 			local deferred_fn
-			local original_defer_fn = vim.defer_fn
 			vim.defer_fn = function(fn, _)
 				deferred_fn = fn
 			end
@@ -271,8 +273,6 @@ describe("tmux operations", function()
 			deferred_fn()
 			assert.are.equal(2, #executed_batches)
 			assert.is_true(vim.tbl_contains(executed_batches[2][1], "Escape"))
-
-			vim.defer_fn = original_defer_fn
 		end)
 
 		it("appends \\r when post_keys contain Enter or C-m", function()
@@ -287,7 +287,6 @@ describe("tmux operations", function()
 			local targets = { { id = "%1", kind = "pane", target = "test" } }
 			local st = { instances = {}, last_used_target_id = nil }
 
-			local original_defer_fn = vim.defer_fn
 			vim.defer_fn = function(fn, _)
 				fn()
 			end
@@ -306,8 +305,6 @@ describe("tmux operations", function()
 
 			mocks.operation.send("hello", targets, {}, st)
 			assert.are.equal("hello", captured_stdin)
-
-			vim.defer_fn = original_defer_fn
 		end)
 
 		it("sends pre_keys/post_keys for each target in multi-target send", function()
@@ -318,7 +315,6 @@ describe("tmux operations", function()
 			end
 
 			local deferred_fn
-			local original_defer_fn = vim.defer_fn
 			vim.defer_fn = function(fn, _)
 				deferred_fn = fn
 			end
@@ -362,8 +358,6 @@ describe("tmux operations", function()
 				end
 			end
 			assert.are.equal(2, post_count)
-
-			vim.defer_fn = original_defer_fn
 		end)
 
 		it("respects submit option", function()
@@ -374,7 +368,6 @@ describe("tmux operations", function()
 			end
 
 			local deferred_submit
-			local original_defer_fn = vim.defer_fn
 			vim.defer_fn = function(fn, _)
 				deferred_submit = fn
 			end
@@ -395,8 +388,6 @@ describe("tmux operations", function()
 			mocks.operation.send("text", targets, {}, st)
 			assert.are.equal(1, #executed_batches)
 			assert.is_nil(deferred_submit)
-
-			vim.defer_fn = original_defer_fn
 		end)
 	end)
 
