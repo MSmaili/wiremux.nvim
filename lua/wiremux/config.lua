@@ -118,7 +118,6 @@ local defaults = {
 			},
 			keymaps = {
 				send = {
-					{ "<C-s>", mode = { "i" }, desc = "Send to target" },
 					{ "<CR>", mode = { "n" }, desc = "Send to target" },
 				},
 				close = {

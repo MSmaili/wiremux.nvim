@@ -536,6 +536,7 @@ describe("compose UI", function()
 		open_resolved("first", compose_config)
 		local buf = compose.get_buf()
 		assert.are.same({}, buffer_mapping(buf, "A"))
+		assert.are_not.equal(1, buffer_mapping(buf, "<C-s>", "i").buffer)
 		vim.api.nvim_win_set_cursor(0, { 1, 0 })
 		vim.api.nvim_feedkeys(vim.keycode("A edited<Esc>"), "xt", false)
 		assert.are.same({ "first edited" }, vim.api.nvim_buf_get_lines(buf, 0, -1, false))
@@ -552,7 +553,7 @@ describe("compose UI", function()
 				return false
 			end,
 		})
-		mapping("<C-s>", "i")()
+		mapping("<CR>")()
 		vim.fn.confirm = confirm
 
 		assert.are.equal(-1, hidden)

@@ -180,7 +180,8 @@ when necessary. With only one page, `<C-x>` clears its text instead.
 Normal-mode `<C-s>` saves and hides the draft, then appends the next non-empty
 compose payload. This one-time action bypasses `on_new_payload`. Reopening the
 draft without text does not consume it. `A` keeps its native append-at-end-of-line
-behavior. In insert mode, `<C-s>` still sends the draft.
+behavior. Press `<CR>` in normal mode to send; there is no default insert-mode
+send binding.
 
 `Q` discards. With more than one page it removes only the current page and keeps
 the others. With one page it drops the draft and closes the window, without the

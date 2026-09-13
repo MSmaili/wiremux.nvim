@@ -116,7 +116,6 @@ The following example shows all default values from `config.lua`. Override only 
       wo = { wrap = true, number = false, relativenumber = false },
       keymaps = {
         send = {
-          { "<C-s>", mode = "i", desc = "Send to target" },
           { "<CR>", mode = "n", desc = "Send to target" },
         },
         close = {
@@ -287,7 +286,7 @@ vim.keymap.set({ "n", "x" }, "<leader>ar", function()
 end)
 ```
 
-Press `<C-s>` in normal mode to save and hide the draft, then append the next non-empty compose payload. This one-time action bypasses `on_new_payload`; reopening the draft without text does not consume it. `A` keeps its native append-at-end-of-line behavior. In insert mode, `<C-s>` still sends the draft.
+Press `<C-s>` in normal mode to save and hide the draft, then append the next non-empty compose payload. This one-time action bypasses `on_new_payload`; reopening the draft without text does not consume it. `A` keeps its native append-at-end-of-line behavior. Press `<CR>` in normal mode to send; there is no default insert-mode send binding.
 
 Press `Q` to discard. If the draft has more than one page, `Q` removes only the current page and keeps the others open. If the draft has one page, `Q` drops the draft and closes the window without the close prompt. Use `<C-x>` instead when you want to empty the last page but keep the window open.
 

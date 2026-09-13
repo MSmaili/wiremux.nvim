@@ -32,6 +32,7 @@ describe("compose configuration", function()
 		config.setup()
 
 		assert.are.equal(4, config.opts.ui.compose.history_limit)
+		assert.are.same({ { "<CR>", mode = { "n" }, desc = "Send to target" } }, config.opts.ui.compose.keymaps.send)
 		assert.are.equal("<C-p>", config.opts.ui.compose.keymaps.previous[1])
 		assert.are.equal("<C-n>", config.opts.ui.compose.keymaps.next[1])
 		assert.are.equal("<C-x>", config.opts.ui.compose.keymaps.delete_page[1])
@@ -114,7 +115,7 @@ describe("compose configuration", function()
 
 		assert.are.equal(0.6, config.opts.ui.compose.width)
 		assert.are.equal("ask", config.opts.ui.compose.close_behavior)
-		assert.are.equal("<C-s>", config.opts.ui.compose.keymaps.send[1][1])
+		assert.are.equal("<CR>", config.opts.ui.compose.keymaps.send[1][1])
 	end)
 
 	it("normalizes action-default compose tables", function()
