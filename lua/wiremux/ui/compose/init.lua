@@ -34,6 +34,15 @@ function M.get_buf()
 	end
 end
 
+---Read the current page's opaque source. Callers must not mutate it.
+---@param buf number
+---@return any source
+function M.get_source(buf)
+	if active_session and active_session.status == "editing" and M.get_buf() == buf then
+		return draft_model.current(active_session.draft).source
+	end
+end
+
 ---@param session wiremux.ui.ComposeSession
 ---@return string
 local function window_title(session)

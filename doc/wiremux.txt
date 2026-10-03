@@ -269,6 +269,95 @@ Event data contains `buf`, `win`, and `reopened`. Initial window creation uses
 The event does not fire when an already-visible compose window is only focused.
 Register the autocmd before opening compose.
 
+Placeholder completion ~                         *wiremux-completion*
+
+Optional native sources are provided for blink.cmp and nvim-cmp. Type `{` in
+compose to see built-in and custom placeholders. Accepting a suggestion inserts
+the complete token and replaces an existing closing brace. Completion lists
+names without executing resolvers. Opt in to `preview` for a size-limited
+resolved value in the selected item's documentation popup while typing.
+Suggestions are disabled on pages with `placeholders = false`, including history.
+
+Keep Wiremux's normal lazy-loading triggers (keys or `cmd = "Wiremux"`). These
+examples import its completion adapter only after entering compose; Wiremux need
+not be a dependency of the completion plugin.
+
+blink.cmp ~
+
+Merge into blink options, preserving your normal sources:
+>lua
+  completion = { documentation = { auto_show = true } },
+  sources = {
+    default = function()
+      local sources = { "lsp", "path", "snippets", "buffer" }
+      if vim.b.wiremux_compose == true then
+        sources[#sources + 1] = "wiremux"
+      end
+      return sources
+    end,
+    providers = {
+      wiremux = {
+        name = "Wiremux",
+        module = "wiremux.completion.blink",
+        opts = { preview = true }, -- opt in to resolved documentation
+      },
+    },
+  },
+<
+The guard must be in source selection: blink imports a provider before checking
+its `enabled` callback. Compose uses Markdown. If `sources.per_filetype.markdown`
+overrides your defaults, use `inherit_defaults = true` or the same conditional
+source selection there.
+
+nvim-cmp ~
+
+Add `{ name = "wiremux" }` to your existing cmp sources, including any Markdown
+override. After cmp loads, register this hook:
+>lua
+  local function register_wiremux()
+    if vim.b.wiremux_compose == true then
+      require("wiremux.completion.cmp").register({ preview = true })
+    end
+  end
+
+  vim.api.nvim_create_autocmd("BufEnter", {
+    group = vim.api.nvim_create_augroup("wiremux_cmp", { clear = true }),
+    callback = register_wiremux,
+  })
+  register_wiremux()
+<
+The immediate check handles cmp loading inside an existing compose window.
+BufEnter handles opening or returning to compose later. Registration is
+idempotent. Both adapters use your completion plugin's existing mappings.
+
+Resolved preview limits ~
+
+The examples enable resolved documentation. `preview = true` limits each value
+to 10 lines and 2048 bytes. Customize by replacing it with:
+>lua
+  preview = { max_lines = 15, max_bytes = 4096 }
+<
+Both limits must be positive integers. A truncation notice follows longer
+values; UTF-8 characters are kept intact. Only the displayed value is truncated.
+Accepting a completion still inserts the placeholder, and sending resolves the
+full payload. Changes use diff syntax; empty/unavailable results show a message.
+
+Resolution uses the current page's source origin, just like `K`. Live values may
+change before sending. Suggestions themselves never execute resolvers. With
+previews enabled, engines request resolution for documentation and may also do
+so on acceptance. Resolvers are synchronous: display limits do not limit time
+spent running Git or custom resolver code. Omit `preview` or use `false` to show
+descriptions only.
+
+For automatic popups while typing, blink needs
+`completion.documentation.auto_show = true`. nvim-cmp defaults to automatic
+documentation; keep `view.docs.auto_open = true` if overriding it. Select a
+suggestion to inspect its value. Use normal-mode `K` for a full explicit preview.
+
+`b:wiremux_compose` is true on compose buffers, including hidden drafts. It is a
+cheap integration marker, not an indication that placeholders are enabled on
+the current page; the adapters check that separately.
+
 Dynamic labels for targets ~
 
 A function-valued `label` returns the entire managed picker row, without an

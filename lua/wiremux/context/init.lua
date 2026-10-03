@@ -31,6 +31,14 @@ function M.configure(custom_resolvers)
 	return configured_custom_resolvers
 end
 
+---List configured placeholder names without executing their resolvers.
+---@return string[] Sorted names, including custom resolvers.
+function M.names()
+	local names = vim.tbl_keys(resolvers)
+	table.sort(names)
+	return names
+end
+
 ---Capture the current source location for deferred resolution.
 ---@return wiremux.context.ResolverOrigin
 function M.capture_origin()

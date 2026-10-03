@@ -302,6 +302,74 @@ It does not matter when you type a placeholder. A name in the initial text and a
 
 When a draft exists, `on_new_payload` accepts `"ask"`, `"keep"`, `"replace"`, or `"append"`. The dialog selects **Keep Draft** by default. A non-empty `send()` call updates the session configuration, callbacks, and delivery options. This update also occurs when you keep the existing pages. A `send()` call without text only reopens a hidden draft.
 
+#### Placeholder completion
+
+Wiremux provides optional native sources for **blink.cmp** and **nvim-cmp**. In compose, type `{` to see built-in and custom placeholders, then keep typing to filter them. Accepting a suggestion inserts the complete `{name}` and replaces any existing closing brace. Enable `preview` to show the selected placeholder's resolved value in the documentation popup while you type.
+
+Completion follows the current compose page. Pages with `placeholders = false`, including reopened history, do not offer placeholder suggestions.
+
+The configurations below defer importing Wiremux's completion modules until you enter compose. Keep Wiremux's usual lazy-loading triggers (for example, `keys` or `cmd = "Wiremux"`); it does not need to be a dependency of your completion plugin.
+
+**blink.cmp**
+
+Merge this into your blink.cmp options, keeping your usual source list:
+
+```lua
+completion = { documentation = { auto_show = true } },
+sources = {
+  default = function()
+    local sources = { "lsp", "path", "snippets", "buffer" }
+    if vim.b.wiremux_compose == true then
+      sources[#sources + 1] = "wiremux"
+    end
+    return sources
+  end,
+  providers = {
+    wiremux = {
+      name = "Wiremux",
+      module = "wiremux.completion.blink",
+      opts = { preview = true }, -- opt in to resolved documentation
+    },
+  },
+},
+```
+
+The buffer check belongs in source selection: blink imports a provider before checking its `enabled` callback. Compose uses the `markdown` filetype; if you override `sources.per_filetype.markdown`, inherit the defaults with `inherit_defaults = true` or apply the same conditional selection there.
+
+**nvim-cmp**
+
+Add `{ name = "wiremux" }` to your existing cmp sources. Then put this in your cmp configuration, after cmp loads:
+
+```lua
+local function register_wiremux()
+  if vim.b.wiremux_compose == true then
+    require("wiremux.completion.cmp").register({ preview = true })
+  end
+end
+
+vim.api.nvim_create_autocmd("BufEnter", {
+  group = vim.api.nvim_create_augroup("wiremux_cmp", { clear = true }),
+  callback = register_wiremux,
+})
+register_wiremux()
+```
+
+The immediate check handles cmp loading while compose is already open; `BufEnter` handles opening or returning to compose later. Registration is idempotent. If you configure cmp sources separately for Markdown, include `wiremux` in that list too. Both integrations use your completion plugin's existing mappings.
+
+**Resolved previews and size limits**
+
+The examples opt in to resolved documentation. With `preview = true`, the selected value is limited to **10 lines and 2,048 bytes**, with a truncation notice for longer output. To customize these limits, replace `preview = true` with:
+
+```lua
+preview = { max_lines = 15, max_bytes = 4096 }
+```
+
+The limits apply to the displayed value; they preserve UTF-8 characters and leave the inserted placeholder and eventual payload intact. `{changes}` uses diff syntax. Empty and unavailable values get a short status message. The popup uses the current page's source origin, just like `K`; live values may change again before sending.
+
+Generating suggestions never runs resolvers. With previews enabled, the completion engine resolves the requested item when it asks for documentation (and may also do so on acceptance). Resolvers are synchronous, so expensive custom resolvers or Git queries can still delay a preview; the size limit bounds display output, not resolver work. Omit `preview` or set it to `false` for descriptions only.
+
+Blink needs `completion.documentation.auto_show = true` to open the popup automatically. nvim-cmp opens documentation by default; keep `view.docs.auto_open = true` if you override that setting. Move through suggestions to inspect their values as you write.
+
 #### Recover a compose send
 
 Wiremux keeps the four most recent confirmed compose sends by default. Run `:Wiremux history` to pick one, reopen it as a single compose page, edit it, and send it again. Picker rows show the time, payload size, and first non-empty line. When the fzf-lua or Snacks preview window is enabled, it lazily loads only the highlighted payload. Direct sends are not stored.

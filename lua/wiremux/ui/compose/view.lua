@@ -308,6 +308,7 @@ function M.new(text, config, intents)
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(text, "\n"))
 	vim.bo[buf].buftype = "nofile"
 	vim.bo[buf].bufhidden = "hide"
+	vim.b[buf].wiremux_compose = true
 	vim.bo[buf].filetype = "markdown"
 
 	---@type wiremux.ui.ComposeView
